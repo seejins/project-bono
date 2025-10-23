@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - FRONTEND_URL=http://localhost:5173
+      - TELEMETRY_PORT=20777
+    volumes:
+      - ./data:/app/data
+    networks:
+      - bono-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3001
+    depends_on:
+      - backend
+    networks:
+      - bono-network
+
+  database:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=project_bono
+      - POSTGRES_USER=bono_user
+      - POSTGRES_PASSWORD=bono_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - bono-network
+
+volumes:
+  postgres_data:
+
+networks:
+  bono-network:
+    driver: bridge
