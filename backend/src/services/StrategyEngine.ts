@@ -58,6 +58,11 @@ export class StrategyEngine {
     raceLength: number = 50,
     weather: WeatherConditions
   ): RaceStrategy {
+    // Advanced tactical analysis
+    const tacticalAdvice = this.analyzeTacticalSituation(telemetry, raceLength);
+    const targetLapTime = this.calculateTargetLapTime(telemetry);
+    const undercutOpportunity = this.checkUndercutOpportunity(telemetry);
+    const overcutOpportunity = this.checkOvercutOpportunity(telemetry);
     const currentLap = telemetry.lapNumber;
     const lapsRemaining = raceLength - currentLap;
     const fuelRemaining = telemetry.fuelLevel;
@@ -258,5 +263,113 @@ export class StrategyEngine {
     this.lapHistory = [];
     this.weatherHistory = [];
     this.currentStrategy = null;
+  }
+
+  // Advanced tactical analysis methods
+  private analyzeTacticalSituation(telemetry: TelemetryData, raceLength: number): string {
+    const currentLap = telemetry.lapNumber;
+    const position = telemetry.carPosition;
+    const lapsRemaining = raceLength - currentLap;
+    
+    // Analyze if driver in front is struggling
+    if (position > 1) {
+      const gapToLeader = this.calculateGapToLeader(telemetry);
+      if (gapToLeader < 2.0 && lapsRemaining > 10) {
+        return `Driver ahead is struggling! Gap down to ${gapToLeader.toFixed(1)}s. Consider undercut this lap.`;
+      }
+    }
+    
+    // Analyze tire advantage
+    const tireAdvantage = this.calculateTireAdvantage(telemetry);
+    if (tireAdvantage > 0.5) {
+      return `You have ${tireAdvantage.toFixed(1)}s tire advantage. Push hard to extend gap!`;
+    }
+    
+    // Analyze fuel situation
+    const fuelStrategy = this.analyzeFuelStrategy(telemetry, lapsRemaining);
+    if (fuelStrategy.needsSaving) {
+      return `Fuel saving mode needed. ${fuelStrategy.lapsToSave} laps to save fuel.`;
+    }
+    
+    return "Continue current strategy. All systems optimal.";
+  }
+
+  private calculateTargetLapTime(telemetry: TelemetryData): number {
+    const bestLapTime = telemetry.bestLapTime;
+    const currentLapTime = telemetry.currentLapTime;
+    
+    if (bestLapTime === 0) return 0;
+    
+    // Calculate target based on track evolution and tire wear
+    const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
+    const trackEvolution = 0.1; // Track getting faster
+    const tireDegradation = tireWear * 0.2; // Slower due to tire wear
+    
+    const targetTime = bestLapTime + trackEvolution - tireDegradation;
+    return Math.max(targetTime, bestLapTime - 0.5); // Don't go too fast
+  }
+
+  private checkUndercutOpportunity(telemetry: TelemetryData): boolean {
+    const position = telemetry.carPosition;
+    const gapToLeader = this.calculateGapToLeader(telemetry);
+    const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
+    
+    // Undercut opportunity if:
+    // 1. Not in lead
+    // 2. Gap is close enough (under 3 seconds)
+    // 3. Tires are fresh enough
+    // 4. Enough laps remaining
+    return position > 1 && gapToLeader < 3.0 && tireWear < 0.6 && telemetry.lapNumber < 40;
+  }
+
+  private checkOvercutOpportunity(telemetry: TelemetryData): boolean {
+    const position = telemetry.carPosition;
+    const gapToLeader = this.calculateGapToLeader(telemetry);
+    const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
+    
+    // Overcut opportunity if:
+    // 1. Not in lead
+    // 2. Gap is close (under 2 seconds)
+    // 3. Tires are still good
+    // 4. Leader might pit soon
+    return position > 1 && gapToLeader < 2.0 && tireWear < 0.4 && telemetry.lapNumber < 35;
+  }
+
+  private calculateGapToLeader(telemetry: TelemetryData): number {
+    // Simulate gap calculation (in real app, this would come from telemetry)
+    const position = telemetry.carPosition;
+    if (position === 1) return 0;
+    
+    // Simulate gaps based on position
+    const gaps = [0, 1.2, 2.8, 4.5, 6.2, 8.1, 10.5, 12.8, 15.2, 18.1];
+    return gaps[position - 1] || 20.0;
+  }
+
+  private calculateTireAdvantage(telemetry: TelemetryData): number {
+    const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
+    const position = telemetry.carPosition;
+    
+    // Simulate tire advantage based on tire age
+    if (position === 1) return 0;
+    
+    // Fresh tires give advantage
+    const tireAge = telemetry.lapNumber * 0.1; // Simulate tire age
+    const advantage = Math.max(0, 1.0 - tireAge - tireWear);
+    
+    return advantage;
+  }
+
+  private analyzeFuelStrategy(telemetry: TelemetryData, lapsRemaining: number): {needsSaving: boolean, lapsToSave: number} {
+    const fuelLevel = telemetry.fuelLevel;
+    const fuelPerLap = 2.5; // Average fuel consumption
+    const fuelNeeded = lapsRemaining * fuelPerLap;
+    
+    if (fuelLevel < fuelNeeded) {
+      const deficit = fuelNeeded - fuelLevel;
+      const lapsToSave = Math.ceil(deficit / fuelPerLap);
+      return {needsSaving: true, lapsToSave};
+    }
+    
+    return {needsSaving: false, lapsToSave: 0};
   }
 }

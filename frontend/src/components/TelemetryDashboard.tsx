@@ -1,7 +1,6 @@
 import React from 'react';
-import { Gauge, GaugeContainer } from 'recharts';
-import { Speedometer, Fuel, Thermometer, Zap, Activity } from 'lucide-react';
-import { TelemetryData } from '../../shared/types';
+import { Fuel, Thermometer, Zap, Activity } from 'lucide-react';
+import { TelemetryData } from '../types';
 
 interface TelemetryDashboardProps {
   telemetry: TelemetryData | null;
@@ -22,8 +21,6 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ telemetr
 
   const speedKmh = Math.round(telemetry.speed * 3.6);
   const fuelPercentage = Math.round((telemetry.fuelLevel / telemetry.fuelCapacity) * 100);
-  const averageTireWear = Object.values(telemetry.tireWear).reduce((a, b) => a + b, 0) / 4;
-  const tireWearPercentage = Math.round(averageTireWear * 100);
 
   return (
     <div className="space-y-6">
@@ -32,7 +29,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ telemetr
         <div className="bg-gray-800 rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Speed</h3>
-            <Speedometer className="w-6 h-6 text-blue-400" />
+            <Activity className="w-6 h-6 text-blue-400" />
           </div>
           <div className="text-center">
             <div className="text-4xl font-bold text-blue-400 mb-2">
@@ -91,7 +88,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ telemetr
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-xl font-semibold mb-6">Tire Status</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Object.entries(telemetry.tireWear).map(([position, wear]) => (
+          {Object.entries(telemetry.tireWear).map(([position, wear]: [string, number]) => (
             <div key={position} className="text-center">
               <div className="text-sm text-gray-400 mb-2 capitalize">
                 {position.replace(/([A-Z])/g, ' $1').trim()}

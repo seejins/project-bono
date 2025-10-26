@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { TelemetryService } from './services/TelemetryService';
 import { StrategyEngine } from './services/StrategyEngine';
-import { DatabaseService } from './services/DatabaseService';
+import { DatabaseService } from './services/DatabaseService'; 
 import { setupRoutes } from './routes';
 import { setupSocketHandlers } from './socket';
 

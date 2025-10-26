@@ -2,6 +2,7 @@ import { Express } from 'express';
 import { TelemetryService } from '../services/TelemetryService';
 import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
+import uploadRoutes from './upload';
 
 export function setupRoutes(
   app: Express,
@@ -57,4 +58,7 @@ export function setupRoutes(
     services.strategyEngine.reset();
     res.json({ message: 'Strategy engine reset' });
   });
+
+  // Upload routes for F1 23 data
+  app.use('/api/upload', uploadRoutes);
 }

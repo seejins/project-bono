@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trophy, Clock, MapPin, Cloud, Thermometer } from 'lucide-react';
-import { TelemetryData, RaceStrategy } from '../../shared/types';
+import { TelemetryData, RaceStrategy } from '../types';
 
 interface RaceInfoProps {
   telemetry: TelemetryData | null;

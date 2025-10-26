@@ -77,3 +77,4 @@ export const AlertSystem: React.FC<AlertSystemProps> = ({ alerts, onDismiss }) =
     </div>
   );
 };
+

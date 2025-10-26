@@ -1,6 +1,6 @@
 import React from 'react';
 import { Target, Clock, Fuel, AlertTriangle, CheckCircle } from 'lucide-react';
-import { RaceStrategy, TelemetryData } from '../../shared/types';
+import { RaceStrategy, TelemetryData } from '../types';
 
 interface StrategyPanelProps {
   strategy: RaceStrategy | null;

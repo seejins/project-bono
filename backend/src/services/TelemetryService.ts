@@ -66,7 +66,7 @@ export interface TelemetryData {
 
 export class TelemetryService extends EventEmitter {
   private socket: dgram.Socket;
-  private isRunning: boolean = false;
+  public isRunning: boolean = false;
   private lastData: TelemetryData | null = null;
   private dataBuffer: TelemetryData[] = [];
   private readonly BUFFER_SIZE = 1000; // Keep last 1000 data points
@@ -252,7 +252,7 @@ export class TelemetryService extends EventEmitter {
 
     // Divide by count to get average
     Object.keys(avg).forEach(key => {
-      avg[key] = avg[key] / recentData.length;
+      (avg as any)[key] = (avg as any)[key] / recentData.length;
     });
 
     return avg as TelemetryData;

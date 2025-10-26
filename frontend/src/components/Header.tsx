@@ -1,5 +1,6 @@
 import React from 'react';
-import { Wifi, WifiOff, Activity } from 'lucide-react';
+import { Wifi, WifiOff, Trophy } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   isConnected: boolean;
@@ -7,27 +8,30 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ isConnected }) => {
   return (
-    <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Activity className="w-8 h-8 text-red-500" />
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+            <Trophy className="w-6 h-6 text-white" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold">Project Bono</h1>
-            <p className="text-sm text-gray-400">Real-time telemetry & strategy companion</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">F1 Season Manager</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Friend group racing championship</p>
           </div>
         </div>
         
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 text-sm">
             {isConnected ? (
-              <Wifi className="w-5 h-5 text-green-400" />
+              <Wifi className="w-4 h-4 text-green-500" />
             ) : (
-              <WifiOff className="w-5 h-5 text-red-400" />
+              <WifiOff className="w-4 h-4 text-red-500" />
             )}
-            <span className={`text-sm ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+          <ThemeToggle />
         </div>
       </div>
     </header>
