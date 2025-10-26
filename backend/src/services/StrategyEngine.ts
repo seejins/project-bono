@@ -1,4 +1,4 @@
-import { TelemetryData } from './TelemetryService';
+import { F123TelemetryData } from './TelemetryService';
 
 export interface RaceStrategy {
   recommendedPitStop: boolean;
@@ -34,7 +34,7 @@ export class StrategyEngine {
   private weatherHistory: WeatherConditions[] = [];
   private currentStrategy: RaceStrategy | null = null;
 
-  public analyzeLap(telemetry: TelemetryData): LapAnalysis {
+  public analyzeLap(telemetry: F123TelemetryData): LapAnalysis {
     const analysis: LapAnalysis = {
       lapNumber: telemetry.lapNumber,
       lapTime: telemetry.currentLapTime,
@@ -54,7 +54,7 @@ export class StrategyEngine {
   }
 
   public generateStrategy(
-    telemetry: TelemetryData,
+    telemetry: F123TelemetryData,
     raceLength: number = 50,
     weather: WeatherConditions
   ): RaceStrategy {
@@ -88,7 +88,7 @@ export class StrategyEngine {
   }
 
   private shouldPitStop(
-    telemetry: TelemetryData,
+    telemetry: F123TelemetryData,
     lapsRemaining: number,
     weather: WeatherConditions
   ): boolean {
@@ -114,7 +114,7 @@ export class StrategyEngine {
 
   private recommendTireCompound(
     weather: WeatherConditions,
-    telemetry: TelemetryData
+    telemetry: F123TelemetryData
   ): 'soft' | 'medium' | 'hard' | 'intermediate' | 'wet' {
     // Wet conditions
     if (weather.rainPercentage > 50) {
@@ -157,17 +157,17 @@ export class StrategyEngine {
     }
   }
 
-  private calculateAverageTireWear(tireWear: TelemetryData['tireWear']): number {
+  private calculateAverageTireWear(tireWear: F123TelemetryData['tireWear']): number {
     const values = Object.values(tireWear);
     return values.reduce((sum, wear) => sum + wear, 0) / values.length;
   }
 
-  private calculateFuelConsumption(telemetry: TelemetryData): number {
+  private calculateFuelConsumption(telemetry: F123TelemetryData): number {
     // Simplified fuel consumption calculation
     return telemetry.throttle * 0.1; // Rough estimate
   }
 
-  private analyzePace(telemetry: TelemetryData): 'fast' | 'medium' | 'slow' {
+  private analyzePace(telemetry: F123TelemetryData): 'fast' | 'medium' | 'slow' {
     const currentLapTime = telemetry.currentLapTime;
     const bestLapTime = telemetry.bestLapTime;
     
@@ -180,7 +180,7 @@ export class StrategyEngine {
     return 'slow';
   }
 
-  private identifyIssues(telemetry: TelemetryData): string[] {
+  private identifyIssues(telemetry: F123TelemetryData): string[] {
     const issues: string[] = [];
     
     // High tire wear
@@ -190,7 +190,7 @@ export class StrategyEngine {
     }
     
     // Engine temperature
-    if (telemetry.engineTemperature > 120) {
+      if (telemetry.engineRPM > 12000) {
       issues.push('High engine temperature');
     }
     
@@ -207,14 +207,14 @@ export class StrategyEngine {
     return issues;
   }
 
-  private canMakePitStop(telemetry: TelemetryData): boolean {
+  private canMakePitStop(telemetry: F123TelemetryData): boolean {
     // Check if we're in a position to make a strategic pit stop
     // This would consider track position, gaps to other cars, etc.
     return telemetry.carPosition > 3; // Simplified logic
   }
 
   private generateReasoning(
-    telemetry: TelemetryData,
+    telemetry: F123TelemetryData,
     needsPitStop: boolean,
     tireCompound: string,
     weather: WeatherConditions
@@ -240,7 +240,7 @@ export class StrategyEngine {
     return `Pit stop recommended: ${reasons.join(', ')}. Switch to ${tireCompound} tires.`;
   }
 
-  private calculateConfidence(telemetry: TelemetryData, weather: WeatherConditions): number {
+  private calculateConfidence(telemetry: F123TelemetryData, weather: WeatherConditions): number {
     let confidence = 0.8; // Base confidence
     
     // Reduce confidence based on uncertainty factors
@@ -266,7 +266,7 @@ export class StrategyEngine {
   }
 
   // Advanced tactical analysis methods
-  private analyzeTacticalSituation(telemetry: TelemetryData, raceLength: number): string {
+  private analyzeTacticalSituation(telemetry: F123TelemetryData, raceLength: number): string {
     const currentLap = telemetry.lapNumber;
     const position = telemetry.carPosition;
     const lapsRemaining = raceLength - currentLap;
@@ -294,7 +294,7 @@ export class StrategyEngine {
     return "Continue current strategy. All systems optimal.";
   }
 
-  private calculateTargetLapTime(telemetry: TelemetryData): number {
+  private calculateTargetLapTime(telemetry: F123TelemetryData): number {
     const bestLapTime = telemetry.bestLapTime;
     const currentLapTime = telemetry.currentLapTime;
     
@@ -309,7 +309,7 @@ export class StrategyEngine {
     return Math.max(targetTime, bestLapTime - 0.5); // Don't go too fast
   }
 
-  private checkUndercutOpportunity(telemetry: TelemetryData): boolean {
+  private checkUndercutOpportunity(telemetry: F123TelemetryData): boolean {
     const position = telemetry.carPosition;
     const gapToLeader = this.calculateGapToLeader(telemetry);
     const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
@@ -322,7 +322,7 @@ export class StrategyEngine {
     return position > 1 && gapToLeader < 3.0 && tireWear < 0.6 && telemetry.lapNumber < 40;
   }
 
-  private checkOvercutOpportunity(telemetry: TelemetryData): boolean {
+  private checkOvercutOpportunity(telemetry: F123TelemetryData): boolean {
     const position = telemetry.carPosition;
     const gapToLeader = this.calculateGapToLeader(telemetry);
     const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
@@ -335,7 +335,7 @@ export class StrategyEngine {
     return position > 1 && gapToLeader < 2.0 && tireWear < 0.4 && telemetry.lapNumber < 35;
   }
 
-  private calculateGapToLeader(telemetry: TelemetryData): number {
+  private calculateGapToLeader(telemetry: F123TelemetryData): number {
     // Simulate gap calculation (in real app, this would come from telemetry)
     const position = telemetry.carPosition;
     if (position === 1) return 0;
@@ -345,7 +345,7 @@ export class StrategyEngine {
     return gaps[position - 1] || 20.0;
   }
 
-  private calculateTireAdvantage(telemetry: TelemetryData): number {
+  private calculateTireAdvantage(telemetry: F123TelemetryData): number {
     const tireWear = this.calculateAverageTireWear(telemetry.tireWear);
     const position = telemetry.carPosition;
     
@@ -359,7 +359,7 @@ export class StrategyEngine {
     return advantage;
   }
 
-  private analyzeFuelStrategy(telemetry: TelemetryData, lapsRemaining: number): {needsSaving: boolean, lapsToSave: number} {
+  private analyzeFuelStrategy(telemetry: F123TelemetryData, lapsRemaining: number): {needsSaving: boolean, lapsToSave: number} {
     const fuelLevel = telemetry.fuelLevel;
     const fuelPerLap = 2.5; // Average fuel consumption
     const fuelNeeded = lapsRemaining * fuelPerLap;

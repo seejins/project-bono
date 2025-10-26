@@ -159,7 +159,7 @@ export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => 
           className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Back to Tracks</span>
+          <span>Back</span>
         </button>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{track.name}</h1>
         <div className="w-10"></div> {/* Spacer */}

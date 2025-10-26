@@ -3,6 +3,7 @@ import { TelemetryService } from '../services/TelemetryService';
 import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
 import uploadRoutes from './upload';
+import seasonsRoutes from './seasons';
 
 export function setupRoutes(
   app: Express,
@@ -61,4 +62,7 @@ export function setupRoutes(
 
   // Upload routes for F1 23 data
   app.use('/api/upload', uploadRoutes);
+  
+  // Seasons management routes
+  app.use('/api/seasons', seasonsRoutes);
 }

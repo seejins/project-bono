@@ -6,7 +6,8 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { TelemetryService } from './services/TelemetryService';
 import { StrategyEngine } from './services/StrategyEngine';
-import { DatabaseService } from './services/DatabaseService'; 
+import { DatabaseService } from './services/DatabaseService';
+import { SessionExportService } from './services/SessionExportService'; 
 import { setupRoutes } from './routes';
 import { setupSocketHandlers } from './socket';
 
@@ -30,12 +31,13 @@ app.use(express.json());
 const databaseService = new DatabaseService();
 const telemetryService = new TelemetryService();
 const strategyEngine = new StrategyEngine();
+const sessionExportService = new SessionExportService();
 
 // Setup routes
 setupRoutes(app, { telemetryService, strategyEngine, databaseService });
 
 // Setup Socket.IO handlers
-setupSocketHandlers(io, { telemetryService, strategyEngine });
+setupSocketHandlers(io, { telemetryService, strategyEngine, sessionExportService });
 
 // Start telemetry service
 telemetryService.start();

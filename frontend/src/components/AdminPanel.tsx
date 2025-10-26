@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Users, Calendar, Settings, FileText, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
-import { useAdmin } from '../contexts/AdminContext';
+import { Upload, Users, Calendar, Settings, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -8,9 +7,8 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthenticate }) => {
-  const { logout } = useAdmin();
   const [password, setPassword] = useState('');
-  const [activeSection, setActiveSection] = useState<'upload' | 'drivers' | 'races' | 'settings'>('upload');
+  const [activeSection, setActiveSection] = useState<'upload' | 'session-upload' | 'drivers' | 'races' | 'settings'>('upload');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   
@@ -21,8 +19,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
     { id: '1', name: 'John Smith', team: 'Mercedes', number: 44 }
   ]);
   
+  // Session file upload state
+  const [sessionFile, setSessionFile] = useState<File | null>(null);
+  const [sessionUploadStatus, setSessionUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [sessionUploadMessage, setSessionUploadMessage] = useState('');
+  const [selectedRace, setSelectedRace] = useState('');
+
   // Race management state
   const [showScheduleRaceModal, setShowScheduleRaceModal] = useState(false);
+  const [newRace, setNewRace] = useState({ track: '', date: '', type: 'race' });
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +62,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
   const handleRemoveDriver = (driverId: string) => {
     if (confirm('Are you sure you want to remove this driver?')) {
       setDrivers(drivers.filter(d => d.id !== driverId));
+    }
+  };
+
+  const handleScheduleRace = async () => {
+    if (!newRace.track || !newRace.date) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    // For now, just close modal (later will call API)
+    setNewRace({ track: '', date: '', type: 'race' });
+    setShowScheduleRaceModal(false);
+    alert('Race scheduled successfully!');
+  };
+
+  const handleSessionFileUpload = async () => {
+    if (!sessionFile || !selectedRace) {
+      alert('Please select a file and race');
+      return;
+    }
+
+    setSessionUploadStatus('uploading');
+    setSessionUploadMessage('Uploading session file...');
+
+    try {
+      const formData = new FormData();
+      formData.append('sessionFile', sessionFile);
+      formData.append('raceId', selectedRace);
+
+      const response = await fetch('/api/upload/session', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        setSessionUploadStatus('success');
+        setSessionUploadMessage('Session file uploaded successfully!');
+        setSessionFile(null);
+        setSelectedRace('');
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      setSessionUploadStatus('error');
+      setSessionUploadMessage('Failed to upload session file');
     }
   };
 
@@ -95,30 +145,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
   if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto">
-        <div className="bg-gray-800 rounded-lg p-8">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-8 shadow-sm">
           <div className="text-center mb-6">
-            <Settings className="w-12 h-12 text-blue-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-white">Admin Access</h2>
-            <p className="text-gray-400">Enter admin password to continue</p>
+            <Settings className="w-12 h-12 text-red-600 dark:text-blue-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Access</h2>
+            <p className="text-gray-500 dark:text-gray-400">Enter admin password to continue</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 placeholder="Enter admin password"
                 required
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
             >
               Login
             </button>
@@ -133,22 +183,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Settings className="w-6 h-6 text-blue-400" />
-          <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
+          <Settings className="w-6 h-6 text-red-600 dark:text-blue-400" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Panel</h1>
         </div>
-        <button
-          onClick={logout}
-          className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Logout</span>
-        </button>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          Season Management
+        </div>
       </div>
 
       {/* Navigation */}
-      <div className="flex space-x-1 bg-gray-800 rounded-lg p-1">
+      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
         {[
           { id: 'upload', label: 'Upload Data', icon: Upload },
+          { id: 'session-upload', label: 'Session Files', icon: FileText },
           { id: 'drivers', label: 'Manage Drivers', icon: Users },
           { id: 'races', label: 'Manage Races', icon: Calendar },
           { id: 'settings', label: 'Settings', icon: Settings }
@@ -160,8 +207,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
               onClick={() => setActiveSection(section.id as any)}
               className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
                 activeSection === section.id
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-red-600 text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -174,15 +221,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       {/* Upload Section */}
       {activeSection === 'upload' && (
         <div className="space-y-6">
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">F1 23 Data Upload</h3>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">F1 23 Data Upload</h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Upload F1 23 Session File
                 </label>
-                <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center">
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
                   <input
                     type="file"
                     accept=".json,.csv"
@@ -195,8 +242,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                     htmlFor="file-upload"
                     className={`cursor-pointer inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
                       uploadStatus === 'uploading'
-                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700 text-white'
                     }`}
                   >
                     <Upload className="w-4 h-4" />
@@ -204,7 +251,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                       {uploadStatus === 'uploading' ? 'Processing...' : 'Choose File'}
                     </span>
                   </label>
-                  <p className="text-sm text-gray-400 mt-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                     Supports JSON and CSV files from F1 23
                   </p>
                 </div>
@@ -225,28 +272,116 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Recent Uploads</h3>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Uploads</h3>
             <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-blue-400" />
+                  <FileText className="w-5 h-5 text-red-600 dark:text-blue-400" />
                   <div>
-                    <p className="text-white font-medium">Monaco GP Session</p>
-                    <p className="text-sm text-gray-400">2 hours ago</p>
+                    <p className="text-gray-900 dark:text-white font-medium">Monaco GP Session</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">2 hours ago</p>
                   </div>
                 </div>
-                <div className="text-sm text-green-400">Success</div>
+                <div className="text-sm text-green-600 dark:text-green-400">Success</div>
               </div>
-              <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-blue-400" />
+                  <FileText className="w-5 h-5 text-red-600 dark:text-blue-400" />
                   <div>
-                    <p className="text-white font-medium">Silverstone Qualifying</p>
-                    <p className="text-sm text-gray-400">1 day ago</p>
+                    <p className="text-gray-900 dark:text-white font-medium">Silverstone Qualifying</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">1 day ago</p>
                   </div>
                 </div>
-                <div className="text-sm text-green-400">Success</div>
+                <div className="text-sm text-green-600 dark:text-green-400">Success</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session Upload Section */}
+      {activeSection === 'session-upload' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Upload F1 23 Session Files
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Upload session result files from F1 23 to add data for other drivers who aren't the host.
+            </p>
+            
+            <div className="space-y-4">
+              {/* Race Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Race
+                </label>
+                <select
+                  value={selectedRace}
+                  onChange={(e) => setSelectedRace(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Select a race...</option>
+                  <option value="race-1">Bahrain Grand Prix 2024</option>
+                  <option value="race-2">Saudi Arabian Grand Prix 2024</option>
+                  <option value="race-3">Australian Grand Prix 2024</option>
+                </select>
+              </div>
+
+              {/* File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Session File
+                </label>
+                <input
+                  type="file"
+                  accept=".json,.csv,.txt"
+                  onChange={(e) => setSessionFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Supported formats: JSON, CSV, TXT
+                </p>
+              </div>
+
+              {/* Upload Button */}
+              <button
+                onClick={handleSessionFileUpload}
+                disabled={!sessionFile || !selectedRace || sessionUploadStatus === 'uploading'}
+                className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {sessionUploadStatus === 'uploading' ? 'Uploading...' : 'Upload Session File'}
+              </button>
+
+              {/* Status Message */}
+              {sessionUploadMessage && (
+                <div className={`p-3 rounded-md ${
+                  sessionUploadStatus === 'success' 
+                    ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                    : sessionUploadStatus === 'error'
+                    ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                    : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                }`}>
+                  <div className="flex items-center space-x-2">
+                    {sessionUploadStatus === 'success' && <CheckCircle className="w-4 h-4" />}
+                    {sessionUploadStatus === 'error' && <AlertCircle className="w-4 h-4" />}
+                    <span className="text-sm">{sessionUploadMessage}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Information */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+                <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                  How it works:
+                </h4>
+                <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                  <li>• Host data is automatically captured via UDP</li>
+                  <li>• Upload session files for other drivers' results</li>
+                  <li>• Files should contain qualifying and race results</li>
+                  <li>• Data will be processed and added to the race</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -305,122 +440,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                 </div>
               )}
             </div>
-
-            {/* Add Driver Modal */}
-            {showAddDriverModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver</h3>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Driver Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={newDriver.name}
-                        onChange={(e) => setNewDriver({ ...newDriver, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                        placeholder="e.g., John Smith"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Team
-                      </label>
-                      <input
-                        type="text"
-                        value={newDriver.team}
-                        onChange={(e) => setNewDriver({ ...newDriver, team: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                        placeholder="e.g., Mercedes"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Car Number
-                      </label>
-                      <input
-                        type="number"
-                        value={newDriver.number}
-                        onChange={(e) => setNewDriver({ ...newDriver, number: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                        placeholder="e.g., 44"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex space-x-3 mt-6">
-                    <button
-                      onClick={() => setShowAddDriverModal(false)}
-                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleAddDriver}
-                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                    >
-                      Add Driver
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {/* Races Section */}
       {activeSection === 'races' && (
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Race Schedule</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Manage upcoming and past races</p>
-              </div>
-              <button 
-                onClick={() => setShowScheduleRaceModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Schedule Race
-              </button>
-            </div>
-            
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>Schedule your first race</p>
-            </div>
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Manage Races</h3>
+            <button 
+              onClick={() => setShowScheduleRaceModal(true)}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Schedule Race
+            </button>
+          </div>
+          
+          <div className="text-center py-8">
+            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">Race management coming soon...</p>
           </div>
         </div>
       )}
 
       {/* Settings Section */}
       {activeSection === 'settings' && (
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Settings</h3>
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Settings</h3>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Season Name
               </label>
               <input
                 type="text"
                 defaultValue="F1 Season 2024"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Points System
               </label>
-              <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500">
                 <option>F1 Standard (25-18-15-12-10-8-6-4-2-1)</option>
                 <option>Custom Points System</option>
               </select>
@@ -430,11 +495,147 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
               <input
                 type="checkbox"
                 id="fastest-lap-point"
-                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-red-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-red-500"
               />
-              <label htmlFor="fastest-lap-point" className="text-sm text-gray-300">
+              <label htmlFor="fastest-lap-point" className="text-sm text-gray-700 dark:text-gray-300">
                 Award point for fastest lap
               </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Driver Modal */}
+      {showAddDriverModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Driver Name *
+                </label>
+                <input
+                  type="text"
+                  value={newDriver.name}
+                  onChange={(e) => setNewDriver({ ...newDriver, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., John Smith"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Team
+                </label>
+                <input
+                  type="text"
+                  value={newDriver.team}
+                  onChange={(e) => setNewDriver({ ...newDriver, team: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., Mercedes"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Car Number
+                </label>
+                <input
+                  type="number"
+                  value={newDriver.number}
+                  onChange={(e) => setNewDriver({ ...newDriver, number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., 44"
+                />
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowAddDriverModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddDriver}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Add Driver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Race Modal */}
+      {showScheduleRaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Schedule Race</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Track *
+                </label>
+                <select
+                  value={newRace.track}
+                  onChange={(e) => setNewRace({ ...newRace, track: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Select a track</option>
+                  <option value="bahrain">Bahrain International Circuit</option>
+                  <option value="silverstone">Silverstone Circuit</option>
+                  <option value="monaco">Circuit de Monaco</option>
+                  <option value="spa">Spa-Francorchamps</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  value={newRace.date}
+                  onChange={(e) => setNewRace({ ...newRace, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Session Type
+                </label>
+                <select
+                  value={newRace.type}
+                  onChange={(e) => setNewRace({ ...newRace, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="race">Race</option>
+                  <option value="qualifying">Qualifying</option>
+                  <option value="practice">Practice</option>
+                  <option value="sprint">Sprint</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowScheduleRaceModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleScheduleRace}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Schedule Race
+              </button>
             </div>
           </div>
         </div>

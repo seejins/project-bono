@@ -33,7 +33,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
 
   const authenticate = (password: string): boolean => {
     // Simple password check - in production, this would be more secure
-    const adminPassword = '1234';
+    const adminPassword = process.env.REACT_APP_ADMIN_PASSWORD || '1234';
     
     if (password === adminPassword) {
       setIsAuthenticated(true);

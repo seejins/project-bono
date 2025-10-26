@@ -1,16 +1,16 @@
 import React from 'react';
-import { Trophy, Users, MapPin, Settings } from 'lucide-react';
+import { Trophy, Users, Calendar, Settings } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
-  onTabChange: (tab: 'season' | 'drivers' | 'tracks' | 'admin') => void;
+  onTabChange: (tab: 'season' | 'drivers' | 'races' | 'admin') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'season', label: 'Season', icon: Trophy },
     { id: 'drivers', label: 'Drivers', icon: Users },
-    { id: 'tracks', label: 'Tracks', icon: MapPin },
+    { id: 'races', label: 'Races', icon: Calendar },
     { id: 'admin', label: 'Admin', icon: Settings },
   ] as const;
 

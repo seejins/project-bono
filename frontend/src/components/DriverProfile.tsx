@@ -46,9 +46,10 @@ interface Achievement {
 interface DriverProfileProps {
   driverId: string;
   onBack: () => void;
+  onRaceSelect: (raceId: string) => void;
 }
 
-export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack }) => {
+export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, onRaceSelect }) => {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -147,7 +148,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack }
           onClick={onBack}
           className="text-blue-400 hover:text-blue-300"
         >
-          ← Back to Drivers
+          ← Back
         </button>
       </div>
     );
@@ -162,7 +163,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack }
           className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Back to Drivers</span>
+          <span>Back</span>
         </button>
       </div>
 
@@ -325,7 +326,11 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack }
               </thead>
               <tbody className="divide-y divide-gray-700">
                 {raceResults.map((result) => (
-                  <tr key={result.id} className="hover:bg-gray-700">
+                  <tr 
+                    key={result.id} 
+                    className="hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={() => onRaceSelect(result.id)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{result.trackName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-400">{new Date(result.date).toLocaleDateString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Wifi, WifiOff, Trophy } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { SeasonSelector } from './SeasonSelector';
 
 interface HeaderProps {
   isConnected: boolean;
@@ -21,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({ isConnected }) => {
         </div>
         
         <div className="flex items-center space-x-4">
+          <SeasonSelector />
           <div className="flex items-center space-x-2 text-sm">
             {isConnected ? (
               <Wifi className="w-4 h-4 text-green-500" />
