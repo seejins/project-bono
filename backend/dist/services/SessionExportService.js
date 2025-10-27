@@ -52,9 +52,22 @@ class SessionExportService {
             weatherRainPercentage: sessionData.drivers[0]?.rainPercentage || 0,
             status: 'completed'
         };
-        // TODO: Implement createRace method in DatabaseService
-        // For now, return a mock race ID
-        return 'race-' + Date.now();
+        // Get or create track
+        const track = await this.dbService.findOrCreateTrack(sessionData.trackName);
+        // Get current active season
+        const seasons = await this.dbService.getAllSeasons();
+        const activeSeason = seasons.find(s => s.isActive) || seasons[0];
+        if (!activeSeason) {
+            throw new Error('No active season found');
+        }
+        // Create race in database
+        const raceId = await this.dbService.createRace({
+            seasonId: activeSeason.id,
+            trackId: track.id,
+            raceDate: sessionData.sessionEndTime.toISOString(),
+            status: 'completed'
+        });
+        return raceId;
     }
     /**
      * Process driver results from telemetry data
@@ -91,18 +104,71 @@ class SessionExportService {
      * Save session results to database
      */
     async saveSessionResults(raceId, results, sessionType) {
-        // TODO: Implement saveSessionResults method in DatabaseService
-        console.log(`Saving ${results.length} driver results for session type ${sessionType}`);
-        for (const result of results) {
-            console.log(`Driver: ${result.driverName}, Position: ${result.position}, Time: ${result.lapTime}ms`);
-        }
+        // Convert SessionResult[] to format expected by importRaceResults
+        const sessionData = {
+            trackName: 'Unknown Track', // TODO: Get from session data
+            sessionType: sessionType,
+            date: new Date().toISOString(),
+            results: results.map(result => ({
+                driverName: result.driverName,
+                driverNumber: result.carNumber,
+                position: result.position,
+                lapTime: result.lapTime,
+                sector1Time: result.sector1Time,
+                sector2Time: result.sector2Time,
+                sector3Time: result.sector3Time,
+                bestLapTime: result.bestLapTime,
+                gapToPole: result.gapToPole,
+                penalties: result.penalties,
+                warnings: result.warnings,
+                dnfReason: result.dnfReason
+            })),
+            drivers: results.map(result => ({
+                driverName: result.driverName,
+                driverNumber: result.carNumber,
+                teamName: result.teamName
+            }))
+        };
+        await this.dbService.importRaceResults(raceId, sessionData);
+        console.log(`Saved ${results.length} driver results for session type ${sessionType}`);
     }
     /**
      * Save telemetry data to database
      */
     async saveTelemetryData(raceId, drivers, sessionType) {
-        // TODO: Implement saveTelemetryData method in DatabaseService
-        console.log(`Saving telemetry data for ${drivers.length} drivers`);
+        // Convert F123TelemetryData[] to format expected by importRaceResults
+        const sessionData = {
+            trackName: 'Unknown Track', // TODO: Get from session data
+            sessionType: sessionType,
+            date: new Date().toISOString(),
+            results: drivers.map(driver => ({
+                driverName: driver.driverName,
+                driverNumber: driver.carNumber,
+                position: driver.carPosition,
+                lapTime: driver.lapTime,
+                sector1Time: driver.sector1Time,
+                sector2Time: driver.sector2Time,
+                sector3Time: driver.sector3Time,
+                bestLapTime: driver.bestLapTime,
+                gapToPole: driver.gapToPole || 0,
+                penalties: driver.penalties,
+                warnings: driver.warnings,
+                lapTimes: [{
+                        lapNumber: driver.lapNumber,
+                        sector1Time: driver.sector1Time,
+                        sector2Time: driver.sector2Time,
+                        sector3Time: driver.sector3Time,
+                        lapTime: driver.lapTime
+                    }]
+            })),
+            drivers: drivers.map(driver => ({
+                driverName: driver.driverName,
+                driverNumber: driver.carNumber,
+                teamName: driver.teamName
+            }))
+        };
+        await this.dbService.importRaceResults(raceId, sessionData);
+        console.log(`Saved telemetry data for ${drivers.length} drivers`);
     }
     /**
      * Import session data from uploaded file

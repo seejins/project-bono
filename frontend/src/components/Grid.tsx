@@ -78,10 +78,10 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         });
         
         // Sort by points to get correct championship order
-        const sortedDrivers = driversWithStats.sort((a, b) => b.points - a.points);
+        const sortedDrivers = driversWithStats.sort((a: any, b: any) => b.points - a.points);
         
         // Update positions based on sorted order
-        const finalDrivers = sortedDrivers.map((driver, index) => ({
+        const finalDrivers = sortedDrivers.map((driver: any, index: number) => ({
           ...driver,
           position: index + 1
         }));
