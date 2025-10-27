@@ -45,7 +45,37 @@ export interface DriverMapping {
     endDate?: string;
     isActive: boolean;
     createdAt: string;
-    updatedAt: string;
+}
+export interface SessionResult {
+    id: string;
+    raceId: string;
+    driverId: string;
+    position: number;
+    lapTime: number;
+    sector1Time: number;
+    sector2Time: number;
+    sector3Time: number;
+    fastestLap: boolean;
+    createdAt: string;
+}
+export interface TelemetryData {
+    id: string;
+    sessionId: string;
+    driverId: string;
+    lapNumber: number;
+    sector1Time: number;
+    sector2Time: number;
+    sector3Time: number;
+    lapTime: number;
+    timestamp: string;
+}
+export interface SessionFileUpload {
+    id: string;
+    filename: string;
+    originalName: string;
+    fileSize: number;
+    uploadDate: string;
+    processed: boolean;
 }
 export interface DriverData {
     name: string;
@@ -58,16 +88,26 @@ export interface SeasonData {
     year: number;
     startDate?: string | Date;
     endDate?: string | Date;
-    status: 'active' | 'completed' | 'upcoming';
+    status?: 'active' | 'completed' | 'upcoming';
     pointsSystem?: string;
     fastestLapPoint?: boolean;
     isActive?: boolean;
 }
+export interface TrackData {
+    name: string;
+    country: string;
+    location?: string;
+    length: number;
+    laps: number;
+}
 export interface RaceData {
     seasonId: string;
     trackId: string;
-    raceDate: string;
-    status: 'scheduled' | 'completed' | 'cancelled';
+    raceDate: string | Date;
+    status?: 'scheduled' | 'completed' | 'cancelled';
+    date?: string | Date;
+    time?: string;
+    type?: string;
 }
 export interface DriverMappingData {
     seasonId: string;
@@ -75,50 +115,55 @@ export interface DriverMappingData {
     f123_driver_number?: number;
     yourDriverId: string;
 }
+export interface SessionFileUploadData {
+    filename: string;
+    originalName: string;
+    fileSize: number;
+    processed?: boolean;
+}
 export declare class DatabaseService {
     private db;
     private initialized;
+    private isPostgreSQL;
     constructor();
     private initializeTables;
+    private initializePostgreSQLTables;
+    private initializeSQLiteTables;
     ensureInitialized(): Promise<void>;
     private generateId;
-    private runQuery;
-    private getQuery;
-    private allQuery;
+    private executeQuery;
+    private executeQuerySingle;
+    private executeUpdate;
+    createDriver(data: DriverData): Promise<string>;
+    getDriverById(id: string): Promise<Driver | null>;
+    updateDriver(id: string, data: Partial<DriverData>): Promise<void>;
+    deleteDriver(id: string): Promise<void>;
     getDriversBySeason(seasonId: string): Promise<Driver[]>;
-    createDriver(driver: DriverData): Promise<Driver>;
-    updateDriver(driverId: string, updates: Partial<DriverData>): Promise<Driver>;
-    deleteDriver(driverId: string): Promise<void>;
     getAllSeasons(): Promise<Season[]>;
-    getSeasonById(seasonId: string): Promise<Season | null>;
-    createSeason(season: SeasonData): Promise<Season>;
-    updateSeason(seasonId: string, updates: Partial<SeasonData>): Promise<Season>;
-    deleteSeason(seasonId: string): Promise<void>;
-    addDriverToSeason(seasonId: string, driverId: string): Promise<void>;
-    createDriverAndAddToSeason(seasonId: string, driverData: DriverData): Promise<Driver>;
-    removeDriverFromSeason(seasonId: string, driverId: string): Promise<void>;
+    getSeasonById(id: string): Promise<Season | null>;
+    createSeason(data: SeasonData): Promise<string>;
+    updateSeason(id: string, data: Partial<SeasonData>): Promise<Season | null>;
+    deleteSeason(id: string): Promise<void>;
+    findOrCreateTrack(name: string, country?: string): Promise<Track>;
+    getTrackById(id: string): Promise<Track | null>;
     getTracksBySeason(seasonId: string): Promise<Track[]>;
-    addTrackToSeason(seasonId: string, trackId: string): Promise<void>;
-    createTrackAndAddToSeason(seasonId: string, trackData: any): Promise<Track>;
-    removeTrackFromSeason(seasonId: string, trackId: string): Promise<void>;
+    createRace(data: RaceData): Promise<string>;
+    getRaceById(id: string): Promise<Race | null>;
     getRacesBySeason(seasonId: string): Promise<Race[]>;
+    addDriverToSeason(seasonId: string, driverId: string): Promise<void>;
+    removeDriverFromSeason(seasonId: string, driverId: string): Promise<void>;
+    addTrackToSeason(seasonId: string, trackId: string): Promise<void>;
+    removeTrackFromSeason(seasonId: string, trackId: string): Promise<void>;
     addRaceToSeason(seasonId: string, raceId: string): Promise<void>;
-    createRaceAndAddToSeason(seasonId: string, raceData: any): Promise<string>;
     removeRaceFromSeason(seasonId: string, raceId: string): Promise<void>;
-    findOrCreateTrack(trackName: string): Promise<Track>;
-    createRace(race: RaceData): Promise<string>;
+    createDriverAndAddToSeason(seasonId: string, data: DriverData): Promise<Driver>;
+    createTrackAndAddToSeason(seasonId: string, data: TrackData): Promise<Track>;
+    createRaceAndAddToSeason(seasonId: string, data: RaceData): Promise<string>;
     getDriverMappings(seasonId: string): Promise<DriverMapping[]>;
-    createDriverMapping(mapping: DriverMappingData): Promise<DriverMapping>;
+    createDriverMapping(data: DriverMappingData): Promise<DriverMapping>;
     importRaceResults(raceId: string, sessionData: any): Promise<{
         resultsCount: number;
         lapTimesCount: number;
     }>;
-    saveTelemetry(data: any): void;
-    saveStrategy(strategy: any): void;
-    saveAlert(alert: any): void;
-    getTelemetryHistory(limit?: number): Promise<any[]>;
-    getStrategyHistory(limit?: number): Promise<any[]>;
-    getAlerts(limit?: number): Promise<any[]>;
-    close(): void;
 }
 //# sourceMappingURL=DatabaseService.d.ts.map

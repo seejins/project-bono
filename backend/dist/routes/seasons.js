@@ -296,7 +296,9 @@ function createSeasonsRoutes(dbService) {
             }
             await dbService.ensureInitialized();
             const raceId = await dbService.createRaceAndAddToSeason(id, {
+                seasonId: id,
                 trackId,
+                raceDate: new Date(date),
                 date: new Date(date),
                 time,
                 type: type || 'race',
