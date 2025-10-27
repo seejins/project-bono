@@ -80,7 +80,7 @@ export declare class DatabaseService {
     private initialized;
     constructor();
     private initializeTables;
-    private ensureInitialized;
+    ensureInitialized(): Promise<void>;
     private generateId;
     private runQuery;
     private getQuery;

@@ -181,8 +181,10 @@ class DatabaseService {
                         return;
                     }
                     completed++;
+                    console.log(`📊 Table ${completed}/${total} created`);
                     if (completed === total) {
                         this.initialized = true;
+                        console.log('🎉 All database tables created successfully');
                         resolve();
                     }
                 });
@@ -190,8 +192,14 @@ class DatabaseService {
         });
     }
     async ensureInitialized() {
+        console.log('🔧 ensureInitialized called, initialized:', this.initialized);
         if (!this.initialized) {
+            console.log('📋 Initializing database tables...');
             await this.initializeTables();
+            console.log('✅ Database tables initialized');
+        }
+        else {
+            console.log('✅ Database already initialized');
         }
     }
     // Utility method to generate UUID

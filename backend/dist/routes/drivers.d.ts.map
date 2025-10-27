@@ -1,1 +1,1 @@
-{"version":3,"file":"drivers.d.ts","sourceRoot":"","sources":["../../src/routes/drivers.ts"],"names":[],"mappings":"AAGA,QAAA,MAAM,MAAM,4CAAmB,CAAC;AAkGhC,eAAe,MAAM,CAAC"}
+{"version":3,"file":"drivers.d.ts","sourceRoot":"","sources":["../../src/routes/drivers.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,eAAe,EAAE,MAAM,6BAA6B,CAAC;AAE9D,MAAM,CAAC,OAAO,UAAU,mBAAmB,CAAC,SAAS,EAAE,eAAe,8CAyGrE"}

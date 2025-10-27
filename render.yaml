@@ -17,7 +17,7 @@ services:
       - key: API_KEY
         generateValue: true
       - key: ADMIN_PASSWORD
-        value: 1234
+        value: benji1234
       - key: SESSION_SECRET
         generateValue: true
       - key: FRONTEND_URL

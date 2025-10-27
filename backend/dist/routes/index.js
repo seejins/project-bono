@@ -52,10 +52,10 @@ function setupRoutes(app, services) {
         res.json({ message: 'Strategy engine reset' });
     });
     // Upload routes for F1 23 data
-    app.use('/api/upload', upload_1.default);
+    app.use('/api/upload', (0, upload_1.default)(services.databaseService));
     // Seasons management routes
-    app.use('/api/seasons', seasons_1.default);
+    app.use('/api/seasons', (0, seasons_1.default)(services.databaseService));
     // Session data routes (for local host app)
-    app.use('/api/sessions', sessions_1.default);
+    app.use('/api/sessions', (0, sessions_1.default)(services.databaseService));
 }
 //# sourceMappingURL=index.js.map

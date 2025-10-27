@@ -1,3 +1,3 @@
-declare const router: import("express-serve-static-core").Router;
-export default router;
+import { DatabaseService } from '../services/DatabaseService';
+export default function createUploadRoutes(dbService: DatabaseService): import("express-serve-static-core").Router;
 //# sourceMappingURL=upload.d.ts.map

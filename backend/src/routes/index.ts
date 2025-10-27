@@ -62,11 +62,11 @@ export function setupRoutes(
   });
 
   // Upload routes for F1 23 data
-  app.use('/api/upload', uploadRoutes);
+  app.use('/api/upload', uploadRoutes(services.databaseService));
   
   // Seasons management routes
-  app.use('/api/seasons', seasonsRoutes);
+  app.use('/api/seasons', seasonsRoutes(services.databaseService));
   
   // Session data routes (for local host app)
-  app.use('/api/sessions', sessionsRoutes);
+  app.use('/api/sessions', sessionsRoutes(services.databaseService));
 }

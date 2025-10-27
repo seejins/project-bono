@@ -33,6 +33,13 @@ const databaseService = new DatabaseService_1.DatabaseService();
 const telemetryService = new TelemetryService_1.TelemetryService();
 const strategyEngine = new StrategyEngine_1.StrategyEngine();
 const sessionExportService = new SessionExportService_1.SessionExportService();
+// Initialize database tables
+databaseService.ensureInitialized().then(() => {
+    console.log('✅ Database initialized successfully');
+}).catch((error) => {
+    console.error('❌ Database initialization failed:', error);
+    process.exit(1);
+});
 // Setup routes
 (0, routes_1.setupRoutes)(app, { telemetryService, strategyEngine, databaseService });
 // Setup Socket.IO handlers

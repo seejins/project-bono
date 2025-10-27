@@ -1,37 +1,44 @@
 import express from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 
-const router = express.Router();
+export default function createDriversRoutes(dbService: DatabaseService) {
+  const router = express.Router();
 
-// Get all drivers for a season
-router.get('/season/:seasonId', async (req, res) => {
-  try {
-    const { seasonId } = req.params;
-    const dbService = new DatabaseService();
-    
-    // TODO: Implement getDriversBySeason
-    const drivers = await dbService.getDriversBySeason(seasonId);
-    
-    res.json({ drivers });
-  } catch (error) {
-    console.error('Get drivers error:', error);
-    res.status(500).json({ 
-      error: 'Failed to get drivers',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+  // Get all drivers for a season
+  router.get('/', async (req, res) => {
+    try {
+      const { seasonId } = req.query;
+      
+      if (!seasonId) {
+        return res.status(400).json({ error: 'Season ID is required' });
+      }
 
-// Create a new driver
-router.post('/', async (req, res) => {
-  try {
-    const { seasonId, name, team, number } = req.body;
+      await dbService.ensureInitialized();
+      const drivers = await dbService.getDriversBySeason(seasonId as string);
+      
+      res.json({
+        success: true,
+        drivers
+      });
+    } catch (error) {
+      console.error('Get drivers error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get drivers',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Create a new driver
+  router.post('/', async (req, res) => {
+    try {
+      const { seasonId, name, team, number } = req.body;
     
     if (!seasonId || !name) {
       return res.status(400).json({ error: 'Season ID and name are required' });
     }
 
-    const dbService = new DatabaseService();
+    await dbService.ensureInitialized();
     const driverId = await dbService.createDriver({
       seasonId,
       name,
@@ -58,7 +65,7 @@ router.put('/:driverId', async (req, res) => {
     const { driverId } = req.params;
     const { name, team, number } = req.body;
 
-    const dbService = new DatabaseService();
+    await dbService.ensureInitialized();
     await dbService.updateDriver(driverId, {
       name,
       team,
@@ -82,8 +89,7 @@ router.put('/:driverId', async (req, res) => {
 router.delete('/:driverId', async (req, res) => {
   try {
     const { driverId } = req.params;
-
-    const dbService = new DatabaseService();
+    await dbService.ensureInitialized();
     await dbService.deleteDriver(driverId);
     
     res.json({
@@ -99,4 +105,5 @@ router.delete('/:driverId', async (req, res) => {
   }
 });
 
-export default router;
+return router;
+}
