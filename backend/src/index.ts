@@ -39,14 +39,23 @@ setupRoutes(app, { telemetryService, strategyEngine, databaseService });
 // Setup Socket.IO handlers
 setupSocketHandlers(io, { telemetryService, strategyEngine, sessionExportService });
 
-// Start telemetry service
-telemetryService.start();
+// Start telemetry service only in development/local mode
+const isProduction = process.env.NODE_ENV === 'production';
+const disableUDP = process.env.DISABLE_UDP === 'true';
+
+if (!isProduction && !disableUDP) {
+  telemetryService.start();
+  console.log('📡 UDP Telemetry service started (local mode)');
+} else {
+  console.log('📡 UDP Telemetry service disabled (production mode)');
+}
 
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
   console.log(`🏎️  Project Bono Backend running on port ${PORT}`);
   console.log(`📡 Telemetry service: ${telemetryService.isRunning ? 'Active' : 'Inactive'}`);
+  console.log(`🌍 Environment: ${isProduction ? 'Production' : 'Development'}`);
 });
 
 // Graceful shutdown

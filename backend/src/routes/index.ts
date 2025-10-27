@@ -4,6 +4,7 @@ import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
 import uploadRoutes from './upload';
 import seasonsRoutes from './seasons';
+import sessionsRoutes from './sessions';
 
 export function setupRoutes(
   app: Express,
@@ -65,4 +66,7 @@ export function setupRoutes(
   
   // Seasons management routes
   app.use('/api/seasons', seasonsRoutes);
+  
+  // Session data routes (for local host app)
+  app.use('/api/sessions', sessionsRoutes);
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, Users, Calendar, Settings, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { apiPostFormData } from '../utils/api';
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -91,10 +92,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       formData.append('sessionFile', sessionFile);
       formData.append('raceId', selectedRace);
 
-      const response = await fetch('/api/upload/session', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await apiPostFormData('/api/upload/session', formData);
 
       if (response.ok) {
         setSessionUploadStatus('success');
@@ -122,10 +120,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       formData.append('sessionFile', file);
       formData.append('seasonId', '1'); // TODO: Get from context
 
-      const response = await fetch('/api/upload/session', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await apiPostFormData('/api/upload/session', formData);
 
       const result = await response.json();
 

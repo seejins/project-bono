@@ -1,0 +1,46 @@
+services:
+  # Backend API Service
+  - type: web
+    name: f1-race-engineer-backend
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DISABLE_UDP
+        value: true
+      - key: API_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: 1234
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://f1-race-engineer-frontend.onrender.com
+    database:
+      name: f1-race-engineer-db
+      plan: free
+
+  # Frontend Static Site
+  - type: web
+    name: f1-race-engineer-frontend
+    env: static
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://f1-race-engineer-backend.onrender.com
+      - key: VITE_APP_PASSWORD
+        value: dinof1
+      - key: VITE_DEBUG
+        value: false
+
+databases:
+  - name: f1-race-engineer-db
+    plan: free

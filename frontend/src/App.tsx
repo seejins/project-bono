@@ -10,6 +10,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AlertSystem } from './components/AlertSystem';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { PasswordGate } from './components/PasswordGate';
 import { AdminProvider, useAdmin } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SeasonProvider } from './contexts/SeasonContext';
@@ -17,6 +18,9 @@ import { SeasonProvider } from './contexts/SeasonContext';
 function AppContent() {
   const [alerts, setAlerts] = useState<Array<{id: string, type: string, message: string, timestamp: number}>>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('f1-app-authenticated') === 'true';
+  });
   const [activeTab, setActiveTab] = useState<'season' | 'drivers' | 'races' | 'admin'>(() => {
     const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'drivers' | 'races' | 'admin';
     return savedTab || 'season';
@@ -37,7 +41,11 @@ function AppContent() {
     const savedHistory = localStorage.getItem('f1-navigation-history');
     return savedHistory ? JSON.parse(savedHistory) : [];
   });
-  const { isAuthenticated, authenticate } = useAdmin();
+  const { isAuthenticated: isAdminAuthenticated, authenticate } = useAdmin();
+
+  const handleAppAuthentication = () => {
+    setIsAuthenticated(true);
+  };
 
   const handleTabChange = (tab: 'season' | 'drivers' | 'races' | 'admin') => {
     setActiveTab(tab);
@@ -139,7 +147,8 @@ function AppContent() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io('http://localhost:3001');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const newSocket = io(apiUrl);
 
     // Connection handlers
     newSocket.on('connect', () => {
@@ -174,63 +183,69 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header isConnected={isConnected} />
-      
-      <div className="flex">
-        <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
-        
-        <main className="flex-1 p-6">
-          <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+      {!isAuthenticated ? (
+        <PasswordGate onAuthenticated={handleAppAuthentication} />
+      ) : (
+        <>
+          <Header isConnected={isConnected} />
           
-          {activeTab === 'season' && (
-            <SeasonDashboard 
-              onRaceSelect={handleRaceSelect} 
-              onDriverSelect={handleDriverSelect}
-            />
-          )}
-          
-          {activeTab === 'drivers' && (
-            <>
-              {selectedDriver ? (
-                <DriverProfile 
-                  driverId={selectedDriver} 
-                  onBack={handleDriverBack}
-                  onRaceSelect={handleRaceSelect}
+          <div className="flex">
+            <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
+            
+            <main className="flex-1 p-6">
+              <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+              
+              {activeTab === 'season' && (
+                <SeasonDashboard 
+                  onRaceSelect={handleRaceSelect} 
+                  onDriverSelect={handleDriverSelect}
                 />
-              ) : (
-                <DriverList onDriverSelect={handleDriverSelect} />
               )}
-            </>
-          )}
-          
-          {activeTab === 'races' && (
-            <>
-              {selectedDriverRace ? (
-                <DriverRaceAnalysis 
-                  driverId={selectedDriverRace.driverId}
-                  raceId={selectedDriverRace.raceId}
-                  onBack={handleDriverRaceBack} 
-                />
-              ) : selectedRace ? (
-                <RaceDetail 
-                  raceId={selectedRace} 
-                  onBack={handleRaceBack}
-                  onDriverSelect={handleDriverRaceSelect}
-                />
-              ) : (
-                <RaceEvents onRaceSelect={handleRaceSelect} />
+              
+              {activeTab === 'drivers' && (
+                <>
+                  {selectedDriver ? (
+                    <DriverProfile 
+                      driverId={selectedDriver} 
+                      onBack={handleDriverBack}
+                      onRaceSelect={handleRaceSelect}
+                    />
+                  ) : (
+                    <DriverList onDriverSelect={handleDriverSelect} />
+                  )}
+                </>
               )}
-            </>
-          )}
-          
-          {activeTab === 'admin' && (
-            <AdminPanel 
-              isAuthenticated={isAuthenticated}
-              onAuthenticate={authenticate}
-            />
-          )}
-        </main>
-      </div>
+              
+              {activeTab === 'races' && (
+                <>
+                  {selectedDriverRace ? (
+                    <DriverRaceAnalysis 
+                      driverId={selectedDriverRace.driverId}
+                      raceId={selectedDriverRace.raceId}
+                      onBack={handleDriverRaceBack} 
+                    />
+                  ) : selectedRace ? (
+                    <RaceDetail 
+                      raceId={selectedRace} 
+                      onBack={handleRaceBack}
+                      onDriverSelect={handleDriverRaceSelect}
+                    />
+                  ) : (
+                    <RaceEvents onRaceSelect={handleRaceSelect} />
+                  )}
+                </>
+              )}
+              
+              {activeTab === 'admin' && (
+                <AdminPanel 
+                  isAuthenticated={isAdminAuthenticated}
+                  onAuthenticate={authenticate}
+                />
+              )}
+            </main>
+          </div>
+        </>
+      )}
     </div>
   );
 }
