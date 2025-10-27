@@ -22,14 +22,11 @@ services:
         generateValue: true
       - key: FRONTEND_URL
         value: https://f1-race-engineer-frontend.onrender.com
-    database:
-      name: f1-race-engineer-db
-      plan: free
+    databaseName: f1-race-engineer-db
 
   # Frontend Static Site
-  - type: web
+  - type: static
     name: f1-race-engineer-frontend
-    env: static
     plan: free
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
