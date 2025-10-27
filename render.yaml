@@ -28,10 +28,8 @@ services:
           property: connectionString
 
   # Frontend Static Site
-  - type: web
+  - type: static
     name: f1-race-engineer-frontend
-    env: static
-    plan: starter
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
