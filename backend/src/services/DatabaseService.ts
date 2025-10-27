@@ -1,14 +1,36 @@
 import sqlite3 from 'sqlite3';
 import { Client } from 'pg';
+import { v4 as uuidv4 } from 'uuid';
 
 // Type definitions
+export interface Member {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemberData {
+  name: string;
+  isActive?: boolean;
+}
+
 export interface Driver {
   id: string;
   name: string;
   team: string;
   number: number;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DriverData {
+  name: string;
+  team: string;
+  number: number;
+  isActive?: boolean;
 }
 
 export interface Season {
@@ -17,20 +39,36 @@ export interface Season {
   year: number;
   startDate?: string;
   endDate?: string;
-  status: 'active' | 'completed' | 'upcoming';
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SeasonData {
+  name: string;
+  year: number;
+  startDate?: string;
+  endDate?: string;
+  isActive?: boolean;
 }
 
 export interface Track {
   id: string;
   name: string;
   country: string;
-  location: string;
+  city: string;
   length: number;
   laps: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TrackData {
+  name: string;
+  country: string;
+  city?: string;
+  circuitLength: number;
+  laps: number;
 }
 
 export interface Race {
@@ -43,16 +81,35 @@ export interface Race {
   updatedAt: string;
 }
 
+export interface RaceData {
+  seasonId: string;
+  trackId: string;
+  raceDate: string;
+  status?: 'scheduled' | 'completed' | 'cancelled';
+}
+
 export interface DriverMapping {
   id: string;
   seasonId: string;
-  f123_driver_name: string; // Using snake_case to match route expectations
-  f123_driver_number?: number;
-  yourDriverId: string;
-  startDate: string;
-  endDate?: string;
+  f123DriverId: number;
+  f123DriverName: string;
+  f123DriverNumber?: number;
+  f123TeamName?: string;
+  memberId?: string;
+  isHuman: boolean;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface DriverMappingData {
+  seasonId: string;
+  f123DriverId: number;
+  f123DriverName: string;
+  f123DriverNumber?: number;
+  f123TeamName?: string;
+  memberId?: string;
+  isHuman?: boolean;
 }
 
 export interface SessionResult {
@@ -66,78 +123,6 @@ export interface SessionResult {
   sector3Time: number;
   fastestLap: boolean;
   createdAt: string;
-}
-
-export interface TelemetryData {
-  id: string;
-  sessionId: string;
-  driverId: string;
-  lapNumber: number;
-  sector1Time: number;
-  sector2Time: number;
-  sector3Time: number;
-  lapTime: number;
-  timestamp: string;
-}
-
-export interface SessionFileUpload {
-  id: string;
-  filename: string;
-  originalName: string;
-  fileSize: number;
-  uploadDate: string;
-  processed: boolean;
-}
-
-// Data interfaces for creating records
-export interface DriverData {
-  name: string;
-  team: string;
-  number: number;
-  seasonId?: string;
-}
-
-export interface SeasonData {
-  name: string;
-  year: number;
-  startDate?: string | Date;
-  endDate?: string | Date;
-  status?: 'active' | 'completed' | 'upcoming';
-  pointsSystem?: string;
-  fastestLapPoint?: boolean;
-  isActive?: boolean;
-}
-
-export interface TrackData {
-  name: string;
-  country: string;
-  location?: string;
-  length: number;
-  laps: number;
-}
-
-export interface RaceData {
-  seasonId: string;
-  trackId: string;
-  raceDate: string | Date;
-  status?: 'scheduled' | 'completed' | 'cancelled';
-  date?: string | Date;
-  time?: string;
-  type?: string;
-}
-
-export interface DriverMappingData {
-  seasonId: string;
-  f123_driver_name: string;
-  f123_driver_number?: number;
-  yourDriverId: string;
-}
-
-export interface SessionFileUploadData {
-  filename: string;
-  originalName: string;
-  fileSize: number;
-  processed?: boolean;
 }
 
 export class DatabaseService {
@@ -183,6 +168,15 @@ export class DatabaseService {
     
     try {
       const tables = [
+        // Members table
+        `CREATE TABLE IF NOT EXISTS members (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
         // Drivers table
         `CREATE TABLE IF NOT EXISTS drivers (
           id TEXT PRIMARY KEY,
@@ -227,6 +221,7 @@ export class DatabaseService {
           seasonId TEXT,
           trackId TEXT,
           raceDate TIMESTAMP,
+          sessionTypes TEXT DEFAULT 'race',
           status TEXT DEFAULT 'scheduled',
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -235,43 +230,51 @@ export class DatabaseService {
         )`,
         
         // Junction tables
-        `CREATE TABLE IF NOT EXISTS season_drivers (
-          seasonId TEXT,
-          driverId TEXT,
-          PRIMARY KEY (seasonId, driverId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (driverId) REFERENCES drivers(id)
+        `CREATE TABLE IF NOT EXISTS season_participants (
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          member_id TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (member_id) REFERENCES members(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS season_tracks (
-          seasonId TEXT,
-          trackId TEXT,
-          PRIMARY KEY (seasonId, trackId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (trackId) REFERENCES tracks(id)
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          track_id TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (track_id) REFERENCES tracks(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS season_races (
-          seasonId TEXT,
-          raceId TEXT,
-          PRIMARY KEY (seasonId, raceId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (raceId) REFERENCES races(id)
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          race_id TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (race_id) REFERENCES races(id)
         )`,
         
         // F1 23 specific tables
         `CREATE TABLE IF NOT EXISTS f123_driver_mappings (
           id TEXT PRIMARY KEY,
-          seasonId TEXT,
+          season_id TEXT NOT NULL,
+          f123_driver_id INTEGER NOT NULL,
           f123_driver_name TEXT NOT NULL,
           f123_driver_number INTEGER,
-          yourDriverId TEXT,
-          startDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          endDate TIMESTAMP,
-          isActive BOOLEAN DEFAULT true,
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (yourDriverId) REFERENCES drivers(id)
+          f123_team_name TEXT,
+          member_id TEXT,
+          is_human BOOLEAN DEFAULT true,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (member_id) REFERENCES members(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS f123_session_results (
@@ -324,7 +327,7 @@ export class DatabaseService {
         'CREATE INDEX IF NOT EXISTS idx_races_track ON races(trackId)',
         'CREATE INDEX IF NOT EXISTS idx_session_results_race ON f123_session_results(raceId)',
         'CREATE INDEX IF NOT EXISTS idx_session_results_driver ON f123_session_results(driverId)',
-        'CREATE INDEX IF NOT EXISTS idx_driver_mappings_season ON f123_driver_mappings(seasonId)'
+        'CREATE INDEX IF NOT EXISTS idx_driver_mappings_season ON f123_driver_mappings(season_id)'
       ];
 
       for (const index of indexes) {
@@ -344,6 +347,15 @@ export class DatabaseService {
     
     return new Promise((resolve, reject) => {
       const tables = [
+        // Members table
+        `CREATE TABLE IF NOT EXISTS members (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          isActive BOOLEAN DEFAULT 1,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
         // Drivers table
         `CREATE TABLE IF NOT EXISTS drivers (
           id TEXT PRIMARY KEY,
@@ -388,6 +400,7 @@ export class DatabaseService {
           seasonId TEXT,
           trackId TEXT,
           raceDate TEXT,
+          sessionTypes TEXT DEFAULT 'race',
           status TEXT DEFAULT 'scheduled',
           createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
           updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -396,43 +409,51 @@ export class DatabaseService {
         )`,
         
         // Junction tables
-        `CREATE TABLE IF NOT EXISTS season_drivers (
-          seasonId TEXT,
-          driverId TEXT,
-          PRIMARY KEY (seasonId, driverId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (driverId) REFERENCES drivers(id)
+        `CREATE TABLE IF NOT EXISTS season_participants (
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          member_id TEXT NOT NULL,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (member_id) REFERENCES members(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS season_tracks (
-          seasonId TEXT,
-          trackId TEXT,
-          PRIMARY KEY (seasonId, trackId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (trackId) REFERENCES tracks(id)
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          track_id TEXT NOT NULL,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (track_id) REFERENCES tracks(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS season_races (
-          seasonId TEXT,
-          raceId TEXT,
-          PRIMARY KEY (seasonId, raceId),
-          FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (raceId) REFERENCES races(id)
+          id TEXT PRIMARY KEY,
+          season_id TEXT NOT NULL,
+          race_id TEXT NOT NULL,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (season_id) REFERENCES seasons(id),
+          FOREIGN KEY (race_id) REFERENCES races(id)
         )`,
         
         // F1 23 specific tables
         `CREATE TABLE IF NOT EXISTS f123_driver_mappings (
           id TEXT PRIMARY KEY,
-          seasonId TEXT,
-          f123_driver_name TEXT NOT NULL,
-          f123_driver_number INTEGER,
-          yourDriverId TEXT,
-          startDate TEXT DEFAULT CURRENT_TIMESTAMP,
-          endDate TEXT,
+          seasonId TEXT NOT NULL,
+          f123DriverId INTEGER NOT NULL,
+          f123DriverName TEXT NOT NULL,
+          f123DriverNumber INTEGER,
+          f123TeamName TEXT,
+          memberId TEXT,
+          isHuman INTEGER DEFAULT 1,
           isActive INTEGER DEFAULT 1,
           createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (seasonId) REFERENCES seasons(id),
-          FOREIGN KEY (yourDriverId) REFERENCES drivers(id)
+          FOREIGN KEY (memberId) REFERENCES members(id)
         )`,
         
         `CREATE TABLE IF NOT EXISTS f123_session_results (
@@ -476,43 +497,49 @@ export class DatabaseService {
       let completed = 0;
       const total = tables.length;
 
-      tables.forEach(sql => {
-        db.run(sql, (err) => {
+      const createTable = (index: number) => {
+        if (index >= tables.length) {
+          this.initialized = true;
+          console.log('🎉 All SQLite tables created successfully');
+          resolve();
+          return;
+        }
+
+        db.run(tables[index], (err) => {
           if (err) {
-            console.error('Error creating table:', err);
+            console.error(`❌ SQLite table ${index + 1} creation failed:`, err);
             reject(err);
             return;
           }
+          
           completed++;
           console.log(`📊 SQLite Table ${completed}/${total} created`);
-          if (completed === total) {
-            this.initialized = true;
-            console.log('🎉 All SQLite tables created successfully');
-            resolve();
-          }
+          createTable(index + 1);
         });
-      });
+      };
+
+      createTable(0);
     });
   }
 
-  public async ensureInitialized(): Promise<void> {
-    console.log('🔧 ensureInitialized called, initialized:', this.initialized);
-    if (!this.initialized) {
-      console.log('📋 Initializing database tables...');
-      await this.initializeTables();
-      console.log('✅ Database tables initialized');
-    } else {
-      console.log('✅ Database already initialized');
+  async ensureInitialized(): Promise<void> {
+    if (this.initialized) {
+      return;
     }
+    
+    console.log('🔧 ensureInitialized called, initialized:', this.initialized);
+    console.log('📋 Initializing database tables...');
+    
+    await this.initializeTables();
   }
 
-  // Helper method to generate unique IDs
   private generateId(): string {
-    return `id_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Helper method to execute queries
-  private async executeQuery(query: string, params: any[] = []): Promise<any> {
+  private async executeQuery(query: string, params: any[] = []): Promise<any[]> {
+    await this.ensureInitialized();
+    
     if (this.isPostgreSQL) {
       const client = this.db as Client;
       const result = await client.query(query, params);
@@ -522,378 +549,773 @@ export class DatabaseService {
       return new Promise((resolve, reject) => {
         db.all(query, params, (err, rows) => {
           if (err) reject(err);
-          else resolve(rows);
+          else resolve(rows || []);
         });
       });
     }
   }
 
-  // Helper method to execute single row queries
-  private async executeQuerySingle(query: string, params: any[] = []): Promise<any> {
+  private async executeUpdate(query: string, params: any[] = []): Promise<void> {
+    await this.ensureInitialized();
+    
     if (this.isPostgreSQL) {
       const client = this.db as Client;
-      const result = await client.query(query, params);
-      return result.rows[0];
+      await client.query(query, params);
     } else {
       const db = this.db as sqlite3.Database;
       return new Promise((resolve, reject) => {
-        db.get(query, params, (err, row) => {
+        db.run(query, params, (err) => {
           if (err) reject(err);
-          else resolve(row);
+          else resolve();
         });
       });
     }
   }
 
-  // Helper method to execute insert/update/delete queries
-  private async executeUpdate(query: string, params: any[] = []): Promise<any> {
+  // Member CRUD operations
+  async createMember(data: MemberData): Promise<string> {
+    const id = this.generateId();
+    const now = new Date().toISOString();
+    
     if (this.isPostgreSQL) {
       const client = this.db as Client;
-      const result = await client.query(query, params);
-      return result;
+      await client.query(
+        `INSERT INTO members (id, name, is_active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, data.name, data.isActive ?? true, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO members (id, name, isActive, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, data.name, data.isActive ?? true, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+    
+    return id;
+  }
+
+  async getAllMembers(): Promise<Member[]> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, name, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt" 
+         FROM members ORDER BY name`
+      );
+      return result.rows;
     } else {
       const db = this.db as sqlite3.Database;
       return new Promise((resolve, reject) => {
-        db.run(query, params, function(err) {
-          if (err) reject(err);
-          else resolve({ lastID: this.lastID, changes: this.changes });
-        });
+        db.all(
+          `SELECT id, name, isActive, createdAt, updatedAt FROM members ORDER BY name`,
+          (err, rows) => err ? reject(err) : resolve(rows as Member[])
+        );
+      });
+    }
+  }
+
+  async getMemberById(id: string): Promise<Member | null> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, name, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt" 
+         FROM members WHERE id = $1`,
+        [id]
+      );
+      return result.rows[0] || null;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.get(
+          `SELECT id, name, isActive, createdAt, updatedAt FROM members WHERE id = ?`,
+          [id],
+          (err, row) => err ? reject(err) : resolve(row as Member || null)
+        );
+      });
+    }
+  }
+
+  async updateMember(id: string, data: Partial<MemberData>): Promise<void> {
+    const now = new Date().toISOString();
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (data.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.isActive !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      values.push(data.isActive);
+    }
+    
+    updates.push(`updated_at = $${paramIndex++}`);
+    values.push(now);
+    values.push(id);
+
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `UPDATE members SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      const sqliteUpdates = updates.map(update => 
+        update.replace(/\$\d+/g, '?').replace('is_active', 'isActive').replace('updated_at', 'updatedAt')
+      );
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE members SET ${sqliteUpdates.join(', ')} WHERE id = ?`,
+          values,
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+  }
+
+  async deleteMember(id: string): Promise<void> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query('DELETE FROM members WHERE id = $1', [id]);
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM members WHERE id = ?', [id], (err) => err ? reject(err) : resolve());
       });
     }
   }
 
   // Driver CRUD operations
   async createDriver(data: DriverData): Promise<string> {
-    const id = this.generateId();
+    const id = uuidv4();
     const now = new Date().toISOString();
     
-    const query = `
-      INSERT INTO drivers (id, name, team, number, seasonId, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    await this.executeUpdate(query, [
-      id, data.name, data.team || 'No Team', data.number || 0, 
-      data.seasonId || null, now, now
-    ]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        'INSERT INTO drivers (id, name, team, isActive, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, data.name, data.team, data.isActive ?? true, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO drivers (id, name, team, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, data.name, data.team, data.isActive ?? true, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
     
     return id;
   }
 
-  async getDriverById(id: string): Promise<Driver | null> {
-    const query = 'SELECT * FROM drivers WHERE id = ?';
-    return await this.executeQuerySingle(query, [id]);
-  }
-
   async updateDriver(id: string, data: Partial<DriverData>): Promise<void> {
     const now = new Date().toISOString();
-    const fields = [];
-    const values = [];
-    
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
     if (data.name !== undefined) {
-      fields.push('name = ?');
+      updates.push(`name = $${paramIndex++}`);
       values.push(data.name);
     }
     if (data.team !== undefined) {
-      fields.push('team = ?');
+      updates.push(`team = $${paramIndex++}`);
       values.push(data.team);
     }
-    if (data.number !== undefined) {
-      fields.push('number = ?');
-      values.push(data.number);
+    if (data.isActive !== undefined) {
+      updates.push(`isActive = $${paramIndex++}`);
+      values.push(data.isActive);
     }
-    
-    fields.push('updatedAt = ?');
+    updates.push(`updatedAt = $${paramIndex++}`);
     values.push(now);
     values.push(id);
-    
-    const query = `UPDATE drivers SET ${fields.join(', ')} WHERE id = ?`;
-    await this.executeUpdate(query, values);
+
+    if (updates.length === 1) return; // Only updatedAt
+
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `UPDATE drivers SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      const sqliteUpdates = updates.map((update, index) => 
+        update.replace(/\$\d+/g, `$${index + 1}`)
+      );
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE drivers SET ${sqliteUpdates.join(', ')} WHERE id = ?`,
+          values,
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
   }
 
   async deleteDriver(id: string): Promise<void> {
-    const query = 'DELETE FROM drivers WHERE id = ?';
-    await this.executeUpdate(query, [id]);
-  }
-
-  async getDriversBySeason(seasonId: string): Promise<Driver[]> {
-    const query = `
-      SELECT d.* FROM drivers d
-      INNER JOIN season_drivers sd ON d.id = sd.driverId
-      WHERE sd.seasonId = ?
-      ORDER BY d.name
-    `;
-    return await this.executeQuery(query, [seasonId]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query('DELETE FROM drivers WHERE id = $1', [id]);
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM drivers WHERE id = ?', [id], (err) => err ? reject(err) : resolve());
+      });
+    }
   }
 
   // Season CRUD operations
   async getAllSeasons(): Promise<Season[]> {
-    const query = 'SELECT * FROM seasons ORDER BY year DESC, name';
-    return await this.executeQuery(query);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, name, year, start_date as "startDate", end_date as "endDate", 
+                is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+         FROM seasons ORDER BY year DESC, name`
+      );
+      return result.rows;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT id, name, year, startDate, endDate, isActive, createdAt, updatedAt 
+           FROM seasons ORDER BY year DESC, name`,
+          (err, rows) => err ? reject(err) : resolve(rows as Season[])
+        );
+      });
+    }
   }
 
   async getSeasonById(id: string): Promise<Season | null> {
-    const query = 'SELECT * FROM seasons WHERE id = ?';
-    return await this.executeQuerySingle(query, [id]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, name, year, start_date as "startDate", end_date as "endDate", 
+                is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+         FROM seasons WHERE id = $1`,
+        [id]
+      );
+      return result.rows[0] || null;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.get(
+          `SELECT id, name, year, startDate, endDate, isActive, createdAt, updatedAt 
+           FROM seasons WHERE id = ?`,
+          [id],
+          (err, row) => err ? reject(err) : resolve(row as Season || null)
+        );
+      });
+    }
   }
 
   async createSeason(data: SeasonData): Promise<string> {
     const id = this.generateId();
     const now = new Date().toISOString();
     
-    // Convert dates to proper format
-    const startDate = data.startDate ? 
-      (data.startDate instanceof Date ? data.startDate.toISOString() : data.startDate) : null;
-    const endDate = data.endDate ? 
-      (data.endDate instanceof Date ? data.endDate.toISOString() : data.endDate) : null;
-    
-    const query = `
-      INSERT INTO seasons (id, name, year, startDate, endDate, status, pointsSystem, fastestLapPoint, isActive, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    await this.executeUpdate(query, [
-      id, data.name, data.year, startDate, endDate,
-      data.status || 'upcoming', data.pointsSystem || 'f1_standard',
-      this.isPostgreSQL ? (data.fastestLapPoint !== false) : (data.fastestLapPoint !== false ? 1 : 0),
-      this.isPostgreSQL ? (data.isActive || false) : (data.isActive ? 1 : 0),
-      now, now
-    ]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO seasons (id, name, year, start_date, end_date, is_active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, data.name, data.year, data.startDate, data.endDate, data.isActive ?? true, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO seasons (id, name, year, startDate, endDate, isActive, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, data.name, data.year, data.startDate, data.endDate, data.isActive ?? true, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
     
     return id;
   }
 
-  async updateSeason(id: string, data: Partial<SeasonData>): Promise<Season | null> {
+  async updateSeason(id: string, data: Partial<SeasonData>): Promise<void> {
     const now = new Date().toISOString();
-    const fields = [];
-    const values = [];
-    
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
     if (data.name !== undefined) {
-      fields.push('name = ?');
+      updates.push(`name = $${paramIndex++}`);
       values.push(data.name);
     }
     if (data.year !== undefined) {
-      fields.push('year = ?');
+      updates.push(`year = $${paramIndex++}`);
       values.push(data.year);
     }
     if (data.startDate !== undefined) {
-      const startDate = data.startDate instanceof Date ? data.startDate.toISOString() : data.startDate;
-      fields.push('startDate = ?');
-      values.push(startDate);
+      updates.push(`start_date = $${paramIndex++}`);
+      values.push(data.startDate);
     }
     if (data.endDate !== undefined) {
-      const endDate = data.endDate instanceof Date ? data.endDate.toISOString() : data.endDate;
-      fields.push('endDate = ?');
-      values.push(endDate);
-    }
-    if (data.status !== undefined) {
-      fields.push('status = ?');
-      values.push(data.status);
-    }
-    if (data.pointsSystem !== undefined) {
-      fields.push('pointsSystem = ?');
-      values.push(data.pointsSystem);
-    }
-    if (data.fastestLapPoint !== undefined) {
-      fields.push('fastestLapPoint = ?');
-      values.push(this.isPostgreSQL ? data.fastestLapPoint : (data.fastestLapPoint ? 1 : 0));
+      updates.push(`end_date = $${paramIndex++}`);
+      values.push(data.endDate);
     }
     if (data.isActive !== undefined) {
-      fields.push('isActive = ?');
-      values.push(this.isPostgreSQL ? data.isActive : (data.isActive ? 1 : 0));
+      updates.push(`is_active = $${paramIndex++}`);
+      values.push(data.isActive);
     }
     
-    fields.push('updatedAt = ?');
+    updates.push(`updated_at = $${paramIndex++}`);
     values.push(now);
     values.push(id);
-    
-    const query = `UPDATE seasons SET ${fields.join(', ')} WHERE id = ?`;
-    await this.executeUpdate(query, values);
-    
-    return await this.getSeasonById(id);
+
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `UPDATE seasons SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      const sqliteUpdates = updates.map(update => 
+        update.replace(/\$\d+/g, '?').replace('start_date', 'startDate').replace('end_date', 'endDate').replace('is_active', 'isActive').replace('updated_at', 'updatedAt')
+      );
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE seasons SET ${sqliteUpdates.join(', ')} WHERE id = ?`,
+          values,
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
   }
 
   async deleteSeason(id: string): Promise<void> {
-    const query = 'DELETE FROM seasons WHERE id = ?';
-    await this.executeUpdate(query, [id]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query('DELETE FROM seasons WHERE id = $1', [id]);
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM seasons WHERE id = ?', [id], (err) => err ? reject(err) : resolve());
+      });
+    }
   }
 
-  // Track operations
-  async findOrCreateTrack(name: string, country?: string): Promise<Track> {
-    let query = 'SELECT * FROM tracks WHERE name = ?';
-    let existingTrack = await this.executeQuerySingle(query, [name]);
-    
-    if (existingTrack) {
-      return existingTrack;
+  // Season participant management
+  async getDriversBySeason(seasonId: string): Promise<Member[]> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT m.id, m.name, m.is_active as "isActive", 
+                m.created_at as "createdAt", m.updated_at as "updatedAt"
+         FROM members m
+         JOIN season_participants sp ON m.id = sp.member_id
+         WHERE sp.season_id = $1
+         ORDER BY m.name`,
+        [seasonId]
+      );
+      return result.rows;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT m.id, m.name, m.isActive, m.createdAt, m.updatedAt
+           FROM members m
+           JOIN season_participants sp ON m.id = sp.member_id
+           WHERE sp.season_id = ?
+           ORDER BY m.name`,
+          [seasonId],
+          (err, rows) => err ? reject(err) : resolve(rows as Member[])
+        );
+      });
     }
-    
-    // Create new track
+  }
+
+  async addDriverToSeason(seasonId: string, memberId: string): Promise<void> {
     const id = this.generateId();
     const now = new Date().toISOString();
     
-    query = `
-      INSERT INTO tracks (id, name, country, location, length, laps, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    await this.executeUpdate(query, [
-      id, name, country || 'Unknown', '', 0, 0, now, now
-    ]);
-    
-    const track = await this.getTrackById(id);
-    if (!track) throw new Error('Failed to create track');
-    return track;
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO season_participants (id, season_id, member_id, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, seasonId, memberId, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO season_participants (id, season_id, member_id, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, seasonId, memberId, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
   }
 
-  async getTrackById(id: string): Promise<Track | null> {
-    const query = 'SELECT * FROM tracks WHERE id = ?';
-    return await this.executeQuerySingle(query, [id]);
+  async removeDriverFromSeason(seasonId: string, memberId: string): Promise<void> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        'DELETE FROM season_participants WHERE season_id = $1 AND member_id = $2',
+        [seasonId, memberId]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'DELETE FROM season_participants WHERE season_id = ? AND member_id = ?',
+          [seasonId, memberId],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
   }
 
+  // Track management
   async getTracksBySeason(seasonId: string): Promise<Track[]> {
-    const query = `
-      SELECT t.* FROM tracks t
-      INNER JOIN season_tracks st ON t.id = st.trackId
-      WHERE st.seasonId = ?
-      ORDER BY t.name
-    `;
-    return await this.executeQuery(query, [seasonId]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT t.id, t.name, t.country, t.city, t.length, t.laps, t.created_at as "createdAt", t.updated_at as "updatedAt"
+         FROM tracks t
+         JOIN season_tracks st ON t.id = st.track_id
+         WHERE st.season_id = $1
+         ORDER BY t.name`,
+        [seasonId]
+      );
+      return result.rows;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT t.id, t.name, t.country, t.city, t.length, t.laps, t.createdAt, t.updatedAt
+           FROM tracks t
+           JOIN season_tracks st ON t.id = st.track_id
+           WHERE st.season_id = ?
+           ORDER BY t.name`,
+          [seasonId],
+          (err, rows) => err ? reject(err) : resolve(rows as Track[])
+        );
+      });
+    }
   }
 
-  // Race operations
+  async addTrackToSeason(seasonId: string, trackId: string): Promise<void> {
+    const id = this.generateId();
+    const now = new Date().toISOString();
+    
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO season_tracks (id, season_id, track_id, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, seasonId, trackId, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO season_tracks (id, season_id, track_id, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, seasonId, trackId, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+  }
+
+  async removeTrackFromSeason(seasonId: string, trackId: string): Promise<void> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        'DELETE FROM season_tracks WHERE season_id = $1 AND track_id = $2',
+        [seasonId, trackId]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'DELETE FROM season_tracks WHERE season_id = ? AND track_id = ?',
+          [seasonId, trackId],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+  }
+
+  // Race management
+  async getRacesBySeason(seasonId: string): Promise<Race[]> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT r.id, r.season_id as "seasonId", r.track_id as "trackId", r.race_date as "raceDate", 
+                r.status, r.created_at as "createdAt", r.updated_at as "updatedAt"
+         FROM races r
+         WHERE r.season_id = $1
+         ORDER BY r.race_date`,
+        [seasonId]
+      );
+      return result.rows;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT r.id, r.seasonId, r.trackId, r.raceDate, r.status, r.createdAt, r.updatedAt
+           FROM races r
+           WHERE r.season_id = ?
+           ORDER BY r.raceDate`,
+          [seasonId],
+          (err, rows) => err ? reject(err) : resolve(rows as Race[])
+        );
+      });
+    }
+  }
+
+  async addRaceToSeason(seasonId: string, raceData: RaceData): Promise<string> {
+    const id = this.generateId();
+    const now = new Date().toISOString();
+    
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO races (id, season_id, track_id, race_date, status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, seasonId, raceData.trackId, raceData.raceDate, raceData.status ?? 'scheduled', now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO races (id, seasonId, trackId, raceDate, status, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, seasonId, raceData.trackId, raceData.raceDate, raceData.status ?? 'scheduled', now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+    
+    return id;
+  }
+
+  async removeRaceFromSeason(seasonId: string, raceId: string): Promise<void> {
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        'DELETE FROM races WHERE season_id = $1 AND id = $2',
+        [seasonId, raceId]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'DELETE FROM races WHERE seasonId = ? AND id = ?',
+          [seasonId, raceId],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+  }
+
+  // Track management
+  async createTrack(data: TrackData): Promise<string> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        'INSERT INTO tracks (id, name, country, city, length, laps, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, data.name, data.country, data.city || '', data.circuitLength, data.laps, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO tracks (id, name, country, city, length, laps, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, data.name, data.country, data.city || '', data.circuitLength, data.laps, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+    
+    return id;
+  }
+
+  async createTrackAndAddToSeason(seasonId: string, data: TrackData): Promise<string> {
+    const trackId = await this.createTrack(data);
+    await this.addTrackToSeason(seasonId, trackId);
+    return trackId;
+  }
+
+  async findOrCreateTrack(trackName: string): Promise<Track> {
+    // First try to find existing track
+    let track: Track | null = null;
+    
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, name, country, city, length, laps, created_at as "createdAt", updated_at as "updatedAt"
+         FROM tracks WHERE name = $1`,
+        [trackName]
+      );
+      track = result.rows[0] || null;
+    } else {
+      const db = this.db as sqlite3.Database;
+      track = await new Promise<Track | null>((resolve, reject) => {
+        db.get(
+          `SELECT id, name, country, city, length, laps, createdAt, updatedAt 
+           FROM tracks WHERE name = ?`,
+          [trackName],
+          (err, row) => err ? reject(err) : resolve(row as Track || null)
+        );
+      });
+    }
+
+    if (track) {
+      return track;
+    }
+
+    // Create new track if not found
+    const id = this.generateId();
+    const now = new Date().toISOString();
+    
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO tracks (id, name, country, city, length, laps, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, trackName, 'Unknown', 'Unknown', 0, 0, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tracks (id, name, country, city, length, laps, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, trackName, 'Unknown', 'Unknown', 0, 0, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
+
+    return {
+      id,
+      name: trackName,
+      country: 'Unknown',
+      city: 'Unknown',
+      length: 0,
+      laps: 0,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
   async createRace(data: RaceData): Promise<string> {
     const id = this.generateId();
     const now = new Date().toISOString();
     
-    // Use raceDate if available, otherwise use date
-    const raceDate = data.raceDate ? 
-      (data.raceDate instanceof Date ? data.raceDate.toISOString() : data.raceDate) :
-      (data.date instanceof Date ? data.date.toISOString() : data.date);
-    
-    const query = `
-      INSERT INTO races (id, seasonId, trackId, raceDate, status, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    await this.executeUpdate(query, [
-      id, data.seasonId, data.trackId, raceDate, data.status || 'scheduled', now, now
-    ]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO races (id, season_id, track_id, race_date, status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, data.seasonId, data.trackId, data.raceDate, data.status ?? 'scheduled', now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO races (id, seasonId, trackId, raceDate, status, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, data.seasonId, data.trackId, data.raceDate, data.status ?? 'scheduled', now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
     
     return id;
   }
 
-  async getRaceById(id: string): Promise<Race | null> {
-    const query = 'SELECT * FROM races WHERE id = ?';
-    return await this.executeQuerySingle(query, [id]);
-  }
-
-  async getRacesBySeason(seasonId: string): Promise<Race[]> {
-    const query = `
-      SELECT r.* FROM races r
-      INNER JOIN season_races sr ON r.id = sr.raceId
-      WHERE sr.seasonId = ?
-      ORDER BY r.raceDate
-    `;
-    return await this.executeQuery(query, [seasonId]);
-  }
-
-  // Junction table operations
-  async addDriverToSeason(seasonId: string, driverId: string): Promise<void> {
-    const query = 'INSERT OR IGNORE INTO season_drivers (seasonId, driverId) VALUES (?, ?)';
-    await this.executeUpdate(query, [seasonId, driverId]);
-  }
-
-  async removeDriverFromSeason(seasonId: string, driverId: string): Promise<void> {
-    const query = 'DELETE FROM season_drivers WHERE seasonId = ? AND driverId = ?';
-    await this.executeUpdate(query, [seasonId, driverId]);
-  }
-
-  async addTrackToSeason(seasonId: string, trackId: string): Promise<void> {
-    const query = 'INSERT OR IGNORE INTO season_tracks (seasonId, trackId) VALUES (?, ?)';
-    await this.executeUpdate(query, [seasonId, trackId]);
-  }
-
-  async removeTrackFromSeason(seasonId: string, trackId: string): Promise<void> {
-    const query = 'DELETE FROM season_tracks WHERE seasonId = ? AND trackId = ?';
-    await this.executeUpdate(query, [seasonId, trackId]);
-  }
-
-  async addRaceToSeason(seasonId: string, raceId: string): Promise<void> {
-    const query = 'INSERT OR IGNORE INTO season_races (seasonId, raceId) VALUES (?, ?)';
-    await this.executeUpdate(query, [seasonId, raceId]);
-  }
-
-  async removeRaceFromSeason(seasonId: string, raceId: string): Promise<void> {
-    const query = 'DELETE FROM season_races WHERE seasonId = ? AND raceId = ?';
-    await this.executeUpdate(query, [seasonId, raceId]);
-  }
-
-  // Helper methods for creating and adding to seasons
-  async createDriverAndAddToSeason(seasonId: string, data: DriverData): Promise<Driver> {
-    const driverId = await this.createDriver(data);
-    await this.addDriverToSeason(seasonId, driverId);
-    const driver = await this.getDriverById(driverId);
-    if (!driver) throw new Error('Failed to create driver');
-    return driver;
-  }
-
-  async createTrackAndAddToSeason(seasonId: string, data: TrackData): Promise<Track> {
-    const id = this.generateId();
-    const now = new Date().toISOString();
-    
-    const query = `
-      INSERT INTO tracks (id, name, country, location, length, laps, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    await this.executeUpdate(query, [
-      id, data.name, data.country, data.location || '', data.length, data.laps, now, now
-    ]);
-    
-    await this.addTrackToSeason(seasonId, id);
-    const track = await this.getTrackById(id);
-    if (!track) throw new Error('Failed to create track');
-    return track;
-  }
-
-  async createRaceAndAddToSeason(seasonId: string, data: RaceData): Promise<string> {
-    const raceId = await this.createRace(data);
-    await this.addRaceToSeason(seasonId, raceId);
-    return raceId;
-  }
-
-  // Driver mapping operations
+  // Driver mapping management
   async getDriverMappings(seasonId: string): Promise<DriverMapping[]> {
-    const query = 'SELECT * FROM f123_driver_mappings WHERE seasonId = ? ORDER BY f123_driver_name';
-    return await this.executeQuery(query, [seasonId]);
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      const result = await client.query(
+        `SELECT id, season_id as "seasonId", f123_driver_id as "f123DriverId", 
+                f123_driver_name as "f123DriverName", f123_driver_number as "f123DriverNumber",
+                f123_team_name as "f123TeamName", member_id as "memberId", 
+                is_human as "isHuman", is_active as "isActive", 
+                created_at as "createdAt", updated_at as "updatedAt"
+         FROM f123_driver_mappings 
+         WHERE season_id = $1 AND is_active = true
+         ORDER BY f123_driver_name`,
+        [seasonId]
+      );
+      return result.rows;
+    } else {
+      const db = this.db as sqlite3.Database;
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT id, seasonId, f123DriverId, f123DriverName, f123DriverNumber,
+                  f123TeamName, memberId, isHuman, isActive, createdAt, updatedAt
+           FROM f123_driver_mappings 
+           WHERE seasonId = ? AND isActive = true
+           ORDER BY f123DriverName`,
+          [seasonId],
+          (err, rows) => err ? reject(err) : resolve(rows as DriverMapping[])
+        );
+      });
+    }
   }
 
-  async createDriverMapping(data: DriverMappingData): Promise<DriverMapping> {
+  async createDriverMapping(data: DriverMappingData): Promise<string> {
     const id = this.generateId();
     const now = new Date().toISOString();
     
-    const query = `
-      INSERT INTO f123_driver_mappings (id, seasonId, f123_driver_name, f123_driver_number, yourDriverId, startDate, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
+    if (this.isPostgreSQL) {
+      const client = this.db as Client;
+      await client.query(
+        `INSERT INTO f123_driver_mappings 
+         (id, season_id, f123_driver_id, f123_driver_name, f123_driver_number, 
+          f123_team_name, member_id, is_human, is_active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [id, data.seasonId, data.f123DriverId, data.f123DriverName, data.f123DriverNumber,
+         data.f123TeamName, data.memberId, data.isHuman ?? true, true, now, now]
+      );
+    } else {
+      const db = this.db as sqlite3.Database;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO f123_driver_mappings 
+           (id, seasonId, f123DriverId, f123DriverName, f123DriverNumber, 
+            f123TeamName, memberId, isHuman, isActive, createdAt, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, data.seasonId, data.f123DriverId, data.f123DriverName, data.f123DriverNumber,
+           data.f123TeamName, data.memberId, data.isHuman ?? true, true, now, now],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+    }
     
-    await this.executeUpdate(query, [
-      id, data.seasonId, data.f123_driver_name, data.f123_driver_number || null,
-      data.yourDriverId, now, now
-    ]);
-    
-    return await this.executeQuerySingle('SELECT * FROM f123_driver_mappings WHERE id = ?', [id]);
+    return id;
   }
 
-  // Session import operations
-  async importRaceResults(raceId: string, sessionData: any): Promise<{ resultsCount: number; lapTimesCount: number }> {
+  async importRaceResults(raceId: string, sessionData: any): Promise<{resultsCount: number, lapTimesCount: number}> {
     let resultsCount = 0;
     let lapTimesCount = 0;
     
     for (const result of sessionData.results) {
-      if (!result.yourDriverId) continue; // Skip unmapped drivers
-      
-      const id = this.generateId();
+      const resultId = this.generateId();
       const now = new Date().toISOString();
       
       const query = `
@@ -902,7 +1324,8 @@ export class DatabaseService {
       `;
       
       await this.executeUpdate(query, [
-        id, raceId, result.yourDriverId, result.position, result.lapTime,
+        resultId, raceId, result.yourDriverId, result.position,
+        result.lapTime, result.sector1Time, result.sector2Time,
         result.sector1Time, result.sector2Time, result.sector3Time,
         this.isPostgreSQL ? result.fastestLap : (result.fastestLap ? 1 : 0),
         now

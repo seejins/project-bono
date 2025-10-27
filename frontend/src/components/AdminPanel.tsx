@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { Upload, Users, Calendar, Settings, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiPostFormData } from '../utils/api';
+import { ManageSeasons } from './ManageSeasons';
+
+interface Driver {
+  id: string;
+  name: string;
+  team: string;
+  number: number;
+  isActive: boolean;
+}
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -9,15 +18,18 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthenticate }) => {
   const [password, setPassword] = useState('');
-  const [activeSection, setActiveSection] = useState<'upload' | 'session-upload' | 'drivers' | 'races' | 'settings'>('upload');
+  const [activeSection, setActiveSection] = useState<'upload' | 'session-upload' | 'members' | 'seasons' | 'settings'>('upload');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   
   // Driver management state
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
+  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+  const [editingMember, setEditingMember] = useState<Driver | null>(null);
   const [newDriver, setNewDriver] = useState({ name: '', team: '', number: '' });
   const [drivers, setDrivers] = useState([
-    { id: '1', name: 'John Smith', team: 'Mercedes', number: 44 }
+    { id: '1', name: 'John Smith', team: 'Mercedes', number: 44, isActive: true }
   ]);
   
   // Session file upload state
@@ -25,10 +37,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
   const [sessionUploadStatus, setSessionUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [sessionUploadMessage, setSessionUploadMessage] = useState('');
   const [selectedRace, setSelectedRace] = useState('');
-
-  // Race management state
-  const [showScheduleRaceModal, setShowScheduleRaceModal] = useState(false);
-  const [newRace, setNewRace] = useState({ track: '', date: '', type: 'race' });
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,11 +56,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
     }
 
     // For now, add to local state (later will call API)
-    const driver = {
+    const driver: Driver = {
       id: Date.now().toString(),
       name: newDriver.name,
       team: newDriver.team || 'No Team',
-      number: parseInt(newDriver.number) || 0
+      number: parseInt(newDriver.number) || 0,
+      isActive: true
     };
     
     setDrivers([...drivers, driver]);
@@ -66,16 +75,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
     }
   };
 
-  const handleScheduleRace = async () => {
-    if (!newRace.track || !newRace.date) {
-      alert('Please fill in all required fields');
-      return;
-    }
+  const handleEditMember = (member: Driver) => {
+    setEditingMember(member);
+    setShowEditMemberModal(true);
+  };
 
-    // For now, just close modal (later will call API)
-    setNewRace({ track: '', date: '', type: 'race' });
-    setShowScheduleRaceModal(false);
-    alert('Race scheduled successfully!');
+  const handleUpdateMember = async () => {
+    if (!editingMember) return;
+    
+    try {
+      const response = await fetch(`/api/members/${editingMember.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: editingMember.name,
+          isActive: editingMember.isActive
+        }),
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setDrivers(drivers.map(driver => 
+          driver.id === editingMember.id ? editingMember : driver
+        ));
+        setShowEditMemberModal(false);
+        setEditingMember(null);
+      }
+    } catch (error) {
+      console.error('Failed to update member:', error);
+    }
   };
 
   const handleSessionFileUpload = async () => {
@@ -191,8 +221,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
         {[
           { id: 'upload', label: 'Upload Data', icon: Upload },
           { id: 'session-upload', label: 'Session Files', icon: FileText },
-          { id: 'drivers', label: 'Manage Drivers', icon: Users },
-          { id: 'races', label: 'Manage Races', icon: Calendar },
+          { id: 'members', label: 'Manage Members', icon: Users },
+          { id: 'seasons', label: 'Manage Seasons', icon: Calendar },
           { id: 'settings', label: 'Settings', icon: Settings }
         ].map((section) => {
           const Icon = section.icon;
@@ -383,13 +413,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
         </div>
       )}
 
-      {/* Drivers Section */}
-      {activeSection === 'drivers' && (
+      {/* Members Section */}
+      {activeSection === 'members' && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Drivers</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Members</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Manage your league participants</p>
               </div>
               <button 
@@ -397,13 +427,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
               >
                 <Users className="w-4 h-4" />
-                <span>Add Driver</span>
+                <span>Add Member</span>
               </button>
             </div>
             
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800 dark:text-blue-300">
-                <strong>Note:</strong> Add your league drivers here. After uploading F1 23 session files, you'll map F1 23 drivers (like "Lewis Hamilton") to these league drivers.
+                <strong>Note:</strong> Add your league members here. These are the people who can participate in your F1 league seasons.
               </p>
             </div>
 
@@ -420,18 +450,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                         <p className="text-sm text-gray-500 dark:text-gray-400">{driver.team} • #{driver.number || 'N/A'}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => handleRemoveDriver(driver.id)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <span className="text-sm">Remove</span>
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => handleEditMember(driver)}
+                        className="text-blue-600 hover:text-blue-700 transition-colors px-2 py-1 rounded text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleRemoveDriver(driver.id)}
+                        className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Add your first driver to get started</p>
+                  <p>Add your first member to get started</p>
                 </div>
               )}
             </div>
@@ -439,24 +477,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
         </div>
       )}
 
-      {/* Races Section */}
-      {activeSection === 'races' && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Manage Races</h3>
-            <button 
-              onClick={() => setShowScheduleRaceModal(true)}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              Schedule Race
-            </button>
-          </div>
-          
-          <div className="text-center py-8">
-            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">Race management coming soon...</p>
-          </div>
-        </div>
+      {/* Seasons Section */}
+      {activeSection === 'seasons' && (
+        <ManageSeasons 
+          selectedSeasonId={selectedSeasonId}
+          onSeasonSelect={(seasonId) => setSelectedSeasonId(seasonId)}
+        />
       )}
 
       {/* Settings Section */}
@@ -565,76 +591,87 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
         </div>
       )}
 
-      {/* Schedule Race Modal */}
-      {showScheduleRaceModal && (
+      {/* Edit Member Modal */}
+      {showEditMemberModal && editingMember && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Schedule Race</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Member</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Track *
-                </label>
-                <select
-                  value={newRace.track}
-                  onChange={(e) => setNewRace({ ...newRace, track: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="">Select a track</option>
-                  <option value="bahrain">Bahrain International Circuit</option>
-                  <option value="silverstone">Silverstone Circuit</option>
-                  <option value="monaco">Circuit de Monaco</option>
-                  <option value="spa">Spa-Francorchamps</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Date *
+                  Member Name *
                 </label>
                 <input
-                  type="date"
-                  value={newRace.date}
-                  onChange={(e) => setNewRace({ ...newRace, date: e.target.value })}
+                  type="text"
+                  value={editingMember.name}
+                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., John Smith"
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Session Type
+                  Team
                 </label>
-                <select
-                  value={newRace.type}
-                  onChange={(e) => setNewRace({ ...newRace, type: e.target.value })}
+                <input
+                  type="text"
+                  value={editingMember.team}
+                  onChange={(e) => setEditingMember({ ...editingMember, team: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="race">Race</option>
-                  <option value="qualifying">Qualifying</option>
-                  <option value="practice">Practice</option>
-                  <option value="sprint">Sprint</option>
-                </select>
+                  placeholder="e.g., Mercedes"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Car Number
+                </label>
+                <input
+                  type="number"
+                  value={editingMember.number}
+                  onChange={(e) => setEditingMember({ ...editingMember, number: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g., 44"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is-active"
+                  checked={editingMember.isActive}
+                  onChange={(e) => setEditingMember({ ...editingMember, isActive: e.target.checked })}
+                  className="w-4 h-4 text-red-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-red-500"
+                />
+                <label htmlFor="is-active" className="text-sm text-gray-700 dark:text-gray-300">
+                  Active member
+                </label>
               </div>
             </div>
             
             <div className="flex space-x-3 mt-6">
               <button
-                onClick={() => setShowScheduleRaceModal(false)}
+                onClick={() => {
+                  setShowEditMemberModal(false);
+                  setEditingMember(null);
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleScheduleRace}
+                onClick={handleUpdateMember}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
-                Schedule Race
+                Update Member
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

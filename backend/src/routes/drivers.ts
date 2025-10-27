@@ -40,7 +40,6 @@ export default function createDriversRoutes(dbService: DatabaseService) {
 
     await dbService.ensureInitialized();
     const driverId = await dbService.createDriver({
-      seasonId,
       name,
       team,
       number

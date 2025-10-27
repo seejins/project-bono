@@ -7,6 +7,7 @@ exports.setupRoutes = setupRoutes;
 const upload_1 = __importDefault(require("./upload"));
 const seasons_1 = __importDefault(require("./seasons"));
 const sessions_1 = __importDefault(require("./sessions"));
+const members_1 = __importDefault(require("./members"));
 function setupRoutes(app, services) {
     // Health check endpoint
     app.get('/health', (req, res) => {
@@ -55,6 +56,8 @@ function setupRoutes(app, services) {
     app.use('/api/upload', (0, upload_1.default)(services.databaseService));
     // Seasons management routes
     app.use('/api/seasons', (0, seasons_1.default)(services.databaseService));
+    // Members management routes
+    app.use('/api/members', (0, members_1.default)(services.databaseService));
     // Session data routes (for local host app)
     app.use('/api/sessions', (0, sessions_1.default)(services.databaseService));
 }

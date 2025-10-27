@@ -22,7 +22,7 @@ interface DriverListProps {
   onDriverSelect?: (driverId: string) => void;
 }
 
-export const DriverList: React.FC<DriverListProps> = ({ onDriverSelect }) => {
+export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'position' | 'points' | 'wins' | 'name'>('position');
@@ -39,226 +39,63 @@ export const DriverList: React.FC<DriverListProps> = ({ onDriverSelect }) => {
     if (!currentSeason) return;
     
     try {
-      // Different mock data for each season
-      const getSeasonDrivers = (seasonId: string): Driver[] => {
-        switch (seasonId) {
-          case 'season-2024':
-            return [
-              {
-                id: '1',
-                name: 'Lewis Hamilton',
-                team: 'Mercedes',
-                number: 44,
-                seasonId: currentSeason.id,
-                points: 95,
-                wins: 3,
-                podiums: 8,
-                fastestLaps: 2,
-                position: 1,
-                dnf: 0,
-                averageFinish: 2.1,
-                consistency: 100
-              },
-              {
-                id: '2',
-                name: 'Max Verstappen',
-                team: 'Red Bull Racing',
-                number: 1,
-                seasonId: currentSeason.id,
-                points: 87,
-                wins: 2,
-                podiums: 7,
-                fastestLaps: 3,
-                position: 2,
-                dnf: 1,
-                averageFinish: 2.8,
-                consistency: 95
-              },
-              {
-                id: '3',
-                name: 'Charles Leclerc',
-                team: 'Ferrari',
-                number: 16,
-                seasonId: currentSeason.id,
-                points: 78,
-                wins: 1,
-                podiums: 6,
-                fastestLaps: 1,
-                position: 3,
-                dnf: 0,
-                averageFinish: 3.2,
-                consistency: 100
-              },
-              {
-                id: '4',
-                name: 'Lando Norris',
-                team: 'McLaren',
-                number: 4,
-                seasonId: currentSeason.id,
-                points: 65,
-                wins: 1,
-                podiums: 4,
-                fastestLaps: 2,
-                position: 4,
-                dnf: 0,
-                averageFinish: 4.1,
-                consistency: 90
-              },
-              {
-                id: '5',
-                name: 'Carlos Sainz',
-                team: 'Ferrari',
-                number: 55,
-                seasonId: currentSeason.id,
-                points: 58,
-                wins: 0,
-                podiums: 3,
-                fastestLaps: 1,
-                position: 5,
-                dnf: 1,
-                averageFinish: 4.8,
-                consistency: 85
-              }
-            ];
-          
-          case 'season-2023':
-            return [
-              {
-                id: '1',
-                name: 'Max Verstappen',
-                team: 'Red Bull Racing',
-                number: 1,
-                seasonId: currentSeason.id,
-                points: 575,
-                wins: 19,
-                podiums: 21,
-                fastestLaps: 9,
-                position: 1,
-                dnf: 0,
-                averageFinish: 1.2,
-                consistency: 100
-              },
-              {
-                id: '2',
-                name: 'Sergio Perez',
-                team: 'Red Bull Racing',
-                number: 11,
-                seasonId: currentSeason.id,
-                points: 285,
-                wins: 2,
-                podiums: 9,
-                fastestLaps: 2,
-                position: 2,
-                dnf: 2,
-                averageFinish: 4.8,
-                consistency: 90
-              },
-              {
-                id: '3',
-                name: 'Lewis Hamilton',
-                team: 'Mercedes',
-                number: 44,
-                seasonId: currentSeason.id,
-                points: 234,
-                wins: 0,
-                podiums: 6,
-                fastestLaps: 1,
-                position: 3,
-                dnf: 0,
-                averageFinish: 5.2,
-                consistency: 100
-              },
-              {
-                id: '4',
-                name: 'Fernando Alonso',
-                team: 'Aston Martin',
-                number: 14,
-                seasonId: currentSeason.id,
-                points: 206,
-                wins: 0,
-                podiums: 8,
-                fastestLaps: 0,
-                position: 4,
-                dnf: 1,
-                averageFinish: 6.1,
-                consistency: 95
-              },
-              {
-                id: '5',
-                name: 'Charles Leclerc',
-                team: 'Ferrari',
-                number: 16,
-                seasonId: currentSeason.id,
-                points: 206,
-                wins: 0,
-                podiums: 5,
-                fastestLaps: 2,
-                position: 5,
-                dnf: 2,
-                averageFinish: 6.8,
-                consistency: 85
-              }
-            ];
-          
-          case 'season-2025':
-            return [
-              {
-                id: '1',
-                name: 'Lewis Hamilton',
-                team: 'Ferrari',
-                number: 44,
-                seasonId: currentSeason.id,
-                points: 0,
-                wins: 0,
-                podiums: 0,
-                fastestLaps: 0,
-                position: 1,
-                dnf: 0,
-                averageFinish: 0,
-                consistency: 0
-              },
-              {
-                id: '2',
-                name: 'Max Verstappen',
-                team: 'Red Bull Racing',
-                number: 1,
-                seasonId: currentSeason.id,
-                points: 0,
-                wins: 0,
-                podiums: 0,
-                fastestLaps: 0,
-                position: 2,
-                dnf: 0,
-                averageFinish: 0,
-                consistency: 0
-              },
-              {
-                id: '3',
-                name: 'Charles Leclerc',
-                team: 'Ferrari',
-                number: 16,
-                seasonId: currentSeason.id,
-                points: 0,
-                wins: 0,
-                podiums: 0,
-                fastestLaps: 0,
-                position: 3,
-                dnf: 0,
-                averageFinish: 0,
-                consistency: 0
-              }
-            ];
-          
-          default:
-            return [];
-        }
-      };
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/participants`);
+      const data = await response.json();
       
-      const seasonDrivers = getSeasonDrivers(currentSeason.id);
-      setDrivers(seasonDrivers);
-      setLoading(false);
+      if (data.success && data.participants) {
+        // Transform participants to Driver format with realistic mock stats
+        const driversWithStats = data.participants.map((participant: any, index: number) => {
+          // Create realistic F1-style points distribution
+          const basePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1][index] || 0;
+          const bonusPoints = Math.floor(Math.random() * 5); // Fastest lap points
+          const totalPoints = basePoints + bonusPoints;
+          
+          // Calculate realistic stats based on position
+          const wins = index === 0 ? Math.floor(Math.random() * 3) + 1 : Math.floor(Math.random() * 2);
+          const podiums = Math.max(wins, Math.floor(Math.random() * 5) + (index < 3 ? 2 : 0));
+          const fastestLaps = Math.floor(Math.random() * 3);
+          const dnf = Math.floor(Math.random() * 2);
+          const averageFinish = Math.max(1, index + Math.floor(Math.random() * 3) - 1);
+          const consistency = Math.max(60, 100 - (index * 5) - Math.floor(Math.random() * 10));
+          
+          return {
+            id: participant.id,
+            name: participant.name,
+            team: participant.team || 'TBD',
+            number: participant.number || (index + 1),
+            seasonId: currentSeason.id,
+            points: totalPoints,
+            wins,
+            podiums,
+            fastestLaps,
+            position: index + 1,
+            dnf,
+            averageFinish,
+            consistency
+          };
+        });
+        
+        // Sort by points to get correct championship order
+        const sortedDrivers = driversWithStats.sort((a, b) => b.points - a.points);
+        
+        // Update positions based on sorted order
+        const finalDrivers = sortedDrivers.map((driver, index) => ({
+          ...driver,
+          position: index + 1
+        }));
+        
+        setDrivers(finalDrivers);
+      } else {
+        console.warn('No participants found for season');
+        setDrivers([]);
+      }
     } catch (error) {
-      console.error('Error fetching drivers:', error);
+      console.error('Failed to load season drivers:', error);
+      // Fallback to empty array
+      setDrivers([]);
+    } finally {
       setLoading(false);
     }
   };

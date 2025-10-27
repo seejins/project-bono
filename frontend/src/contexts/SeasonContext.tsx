@@ -31,44 +31,47 @@ export const SeasonProvider: React.FC<SeasonProviderProps> = ({ children }) => {
   const fetchSeasons = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual API call
-      // For now, using mock data with different years
-      const mockSeasons: Season[] = [
-        {
-          id: 'season-2024',
-          name: 'F1 Season 2024',
-          year: 2024,
-          status: 'active',
-          start_date: '2024-01-01',
-          end_date: '2024-12-31'
-        },
-        {
-          id: 'season-2023',
-          name: 'F1 Season 2023',
-          year: 2023,
-          status: 'completed',
-          start_date: '2023-01-01',
-          end_date: '2023-12-31'
-        },
-        {
-          id: 'season-2025',
-          name: 'F1 Season 2025',
-          year: 2025,
-          status: 'draft',
-          start_date: '2025-01-01'
-        }
-      ];
       
-      setSeasons(mockSeasons);
+      // Make actual API call to fetch seasons
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/seasons`);
       
-      // Set current season from localStorage or default to active season
-      const savedSeasonId = localStorage.getItem('f1-current-season-id');
-      const activeSeason = mockSeasons.find(s => s.status === 'active');
-      const savedSeason = savedSeasonId ? mockSeasons.find(s => s.id === savedSeasonId) : null;
+      if (!response.ok) {
+        throw new Error(`Failed to fetch seasons: ${response.statusText}`);
+      }
       
-      setCurrentSeason(savedSeason || activeSeason || mockSeasons[0]);
+      const data = await response.json();
+      
+      if (data.success && data.seasons) {
+        // Transform the API response to match our Season interface
+        const apiSeasons: Season[] = data.seasons.map((season: any) => ({
+          id: season.id,
+          name: season.name,
+          year: season.year,
+          status: season.status || 'draft',
+          start_date: season.startDate || season.start_date,
+          end_date: season.endDate || season.end_date
+        }));
+        
+        setSeasons(apiSeasons);
+        
+        // Set current season from localStorage or default to active season
+        const savedSeasonId = localStorage.getItem('f1-current-season-id');
+        const activeSeason = apiSeasons.find(s => s.status === 'active');
+        const savedSeason = savedSeasonId ? apiSeasons.find(s => s.id === savedSeasonId) : null;
+        
+        setCurrentSeason(savedSeason || activeSeason || apiSeasons[0]);
+      } else {
+        console.error('Invalid API response:', data);
+        // Fallback to empty array if API fails
+        setSeasons([]);
+        setCurrentSeason(null);
+      }
     } catch (error) {
       console.error('Error fetching seasons:', error);
+      // Fallback to empty array if API fails
+      setSeasons([]);
+      setCurrentSeason(null);
     } finally {
       setLoading(false);
     }

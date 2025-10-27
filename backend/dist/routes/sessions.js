@@ -32,7 +32,7 @@ function createSessionsRoutes(dbService) {
                     m.f123DriverNumber === result.driverNumber);
                 return {
                     ...result,
-                    yourDriverId: mapping?.yourDriverId || null
+                    yourDriverId: mapping?.memberId || null
                 };
             });
             // Import race results

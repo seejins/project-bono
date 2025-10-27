@@ -86,8 +86,8 @@ export default function createUploadRoutes(dbService: DatabaseService) {
       
       for (const result of sessionData.results) {
         const mapping = driverMappings.find(m => 
-          m.f123_driver_name === result.driverName && 
-          m.f123_driver_number === result.driverNumber
+          m.f123DriverName === result.driverName && 
+          m.f123DriverNumber === result.driverNumber
         );
         
         if (!mapping) {
@@ -173,9 +173,11 @@ export default function createUploadRoutes(dbService: DatabaseService) {
       await dbService.ensureInitialized();
       const mapping = await dbService.createDriverMapping({
         seasonId,
-        f123_driver_name: f123DriverName,
-        f123_driver_number: f123DriverNumber || null,
-        yourDriverId
+        f123DriverId: f123DriverNumber || 0,
+        f123DriverName,
+        f123DriverNumber: f123DriverNumber || undefined,
+        f123TeamName: undefined,
+        memberId: yourDriverId
       });
       
       res.json({

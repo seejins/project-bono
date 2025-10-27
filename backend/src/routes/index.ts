@@ -5,6 +5,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import uploadRoutes from './upload';
 import seasonsRoutes from './seasons';
 import sessionsRoutes from './sessions';
+import membersRoutes from './members';
 
 export function setupRoutes(
   app: Express,
@@ -66,6 +67,9 @@ export function setupRoutes(
   
   // Seasons management routes
   app.use('/api/seasons', seasonsRoutes(services.databaseService));
+  
+  // Members management routes
+  app.use('/api/members', membersRoutes(services.databaseService));
   
   // Session data routes (for local host app)
   app.use('/api/sessions', sessionsRoutes(services.databaseService));

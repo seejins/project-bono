@@ -38,7 +38,7 @@ export default function createSessionsRoutes(dbService: DatabaseService) {
         
         return {
           ...result,
-          yourDriverId: mapping?.yourDriverId || null
+          yourDriverId: mapping?.memberId || null
         };
       });
 

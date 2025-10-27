@@ -38,7 +38,6 @@ function createDriversRoutes(dbService) {
             }
             await dbService.ensureInitialized();
             const driverId = await dbService.createDriver({
-                seasonId,
                 name,
                 team,
                 number
