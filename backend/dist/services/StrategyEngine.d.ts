@@ -1,4 +1,4 @@
-import { TelemetryData } from './TelemetryService';
+import { F123TelemetryData } from './TelemetryService';
 export interface RaceStrategy {
     recommendedPitStop: boolean;
     pitStopLap: number;
@@ -29,8 +29,8 @@ export declare class StrategyEngine {
     private lapHistory;
     private weatherHistory;
     private currentStrategy;
-    analyzeLap(telemetry: TelemetryData): LapAnalysis;
-    generateStrategy(telemetry: TelemetryData, raceLength: number | undefined, weather: WeatherConditions): RaceStrategy;
+    analyzeLap(telemetry: F123TelemetryData): LapAnalysis;
+    generateStrategy(telemetry: F123TelemetryData, raceLength: number | undefined, weather: WeatherConditions): RaceStrategy;
     private shouldPitStop;
     private recommendTireCompound;
     private calculateFuelStrategy;
@@ -44,5 +44,12 @@ export declare class StrategyEngine {
     getLapHistory(): LapAnalysis[];
     getCurrentStrategy(): RaceStrategy | null;
     reset(): void;
+    private analyzeTacticalSituation;
+    private calculateTargetLapTime;
+    private checkUndercutOpportunity;
+    private checkOvercutOpportunity;
+    private calculateGapToLeader;
+    private calculateTireAdvantage;
+    private analyzeFuelStrategy;
 }
 //# sourceMappingURL=StrategyEngine.d.ts.map

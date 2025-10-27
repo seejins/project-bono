@@ -12,6 +12,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const TelemetryService_1 = require("./services/TelemetryService");
 const StrategyEngine_1 = require("./services/StrategyEngine");
 const DatabaseService_1 = require("./services/DatabaseService");
+const SessionExportService_1 = require("./services/SessionExportService");
 const routes_1 = require("./routes");
 const socket_1 = require("./socket");
 dotenv_1.default.config();
@@ -31,16 +32,26 @@ app.use(express_1.default.json());
 const databaseService = new DatabaseService_1.DatabaseService();
 const telemetryService = new TelemetryService_1.TelemetryService();
 const strategyEngine = new StrategyEngine_1.StrategyEngine();
+const sessionExportService = new SessionExportService_1.SessionExportService();
 // Setup routes
 (0, routes_1.setupRoutes)(app, { telemetryService, strategyEngine, databaseService });
 // Setup Socket.IO handlers
-(0, socket_1.setupSocketHandlers)(io, { telemetryService, strategyEngine });
-// Start telemetry service
-telemetryService.start();
+(0, socket_1.setupSocketHandlers)(io, { telemetryService, strategyEngine, sessionExportService });
+// Start telemetry service only in development/local mode
+const isProduction = process.env.NODE_ENV === 'production';
+const disableUDP = process.env.DISABLE_UDP === 'true';
+if (!isProduction && !disableUDP) {
+    telemetryService.start();
+    console.log('📡 UDP Telemetry service started (local mode)');
+}
+else {
+    console.log('📡 UDP Telemetry service disabled (production mode)');
+}
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`🏎️  Project Bono Backend running on port ${PORT}`);
     console.log(`📡 Telemetry service: ${telemetryService.isRunning ? 'Active' : 'Inactive'}`);
+    console.log(`🌍 Environment: ${isProduction ? 'Production' : 'Development'}`);
 });
 // Graceful shutdown
 process.on('SIGINT', () => {

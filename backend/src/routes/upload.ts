@@ -75,7 +75,7 @@ router.post('/session', upload.single('sessionFile'), async (req, res) => {
       targetRaceId = await dbService.createRace({
         seasonId,
         trackId: track.id,
-        raceDate: new Date(sessionData.date),
+        raceDate: new Date(sessionData.date).toISOString(),
         status: 'completed'
       });
     }
@@ -173,8 +173,8 @@ router.post('/mappings', async (req, res) => {
     const dbService = new DatabaseService();
     const mapping = await dbService.createDriverMapping({
       seasonId,
-      f123DriverName,
-      f123DriverNumber: f123DriverNumber || null,
+      f123_driver_name: f123DriverName,
+      f123_driver_number: f123DriverNumber || null,
       yourDriverId
     });
     

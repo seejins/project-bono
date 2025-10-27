@@ -48,7 +48,7 @@ router.post('/upload', verifyApiKey, async (req, res) => {
       targetRaceId = await dbService.createRace({
         seasonId,
         trackId: track.id,
-        raceDate: new Date(sessionData.date),
+        raceDate: new Date(sessionData.date).toISOString(),
         status: 'completed'
       });
     }

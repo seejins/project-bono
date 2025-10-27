@@ -63,6 +63,7 @@ router.post('/', async (req, res) => {
       year: parseInt(year),
       startDate: new Date(startDate),
       endDate: new Date(endDate),
+      status: 'upcoming', // Add missing status property
       pointsSystem: pointsSystem || 'f1_standard',
       fastestLapPoint: fastestLapPoint !== undefined ? fastestLapPoint : true,
       isActive: false
@@ -127,13 +128,7 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     const dbService = new DatabaseService();
     
-    const success = await dbService.deleteSeason(id);
-    
-    if (!success) {
-      return res.status(404).json({ 
-        error: 'Season not found' 
-      });
-    }
+    await dbService.deleteSeason(id);
     
     res.json({
       success: true,
@@ -179,7 +174,7 @@ router.post('/:id/drivers', async (req, res) => {
     }
 
     const dbService = new DatabaseService();
-    const driver = await dbService.addDriverToSeason(id, {
+    const driver = await dbService.createDriverAndAddToSeason(id, {
       name,
       team: team || 'No Team',
       number: number ? parseInt(number) : 0
@@ -204,13 +199,7 @@ router.delete('/:id/drivers/:driverId', async (req, res) => {
     const { id, driverId } = req.params;
     const dbService = new DatabaseService();
     
-    const success = await dbService.removeDriverFromSeason(id, driverId);
-    
-    if (!success) {
-      return res.status(404).json({ 
-        error: 'Driver not found in season' 
-      });
-    }
+    await dbService.removeDriverFromSeason(id, driverId);
     
     res.json({
       success: true,
@@ -256,7 +245,7 @@ router.post('/:id/tracks', async (req, res) => {
     }
 
     const dbService = new DatabaseService();
-    const track = await dbService.addTrackToSeason(id, {
+    const track = await dbService.createTrackAndAddToSeason(id, {
       name,
       country,
       length: length ? parseFloat(length) : 0,
@@ -282,13 +271,7 @@ router.delete('/:id/tracks/:trackId', async (req, res) => {
     const { id, trackId } = req.params;
     const dbService = new DatabaseService();
     
-    const success = await dbService.removeTrackFromSeason(id, trackId);
-    
-    if (!success) {
-      return res.status(404).json({ 
-        error: 'Track not found in season' 
-      });
-    }
+    await dbService.removeTrackFromSeason(id, trackId);
     
     res.json({
       success: true,
@@ -334,7 +317,7 @@ router.post('/:id/races', async (req, res) => {
     }
 
     const dbService = new DatabaseService();
-    const race = await dbService.addRaceToSeason(id, {
+    const raceId = await dbService.createRaceAndAddToSeason(id, {
       trackId,
       date: new Date(date),
       time,
@@ -344,7 +327,7 @@ router.post('/:id/races', async (req, res) => {
     
     res.json({
       success: true,
-      race
+      raceId
     });
   } catch (error) {
     console.error('Add race to season error:', error);
@@ -361,13 +344,7 @@ router.delete('/:id/races/:raceId', async (req, res) => {
     const { id, raceId } = req.params;
     const dbService = new DatabaseService();
     
-    const success = await dbService.removeRaceFromSeason(id, raceId);
-    
-    if (!success) {
-      return res.status(404).json({ 
-        error: 'Race not found in season' 
-      });
-    }
+    await dbService.removeRaceFromSeason(id, raceId);
     
     res.json({
       success: true,

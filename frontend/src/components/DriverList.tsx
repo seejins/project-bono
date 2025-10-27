@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Trophy, Award, Clock, ChevronRight } from 'lucide-react';
+import { Users, Trophy, Award, ChevronRight } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
 
 interface Driver {

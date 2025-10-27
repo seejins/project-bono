@@ -57,6 +57,31 @@ function setupSocketHandlers(io, services) {
     services.telemetryService.on('alert', (alert) => {
         io.emit('alert', alert);
     });
+    // Set up session completion handling
+    services.telemetryService.on('sessionCompleted', async (sessionData) => {
+        try {
+            console.log('Session completed, exporting data...');
+            // Export session data
+            await services.sessionExportService.exportSessionData(sessionData);
+            // Notify all clients
+            io.emit('sessionCompleted', {
+                sessionType: sessionData.sessionType,
+                sessionTypeName: sessionData.sessionTypeName,
+                trackName: sessionData.trackName || 'Unknown Track',
+                drivers: sessionData.drivers.length,
+                message: `${sessionData.sessionTypeName} session completed and data exported`
+            });
+            console.log('Session data exported and clients notified');
+        }
+        catch (error) {
+            console.error('Error handling session completion:', error);
+            // Notify clients of error
+            io.emit('sessionError', {
+                message: 'Failed to export session data',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
 }
 function processVoiceCommand(command) {
     // Process voice commands and generate appropriate responses
@@ -66,7 +91,16 @@ function processVoiceCommand(command) {
         fuel_save: "Fuel saving mode activated. Lift and coast in braking zones.",
         tire_info: "Tire wear is at 65%. You can push for another 10 laps.",
         weather: "Weather is stable. No rain expected for the next 20 minutes.",
-        position: "You're currently P3, 2.5 seconds behind P2. Keep pushing!"
+        position: "You're currently P3, 2.5 seconds behind P2. Keep pushing!",
+        analysis: "Analyzing your lap data... I can see you're losing 0.3 seconds in sector 2. Your braking points are too early - try braking 10 meters later into turn 8.",
+        improvement: "Based on your telemetry, here's how to improve: 1) Brake later into turn 3 - you're losing 0.2s there. 2) Use ERS more aggressively on the straight. 3) Your throttle application is too gradual - be more decisive.",
+        brake_analysis: "Your braking analysis: You're braking 15 meters too early into turn 6, losing 0.15s. Your brake pressure is good, but try releasing the brake 5 meters earlier for better corner exit speed.",
+        ers_analysis: "ERS analysis: You're only using 60% of available energy. Deploy ERS earlier on the main straight - you're losing 0.1s per lap. Also, save more energy for sector 2 where you need the extra power.",
+        quiet_mode: "Understood. Switching to quiet mode. Only critical updates.",
+        minimal_mode: "Switching to minimal updates. Only essential information.",
+        hands_off: "Understood. Hands off. You're in control. I'll only speak for emergencies.",
+        no_braking_talk: "Got it. No communication during braking zones. I'll wait for straights.",
+        verbose_mode: "Switching to detailed mode. I'll provide comprehensive updates."
     };
     return {
         type: command.type,
