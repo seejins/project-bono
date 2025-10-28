@@ -67,6 +67,35 @@
   .team-williams {
     @apply text-blue-300;
   }
+  
+  /* Live Timings Animations */
+  .driver-row {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .driver-row.moving {
+    background-color: rgba(59, 130, 246, 0.1);
+    transform: scale(1.02);
+  }
+  
+  .position-change {
+    animation: pulse 0.5s ease-in-out;
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  
+  /* Smooth transitions for position changes */
+  .position-indicator {
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .tire-indicator {
+    transition: all 0.3s ease-in-out;
+  }
 }
 
 @layer utilities {

@@ -18,11 +18,11 @@ export default function createMembersRoutes(dbService: DatabaseService) {
   // Create a new member
   router.post('/', async (req, res) => {
     try {
-      const { name, isActive } = req.body;
+      const { name, steam_id, isActive } = req.body;
       if (!name) {
         return res.status(400).json({ error: 'Member name is required' });
       }
-      const memberId = await dbService.createMember({ name, isActive });
+      const memberId = await dbService.createMember({ name, steam_id, isActive });
       const newMember = await dbService.getMemberById(memberId);
       res.status(201).json({ success: true, member: newMember });
     } catch (error) {
@@ -50,14 +50,14 @@ export default function createMembersRoutes(dbService: DatabaseService) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, isActive } = req.body;
+      const { name, steam_id, isActive } = req.body;
       
       const member = await dbService.getMemberById(id);
       if (!member) {
         return res.status(404).json({ error: 'Member not found' });
       }
 
-      await dbService.updateMember(id, { name, isActive });
+      await dbService.updateMember(id, { name, steam_id, isActive });
       const updatedMember = await dbService.getMemberById(id);
       res.json({ success: true, member: updatedMember });
     } catch (error) {

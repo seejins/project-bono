@@ -1,5 +1,15 @@
 -- F1 Season Manager Database Schema
 
+-- Members table (for league participants)
+CREATE TABLE members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,
+  steam_id VARCHAR(20) UNIQUE, -- Steam ID for F1 23 UDP mapping
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Seasons table
 CREATE TABLE seasons (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -231,6 +241,22 @@ CREATE INDEX idx_f123_telemetry_data_timestamp ON f123_telemetry_data(timestamp)
 CREATE INDEX idx_session_file_uploads_race ON session_file_uploads(race_id);
 CREATE INDEX idx_session_file_uploads_status ON session_file_uploads(upload_status);
 
+-- F1 23 UDP specific indexes
+CREATE INDEX idx_f123_udp_session_results_season ON f123_udp_session_results(season_id);
+CREATE INDEX idx_f123_udp_session_results_event ON f123_udp_session_results(event_id);
+CREATE INDEX idx_f123_udp_session_results_member ON f123_udp_session_results(member_id);
+CREATE INDEX idx_f123_udp_session_results_session_uid ON f123_udp_session_results(session_uid);
+CREATE INDEX idx_f123_udp_lap_history_session_result ON f123_udp_lap_history(session_result_id);
+CREATE INDEX idx_f123_udp_lap_history_member ON f123_udp_lap_history(member_id);
+CREATE INDEX idx_f123_udp_lap_history_session_uid ON f123_udp_lap_history(session_uid);
+CREATE INDEX idx_f123_udp_tyre_stints_session_result ON f123_udp_tyre_stints(session_result_id);
+CREATE INDEX idx_f123_udp_tyre_stints_member ON f123_udp_tyre_stints(member_id);
+CREATE INDEX idx_f123_udp_tyre_stints_session_uid ON f123_udp_tyre_stints(session_uid);
+CREATE INDEX idx_f123_udp_participants_season ON f123_udp_participants(season_id);
+CREATE INDEX idx_f123_udp_participants_member ON f123_udp_participants(member_id);
+CREATE INDEX idx_f123_udp_participants_session_uid ON f123_udp_participants(session_uid);
+CREATE INDEX idx_f123_udp_participants_vehicle_index ON f123_udp_participants(vehicle_index);
+
 -- Insert default tracks
 INSERT INTO tracks (name, country, length_km) VALUES
 ('Bahrain International Circuit', 'Bahrain', 5.412),
@@ -255,4 +281,129 @@ INSERT INTO tracks (name, country, length_km) VALUES
 ('Interlagos', 'Brazil', 4.309),
 ('Las Vegas Strip Circuit', 'USA', 6.201),
 ('Yas Marina Circuit', 'UAE', 5.281);
+
+-- Season events table
+CREATE TABLE season_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  season_id UUID REFERENCES seasons(id) ON DELETE CASCADE,
+  track_id UUID REFERENCES tracks(id),
+  track_name VARCHAR(100) NOT NULL,
+  race_date DATE,
+  status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled')),
+  session_type INTEGER DEFAULT 10, -- 0=unknown, 1=practice1, 2=practice2, 3=practice3, 4=short_practice, 5=qualifying1, 6=qualifying2, 7=qualifying3, 8=short_qualifying, 9=one_shot_qualifying, 10=race, 11=race2, 12=time_trial
+  session_types TEXT, -- Comma-separated session types (e.g., "Practice, Qualifying, Race")
+  session_duration INTEGER DEFAULT 0, -- Duration in minutes
+  weather_air_temp INTEGER DEFAULT 0, -- Air temperature in Celsius
+  weather_track_temp INTEGER DEFAULT 0, -- Track temperature in Celsius
+  weather_rain_percentage INTEGER DEFAULT 0, -- Rain percentage (0-100)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- F1 23 UDP Session Results table (Final Classification Packet data)
+CREATE TABLE f123_udp_session_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  season_id UUID REFERENCES seasons(id) ON DELETE CASCADE,
+  event_id UUID REFERENCES season_events(id) ON DELETE CASCADE,
+  member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+  
+  -- Final Classification data
+  position INTEGER NOT NULL,
+  num_laps INTEGER NOT NULL,
+  grid_position INTEGER NOT NULL,
+  points INTEGER DEFAULT 0,
+  num_pit_stops INTEGER DEFAULT 0,
+  result_status INTEGER NOT NULL, -- 0=invalid, 1=inactive, 2=active, 3=finished, 4=didnotfinish, 5=disqualified, 6=not classified, 7=retired
+  best_lap_time_ms INTEGER,
+  total_race_time_seconds DECIMAL(10,3),
+  penalties_time INTEGER DEFAULT 0,
+  num_penalties INTEGER DEFAULT 0,
+  num_tyre_stints INTEGER DEFAULT 0,
+  
+  -- UDP session identifiers
+  session_uid BIGINT NOT NULL,
+  session_time REAL NOT NULL,
+  frame_identifier INTEGER NOT NULL,
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(session_uid, member_id)
+);
+
+-- F1 23 UDP Lap History table (Session History Packet data)
+CREATE TABLE f123_udp_lap_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_result_id UUID REFERENCES f123_udp_session_results(id) ON DELETE CASCADE,
+  member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+  
+  -- Lap History data
+  lap_number INTEGER NOT NULL,
+  lap_time_ms INTEGER NOT NULL,
+  sector1_time_ms INTEGER,
+  sector1_time_minutes INTEGER DEFAULT 0,
+  sector2_time_ms INTEGER,
+  sector2_time_minutes INTEGER DEFAULT 0,
+  sector3_time_ms INTEGER,
+  sector3_time_minutes INTEGER DEFAULT 0,
+  lap_valid_bit_flags INTEGER DEFAULT 0, -- 0x01=lap valid, 0x02=sector1 valid, 0x04=sector2 valid, 0x08=sector3 valid
+  
+  -- UDP session identifiers
+  session_uid BIGINT NOT NULL,
+  session_time REAL NOT NULL,
+  frame_identifier INTEGER NOT NULL,
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(session_uid, member_id, lap_number)
+);
+
+-- F1 23 UDP Tyre Stint History table
+CREATE TABLE f123_udp_tyre_stints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_result_id UUID REFERENCES f123_udp_session_results(id) ON DELETE CASCADE,
+  member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+  
+  -- Tyre Stint data
+  stint_number INTEGER NOT NULL,
+  end_lap INTEGER, -- 255 if current tyre
+  tyre_actual_compound INTEGER NOT NULL, -- Actual tyre compound used
+  tyre_visual_compound INTEGER NOT NULL, -- Visual tyre compound used
+  
+  -- UDP session identifiers
+  session_uid BIGINT NOT NULL,
+  session_time REAL NOT NULL,
+  frame_identifier INTEGER NOT NULL,
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(session_uid, member_id, stint_number)
+);
+
+-- F1 23 UDP Participants mapping table
+CREATE TABLE f123_udp_participants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  season_id UUID REFERENCES seasons(id) ON DELETE CASCADE,
+  member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+  
+  -- Participant data from UDP
+  vehicle_index INTEGER NOT NULL,
+  ai_controlled BOOLEAN DEFAULT FALSE,
+  driver_id INTEGER, -- F1 23 driver ID (255 if network human)
+  network_id INTEGER,
+  team_id INTEGER,
+  my_team BOOLEAN DEFAULT FALSE,
+  race_number INTEGER,
+  nationality INTEGER,
+  name VARCHAR(48) NOT NULL, -- Steam name or driver name
+  your_telemetry INTEGER DEFAULT 0, -- 0=restricted, 1=public
+  show_online_names INTEGER DEFAULT 0, -- 0=off, 1=on
+  platform INTEGER, -- 1=Steam, 3=PlayStation, 4=Xbox, 6=Origin, 255=unknown
+  
+  -- UDP session identifiers
+  session_uid BIGINT NOT NULL,
+  session_time REAL NOT NULL,
+  frame_identifier INTEGER NOT NULL,
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(session_uid, vehicle_index)
+);
 

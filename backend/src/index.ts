@@ -7,7 +7,8 @@ import dotenv from 'dotenv';
 import { TelemetryService } from './services/TelemetryService';
 import { StrategyEngine } from './services/StrategyEngine';
 import { DatabaseService } from './services/DatabaseService';
-import { SessionExportService } from './services/SessionExportService'; 
+import { SessionExportService } from './services/SessionExportService';
+import { F123UDPProcessor } from './services/F123UDPProcessor';
 import { setupRoutes } from './routes';
 import { setupSocketHandlers } from './socket';
 
@@ -32,6 +33,7 @@ const databaseService = new DatabaseService();
 const telemetryService = new TelemetryService();
 const strategyEngine = new StrategyEngine();
 const sessionExportService = new SessionExportService();
+const f123UDPProcessor = new F123UDPProcessor(databaseService);
 
 // Initialize database tables
 databaseService.ensureInitialized().then(() => {
@@ -42,7 +44,7 @@ databaseService.ensureInitialized().then(() => {
 });
 
 // Setup routes
-setupRoutes(app, { telemetryService, strategyEngine, databaseService });
+setupRoutes(app, { telemetryService, strategyEngine, databaseService, f123UDPProcessor });
 
 // Setup Socket.IO handlers
 setupSocketHandlers(io, { telemetryService, strategyEngine, sessionExportService });
@@ -54,6 +56,13 @@ const disableUDP = process.env.DISABLE_UDP === 'true';
 if (!isProduction && !disableUDP) {
   telemetryService.start();
   console.log('📡 UDP Telemetry service started (local mode)');
+  
+  // Start F1 23 UDP processor
+  f123UDPProcessor.start().then(() => {
+    console.log('🏎️ F1 23 UDP Processor started');
+  }).catch((error) => {
+    console.error('❌ Failed to start F1 23 UDP Processor:', error);
+  });
 } else {
   console.log('📡 UDP Telemetry service disabled (production mode)');
 }
@@ -70,6 +79,7 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down gracefully...');
   telemetryService.stop();
+  f123UDPProcessor.stop();
   server.close(() => {
     console.log('✅ Server closed');
     process.exit(0);

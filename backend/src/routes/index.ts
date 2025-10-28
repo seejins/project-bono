@@ -2,10 +2,12 @@ import { Express } from 'express';
 import { TelemetryService } from '../services/TelemetryService';
 import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
+import { F123UDPProcessor } from '../services/F123UDPProcessor';
 import uploadRoutes from './upload';
 import seasonsRoutes from './seasons';
 import sessionsRoutes from './sessions';
 import membersRoutes from './members';
+import tracksRoutes from './tracks';
 
 export function setupRoutes(
   app: Express,
@@ -13,6 +15,7 @@ export function setupRoutes(
     telemetryService: TelemetryService;
     strategyEngine: StrategyEngine;
     databaseService: DatabaseService;
+    f123UDPProcessor: F123UDPProcessor;
   }
 ) {
   // Health check endpoint
@@ -20,7 +23,8 @@ export function setupRoutes(
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      telemetry: services.telemetryService.isRunning
+      telemetry: services.telemetryService.isRunning,
+      f123UDPProcessor: services.f123UDPProcessor.isProcessorRunning()
     });
   });
 
@@ -62,6 +66,77 @@ export function setupRoutes(
     res.json({ message: 'Strategy engine reset' });
   });
 
+  // F1 23 UDP Processor status and control
+  app.get('/api/f123-udp/status', (req, res) => {
+    res.json({
+      isRunning: services.f123UDPProcessor.isProcessorRunning(),
+      sessionUid: services.f123UDPProcessor.getSessionUid(),
+      participantMappings: Object.fromEntries(services.f123UDPProcessor.getParticipantMappings())
+    });
+  });
+
+  app.post('/api/f123-udp/start', async (req, res) => {
+    try {
+      await services.f123UDPProcessor.start();
+      res.json({ message: 'F1 23 UDP Processor started successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to start F1 23 UDP Processor' });
+    }
+  });
+
+  app.post('/api/f123-udp/stop', async (req, res) => {
+    try {
+      await services.f123UDPProcessor.stop();
+      res.json({ message: 'F1 23 UDP Processor stopped successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to stop F1 23 UDP Processor' });
+    }
+  });
+
+  app.post('/api/f123-udp/set-active-season/:seasonId', async (req, res) => {
+    try {
+      const { seasonId } = req.params;
+      await services.f123UDPProcessor.setActiveSeason(seasonId);
+      res.json({ message: `Active season set to ${seasonId}` });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to set active season' });
+    }
+  });
+
+  app.post('/api/f123-udp/set-current-event/:eventId', async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      await services.f123UDPProcessor.setCurrentEvent(eventId);
+      res.json({ message: `Current event set to ${eventId}` });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to set current event' });
+    }
+  });
+
+  // Get UDP session results
+  app.get('/api/f123-udp/session-results/:seasonId', async (req, res) => {
+    try {
+      const { seasonId } = req.params;
+      const { eventId } = req.query;
+      const results = await services.databaseService.getUDPSessionResults(seasonId, eventId as string);
+      res.json({ results });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get session results' });
+    }
+  });
+
+  // Get UDP lap history for a member
+  app.get('/api/f123-udp/lap-history/:memberId', async (req, res) => {
+    try {
+      const { memberId } = req.params;
+      const { sessionUid } = req.query;
+      const lapHistory = await services.databaseService.getUDPLapHistory(memberId, sessionUid ? BigInt(sessionUid as string) : undefined);
+      res.json({ lapHistory });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get lap history' });
+    }
+  });
+
   // Upload routes for F1 23 data
   app.use('/api/upload', uploadRoutes(services.databaseService));
   
@@ -70,6 +145,9 @@ export function setupRoutes(
   
   // Members management routes
   app.use('/api/members', membersRoutes(services.databaseService));
+  
+  // Tracks management routes
+  app.use('/api/tracks', tracksRoutes);
   
   // Session data routes (for local host app)
   app.use('/api/sessions', sessionsRoutes(services.databaseService));

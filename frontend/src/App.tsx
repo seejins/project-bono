@@ -8,10 +8,11 @@ import { MemberProfile } from './components/MemberProfile';
 import { RaceEvents } from './components/RaceHistory';
 import { RaceDetail } from './components/RaceDetail';
 import { DriverRaceAnalysis } from './components/DriverRaceAnalysis';
+import { LiveTimings } from './components/LiveTimings';
 import { AdminPanel } from './components/AdminPanel';
 import { AlertSystem } from './components/AlertSystem';
 import { Header } from './components/Header';
-import { Sidebar } from './components/Sidebar';
+import { HeaderNavigation } from './components/HeaderNavigation';
 import { PasswordGate } from './components/PasswordGate';
 import { AdminProvider, useAdmin } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -23,8 +24,8 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('f1-app-authenticated') === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'season' | 'grid' | 'races' | 'career' | 'admin'>(() => {
-    const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'career' | 'admin';
+  const [activeTab, setActiveTab] = useState<'season' | 'grid' | 'races' | 'career' | 'admin' | 'live'>(() => {
+    const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'career' | 'admin' | 'live';
     return savedTab || 'season';
   });
   const [selectedDriver, setSelectedDriver] = useState<string | null>(() => {
@@ -49,7 +50,7 @@ function AppContent() {
     setIsAuthenticated(true);
   };
 
-  const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'career' | 'admin') => {
+  const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'career' | 'admin' | 'live') => {
     setActiveTab(tab);
     setSelectedDriver(null);
     setSelectedRace(null);
@@ -197,13 +198,10 @@ function AppContent() {
         <PasswordGate onAuthenticated={handleAppAuthentication} />
       ) : (
         <>
-          <Header isConnected={isConnected} />
+          <HeaderNavigation activeTab={activeTab} onTabChange={handleTabChange} />
           
-          <div className="flex">
-            <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
-            
-            <main className="flex-1 p-6">
-              <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+          <main className="flex-1 p-6">
+            <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
               
               {activeTab === 'season' && (
                 <SeasonDashboard 
@@ -259,14 +257,17 @@ function AppContent() {
                 </>
               )}
               
+              {activeTab === 'live' && (
+                <LiveTimings />
+              )}
+              
               {activeTab === 'admin' && (
                 <AdminPanel 
                   isAuthenticated={isAdminAuthenticated}
                   onAuthenticate={authenticate}
                 />
               )}
-            </main>
-          </div>
+          </main>
         </>
       )}
     </div>

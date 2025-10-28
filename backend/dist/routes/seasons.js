@@ -90,16 +90,24 @@ function createSeasonsRoutes(dbService) {
         try {
             const { id } = req.params;
             const { name, year, startDate, endDate, pointsSystem, fastestLapPoint, isActive } = req.body;
-            if (!name || !year) {
-                return res.status(400).json({ error: 'Missing required fields' });
+            // Only require name and year if they're being updated
+            if (name !== undefined && !name) {
+                return res.status(400).json({ error: 'Name cannot be empty' });
+            }
+            if (year !== undefined && (!year || isNaN(parseInt(year)))) {
+                return res.status(400).json({ error: 'Year must be a valid number' });
             }
             await dbService.ensureInitialized();
+            // If this season is being activated, deactivate all other seasons
+            if (isActive === 1) {
+                await dbService.deactivateAllOtherSeasons(id);
+            }
             await dbService.updateSeason(id, {
                 name,
-                year: parseInt(year),
+                year: year !== undefined ? parseInt(year) : undefined,
                 startDate: startDate ? new Date(startDate).toISOString() : undefined,
                 endDate: endDate ? new Date(endDate).toISOString() : undefined,
-                isActive: isActive !== undefined ? isActive : false
+                isActive: isActive !== undefined ? isActive : undefined
             });
             const season = await dbService.getSeasonById(id);
             if (!season) {
@@ -360,6 +368,120 @@ function createSeasonsRoutes(dbService) {
             console.error('Remove race from season error:', error);
             res.status(500).json({
                 error: 'Failed to remove race from season',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
+    // Get events for a season
+    router.get('/:id/events', async (req, res) => {
+        try {
+            const { id } = req.params;
+            await dbService.ensureInitialized();
+            const events = await dbService.getEventsBySeason(id);
+            res.json({
+                success: true,
+                events: events
+            });
+        }
+        catch (error) {
+            console.error('Get season events error:', error);
+            res.status(500).json({
+                error: 'Failed to get season events',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
+    // Add event to season
+    router.post('/:id/events', async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { track_name, date, session_type, session_types, session_duration, weather_air_temp, weather_track_temp, weather_rain_percentage } = req.body;
+            if (!track_name) {
+                return res.status(400).json({ error: 'Track name is required' });
+            }
+            await dbService.ensureInitialized();
+            const eventId = await dbService.addEventToSeason(id, {
+                track_name,
+                date: date || new Date().toISOString(), // Default to current date if not provided
+                session_type: session_type || 10, // Default to Race
+                session_types: session_types || null, // Store the comma-separated session types
+                session_duration: session_duration || 0,
+                weather_air_temp: weather_air_temp || 0,
+                weather_track_temp: weather_track_temp || 0,
+                weather_rain_percentage: weather_rain_percentage || 0
+            });
+            res.json({
+                success: true,
+                eventId: eventId,
+                message: 'Event added to season successfully'
+            });
+        }
+        catch (error) {
+            console.error('Add event to season error:', error);
+            res.status(500).json({
+                error: 'Failed to add event to season',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
+    // Update event in season
+    router.put('/:id/events/:eventId', async (req, res) => {
+        try {
+            const { id, eventId } = req.params;
+            const updateData = req.body;
+            await dbService.ensureInitialized();
+            await dbService.updateEventInSeason(id, eventId, updateData);
+            res.json({
+                success: true,
+                message: 'Event updated successfully'
+            });
+        }
+        catch (error) {
+            console.error('Update event error:', error);
+            res.status(500).json({
+                error: 'Failed to update event',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
+    // Delete event from season
+    router.delete('/:id/events/:eventId', async (req, res) => {
+        try {
+            const { id, eventId } = req.params;
+            await dbService.ensureInitialized();
+            await dbService.removeEventFromSeason(id, eventId);
+            res.json({
+                success: true,
+                message: 'Event removed from season successfully'
+            });
+        }
+        catch (error) {
+            console.error('Remove event from season error:', error);
+            res.status(500).json({
+                error: 'Failed to remove event from season',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    });
+    // Get active season
+    router.get('/active', async (req, res) => {
+        try {
+            await dbService.ensureInitialized();
+            const activeSeason = await dbService.getActiveSeason();
+            if (!activeSeason) {
+                return res.status(404).json({
+                    error: 'No active season found'
+                });
+            }
+            res.json({
+                success: true,
+                season: activeSeason
+            });
+        }
+        catch (error) {
+            console.error('Get active season error:', error);
+            res.status(500).json({
+                error: 'Failed to get active season',
                 details: error instanceof Error ? error.message : 'Unknown error'
             });
         }

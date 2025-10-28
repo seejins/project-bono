@@ -28,6 +28,25 @@ export const apiPost = async (endpoint: string, data?: any) => {
   return apiCall(endpoint, options);
 };
 
+export const apiPut = async (endpoint: string, data?: any) => {
+  const options: RequestInit = {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+  
+  if (data) {
+    options.body = JSON.stringify(data);
+  }
+  
+  return apiCall(endpoint, options);
+};
+
+export const apiDelete = async (endpoint: string) => {
+  return apiCall(endpoint, { method: 'DELETE' });
+};
+
 export const apiPostFormData = async (endpoint: string, formData: FormData) => {
   return apiCall(endpoint, {
     method: 'POST',

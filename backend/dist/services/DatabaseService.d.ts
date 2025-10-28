@@ -1,12 +1,14 @@
 export interface Member {
     id: string;
     name: string;
+    steam_id?: string;
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
 }
 export interface MemberData {
     name: string;
+    steam_id?: string;
     isActive?: boolean;
 }
 export interface Driver {
@@ -81,8 +83,6 @@ export interface DriverMapping {
     f123DriverNumber?: number;
     f123TeamName?: string;
     memberId?: string;
-    isHuman: boolean;
-    isActive: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -93,12 +93,12 @@ export interface DriverMappingData {
     f123DriverNumber?: number;
     f123TeamName?: string;
     memberId?: string;
-    isHuman?: boolean;
 }
 export interface SessionResult {
-    id: string;
-    raceId: string;
     driverId: string;
+    driverName: string;
+    teamName: string;
+    carNumber: number;
     position: number;
     lapTime: number;
     sector1Time: number;
@@ -110,13 +110,17 @@ export interface SessionResult {
 export declare class DatabaseService {
     private db;
     private initialized;
-    private isPostgreSQL;
+    private initializationPromise;
     constructor();
     private initializeTables;
-    private initializePostgreSQLTables;
-    private initializeSQLiteTables;
+    private performInitialization;
+    private runMigrations;
+    private createMigrationsTable;
+    private runMigration;
+    private hasMigrationRun;
+    private markMigrationAsRun;
+    private addColumnIfNotExists;
     ensureInitialized(): Promise<void>;
-    private generateId;
     private executeQuery;
     private executeUpdate;
     createMember(data: MemberData): Promise<string>;
@@ -124,32 +128,53 @@ export declare class DatabaseService {
     getMemberById(id: string): Promise<Member | null>;
     updateMember(id: string, data: Partial<MemberData>): Promise<void>;
     deleteMember(id: string): Promise<void>;
+    createSeason(data: SeasonData): Promise<string>;
+    getAllSeasons(): Promise<Season[]>;
+    getSeasonById(id: string): Promise<Season | null>;
+    updateSeason(id: string, data: Partial<SeasonData>): Promise<void>;
+    deleteSeason(id: string): Promise<void>;
+    createTrack(data: TrackData): Promise<string>;
+    getAllTracks(): Promise<Track[]>;
+    getTrackById(id: string): Promise<Track | null>;
+    createRace(data: RaceData): Promise<string>;
+    getRacesBySeason(seasonId: string): Promise<Race[]>;
+    createDriverMapping(data: DriverMappingData): Promise<string>;
+    getDriverMappingsBySeason(seasonId: string): Promise<DriverMapping[]>;
+    updateDriverMapping(id: string, data: Partial<DriverMappingData>): Promise<void>;
+    deleteDriverMapping(id: string): Promise<void>;
+    importSessionResults(raceId: string, results: SessionResult[]): Promise<void>;
+    getSessionResultsByRace(raceId: string): Promise<SessionResult[]>;
+    getMemberCareerStats(memberId: string): Promise<any>;
+    getMemberSeasonStats(memberId: string, seasonId: string): Promise<any>;
+    getMemberRaceHistory(memberId: string, limit?: number): Promise<any[]>;
+    private getDefaultStats;
+    getActiveSeason(): Promise<Season | null>;
+    getMemberBySteamId(steamId: string): Promise<Member | null>;
+    findOrCreateTrack(trackName: string): Promise<string>;
+    getDriverMappings(seasonId: string): Promise<DriverMapping[]>;
+    importRaceResults(raceId: string, results: SessionResult[]): Promise<void>;
+    deactivateAllOtherSeasons(currentSeasonId: string): Promise<void>;
+    getDriversBySeason(seasonId: string): Promise<Driver[]>;
     createDriver(data: DriverData): Promise<string>;
     updateDriver(id: string, data: Partial<DriverData>): Promise<void>;
     deleteDriver(id: string): Promise<void>;
-    getAllSeasons(): Promise<Season[]>;
-    getSeasonById(id: string): Promise<Season | null>;
-    createSeason(data: SeasonData): Promise<string>;
-    updateSeason(id: string, data: Partial<SeasonData>): Promise<void>;
-    deleteSeason(id: string): Promise<void>;
-    getDriversBySeason(seasonId: string): Promise<Member[]>;
+    addUDPParticipant(data: any): Promise<void>;
+    addUDPSessionResult(data: any): Promise<void>;
+    addUDPTyreStint(data: any): Promise<void>;
+    addUDPLapHistory(data: any): Promise<void>;
+    getUDPSessionResults(): Promise<any[]>;
+    getUDPLapHistory(): Promise<any[]>;
     addDriverToSeason(seasonId: string, memberId: string): Promise<void>;
-    removeDriverFromSeason(seasonId: string, memberId: string): Promise<void>;
+    removeDriverFromSeason(seasonId: string, driverId: string): Promise<void>;
     getTracksBySeason(seasonId: string): Promise<Track[]>;
-    addTrackToSeason(seasonId: string, trackId: string): Promise<void>;
+    createTrackAndAddToSeason(data: TrackData, seasonId: string): Promise<string>;
     removeTrackFromSeason(seasonId: string, trackId: string): Promise<void>;
-    getRacesBySeason(seasonId: string): Promise<Race[]>;
-    addRaceToSeason(seasonId: string, raceData: RaceData): Promise<string>;
-    removeRaceFromSeason(seasonId: string, raceId: string): Promise<void>;
-    createTrack(data: TrackData): Promise<string>;
-    createTrackAndAddToSeason(seasonId: string, data: TrackData): Promise<string>;
-    findOrCreateTrack(trackName: string): Promise<Track>;
-    createRace(data: RaceData): Promise<string>;
-    getDriverMappings(seasonId: string): Promise<DriverMapping[]>;
-    createDriverMapping(data: DriverMappingData): Promise<string>;
-    importRaceResults(raceId: string, sessionData: any): Promise<{
-        resultsCount: number;
-        lapTimesCount: number;
-    }>;
+    addRaceToSeason(data: RaceData): Promise<string>;
+    removeRaceFromSeason(raceId: string): Promise<void>;
+    getEventsBySeason(seasonId: string): Promise<any[]>;
+    addEventToSeason(seasonId: string, eventData: any): Promise<string>;
+    updateEventInSeason(eventId: string, eventData: any): Promise<void>;
+    removeEventFromSeason(eventId: string): Promise<void>;
+    close(): Promise<void>;
 }
 //# sourceMappingURL=DatabaseService.d.ts.map

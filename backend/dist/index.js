@@ -13,6 +13,7 @@ const TelemetryService_1 = require("./services/TelemetryService");
 const StrategyEngine_1 = require("./services/StrategyEngine");
 const DatabaseService_1 = require("./services/DatabaseService");
 const SessionExportService_1 = require("./services/SessionExportService");
+const F123UDPProcessor_1 = require("./services/F123UDPProcessor");
 const routes_1 = require("./routes");
 const socket_1 = require("./socket");
 dotenv_1.default.config();
@@ -33,6 +34,7 @@ const databaseService = new DatabaseService_1.DatabaseService();
 const telemetryService = new TelemetryService_1.TelemetryService();
 const strategyEngine = new StrategyEngine_1.StrategyEngine();
 const sessionExportService = new SessionExportService_1.SessionExportService();
+const f123UDPProcessor = new F123UDPProcessor_1.F123UDPProcessor(databaseService);
 // Initialize database tables
 databaseService.ensureInitialized().then(() => {
     console.log('✅ Database initialized successfully');
@@ -41,7 +43,7 @@ databaseService.ensureInitialized().then(() => {
     process.exit(1);
 });
 // Setup routes
-(0, routes_1.setupRoutes)(app, { telemetryService, strategyEngine, databaseService });
+(0, routes_1.setupRoutes)(app, { telemetryService, strategyEngine, databaseService, f123UDPProcessor });
 // Setup Socket.IO handlers
 (0, socket_1.setupSocketHandlers)(io, { telemetryService, strategyEngine, sessionExportService });
 // Start telemetry service only in development/local mode
@@ -50,6 +52,12 @@ const disableUDP = process.env.DISABLE_UDP === 'true';
 if (!isProduction && !disableUDP) {
     telemetryService.start();
     console.log('📡 UDP Telemetry service started (local mode)');
+    // Start F1 23 UDP processor
+    f123UDPProcessor.start().then(() => {
+        console.log('🏎️ F1 23 UDP Processor started');
+    }).catch((error) => {
+        console.error('❌ Failed to start F1 23 UDP Processor:', error);
+    });
 }
 else {
     console.log('📡 UDP Telemetry service disabled (production mode)');
@@ -64,6 +72,7 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down gracefully...');
     telemetryService.stop();
+    f123UDPProcessor.stop();
     server.close(() => {
         console.log('✅ Server closed');
         process.exit(0);
