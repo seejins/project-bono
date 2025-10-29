@@ -379,75 +379,11 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
             year: selectedSeason.year,
             startDate: selectedSeason.start_date || '',
             endDate: selectedSeason.end_date || '',
-            pointsSystem: 'f1_standard' as const,
-            fastestLapPoint: true,
-            isActive: true,
-            drivers: drivers.map(d => ({
-              id: d.id,
-              name: d.name,
-              team: d.team,
-              number: d.number
-            })),
-            tracks: tracks.map(t => ({
-              id: t.id,
-              name: t.name,
-              country: t.country,
-              city: t.location,
-              circuitLength: t.length,
-              laps: t.laps,
-              length: t.length
-            })),
-            races: events.map(e => ({
-              id: e.id,
-              trackId: e.trackId,
-              trackName: e.track.name,
-              date: e.date || '',
-              time: '15:00',
-              status: e.status as 'scheduled' | 'completed' | 'cancelled',
-              type: e.sessionTypes.includes('race') ? 'race' : 
-                    e.sessionTypes.includes('qualifying') ? 'qualifying' : 'practice'
-            }))
+            isActive: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           }}
           onBack={() => onSeasonSelect && onSeasonSelect('')}
-          onUpdate={(updatedSeason) => {
-            // Update the selected season with new data
-            setSelectedSeason({
-              ...selectedSeason,
-              name: updatedSeason.name,
-              year: updatedSeason.year,
-              start_date: updatedSeason.startDate || '',
-              end_date: updatedSeason.endDate || ''
-            });
-            
-            // Update drivers and events
-            setDrivers(updatedSeason.drivers.map(d => ({
-              id: d.id,
-              name: d.name,
-              team: d.team,
-              number: d.number,
-              createdAt: '',
-              updatedAt: ''
-            })));
-            
-            setEvents(updatedSeason.races.map(r => ({
-              id: r.id,
-              trackId: r.trackId,
-              track: tracks.find(t => t.id === r.trackId) || {
-                id: r.trackId,
-                name: r.trackName,
-                country: '',
-                location: '',
-                length: 0,
-                laps: 0,
-                createdAt: '',
-                updatedAt: ''
-              },
-              date: r.date,
-              sessionTypes: [r.type],
-              status: r.status,
-              createdAt: ''
-            })));
-          }}
         />
       )}
 
@@ -878,7 +814,7 @@ const SeasonManagement: React.FC<SeasonManagementProps> = ({
           {activeTab === 'events' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Scheduled Races</h4>
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Scheduled Events</h4>
                 <button
                   onClick={onAddEvent}
                   className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"

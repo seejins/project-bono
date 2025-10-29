@@ -3,9 +3,10 @@ import { io } from 'socket.io-client';
 import { SeasonDashboard } from './components/SeasonDashboard';
 import { Grid } from './components/Grid';
 import { DriverSeasonStats } from './components/DriverSeasonStats';
-import { CareerList } from './components/CareerList';
+import { HistoryPage } from './components/HistoryPage';
+import { MemberCareerProfileComponent } from './components/MemberCareerProfile';
 import { MemberProfile } from './components/MemberProfile';
-import { RaceEvents } from './components/RaceHistory';
+import { RacesDashboard } from './components/RacesDashboard';
 import { RaceDetail } from './components/RaceDetail';
 import { DriverRaceAnalysis } from './components/DriverRaceAnalysis';
 import { LiveTimings } from './components/LiveTimings';
@@ -16,7 +17,7 @@ import { HeaderNavigation } from './components/HeaderNavigation';
 import { PasswordGate } from './components/PasswordGate';
 import { AdminProvider, useAdmin } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { SeasonProvider } from './contexts/SeasonContext';
+import { SeasonProvider, useSeason } from './contexts/SeasonContext';
 
 function AppContent() {
   const [alerts, setAlerts] = useState<Array<{id: string, type: string, message: string, timestamp: number}>>([]);
@@ -24,13 +25,13 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('f1-app-authenticated') === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'season' | 'grid' | 'races' | 'career' | 'admin' | 'live'>(() => {
-    const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'career' | 'admin' | 'live';
+  const [activeTab, setActiveTab] = useState<'season' | 'grid' | 'races' | 'history' | 'admin' | 'live'>(() => {
+    const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live';
     return savedTab || 'season';
   });
-  const [selectedDriver, setSelectedDriver] = useState<string | null>(() => {
-    const savedDriver = localStorage.getItem('f1-selected-driver');
-    return savedDriver || null;
+  const [selectedMember, setSelectedMember] = useState<string | null>(() => {
+    const savedMember = localStorage.getItem('f1-selected-member');
+    return savedMember || null;
   });
   const [selectedRace, setSelectedRace] = useState<string | null>(() => {
     const savedRace = localStorage.getItem('f1-selected-race');
@@ -45,39 +46,40 @@ function AppContent() {
     return savedHistory ? JSON.parse(savedHistory) : [];
   });
   const { isAuthenticated: isAdminAuthenticated, authenticate } = useAdmin();
+  const { currentSeason } = useSeason();
 
   const handleAppAuthentication = () => {
     setIsAuthenticated(true);
   };
 
-  const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'career' | 'admin' | 'live') => {
+  const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live') => {
     setActiveTab(tab);
-    setSelectedDriver(null);
+    setSelectedMember(null);
     setSelectedRace(null);
     setSelectedDriverRace(null);
     localStorage.setItem('f1-active-tab', tab);
-    localStorage.removeItem('f1-selected-driver');
+    localStorage.removeItem('f1-selected-member');
     localStorage.removeItem('f1-selected-race');
     localStorage.removeItem('f1-selected-driver-race');
   };
 
   const handleDriverSelect = (driverId: string) => {
     pushToHistory(activeTab, 'list'); // Save current view
-    setActiveTab('career'); // Switch to career tab
-    setSelectedDriver(driverId);
-    localStorage.setItem('f1-active-tab', 'career');
-    localStorage.setItem('f1-selected-driver', driverId);
+    setActiveTab('history'); // Switch to history tab
+    setSelectedMember(driverId);
+    localStorage.setItem('f1-active-tab', 'history');
+    localStorage.setItem('f1-selected-member', driverId);
   };
 
   const handleGridDriverSelect = (driverId: string) => {
     pushToHistory(activeTab, 'list'); // Save current view
     setActiveTab('grid'); // Stay on grid tab
-    setSelectedDriver(driverId);
+    setSelectedMember(driverId);
     localStorage.setItem('f1-active-tab', 'grid');
-    localStorage.setItem('f1-selected-driver', driverId);
+    localStorage.setItem('f1-selected-member', driverId);
   };
 
-  const handleDriverBack = () => {
+  const handleMemberBack = () => {
     const previous = popFromHistory();
     if (previous) {
       setActiveTab(previous.tab as any);
@@ -85,13 +87,27 @@ function AppContent() {
       if (previous.view === 'race' && selectedRace) {
         // Stay on race detail
       } else {
-        setSelectedDriver(null);
-        localStorage.removeItem('f1-selected-driver');
+        setSelectedMember(null);
+        localStorage.removeItem('f1-selected-member');
       }
     } else {
-      setSelectedDriver(null);
-      localStorage.removeItem('f1-selected-driver');
+      setSelectedMember(null);
+      localStorage.removeItem('f1-selected-member');
     }
+  };
+
+  const handleMemberSelect = (memberId: string) => {
+    pushToHistory(activeTab, 'list'); // Save current view
+    setSelectedMember(memberId);
+    localStorage.setItem('f1-selected-member', memberId);
+  };
+
+  const handleSeasonSelect = (seasonId: string) => {
+    pushToHistory(activeTab, 'list'); // Save current view
+    setActiveTab('races'); // Switch to races tab
+    setSelectedRace(seasonId);
+    localStorage.setItem('f1-active-tab', 'races');
+    localStorage.setItem('f1-selected-race', seasonId);
   };
 
   const handleRaceSelect = (raceId: string) => {
@@ -107,7 +123,7 @@ function AppContent() {
     if (previous) {
       setActiveTab(previous.tab as any);
       localStorage.setItem('f1-active-tab', previous.tab);
-      if (previous.view === 'driver' && selectedDriver) {
+      if (previous.view === 'driver') {
         // Stay on driver profile
       } else {
         setSelectedRace(null);
@@ -133,7 +149,7 @@ function AppContent() {
       if (previous.view === 'race') {
         setSelectedRace(previous.tab === 'races' ? 'race-1' : null);
       } else if (previous.view === 'driver') {
-        setSelectedDriver(previous.tab === 'drivers' ? 'driver-1' : null);
+        // Handle driver view navigation
       }
     }
     setSelectedDriverRace(null);
@@ -201,7 +217,7 @@ function AppContent() {
           <HeaderNavigation activeTab={activeTab} onTabChange={handleTabChange} />
           
           <main className="flex-1 p-6">
-            <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+            {activeTab !== 'admin' && <AlertSystem alerts={alerts} onDismiss={dismissAlert} />}
               
               {activeTab === 'season' && (
                 <SeasonDashboard 
@@ -212,10 +228,10 @@ function AppContent() {
               
               {activeTab === 'grid' && (
                 <>
-                  {selectedDriver ? (
+                  {selectedMember ? (
                     <DriverSeasonStats 
-                      driverId={selectedDriver} 
-                      onBack={handleDriverBack}
+                      driverId={selectedMember} 
+                      onBack={handleMemberBack}
                     />
                   ) : (
                     <Grid onDriverSelect={handleGridDriverSelect} />
@@ -223,16 +239,19 @@ function AppContent() {
                 </>
               )}
               
-              {activeTab === 'career' && (
+              {activeTab === 'history' && (
                 <>
-                  {selectedDriver ? (
-                    <MemberProfile 
-                      driverId={selectedDriver} 
-                      onBack={handleDriverBack}
+                  {selectedMember ? (
+                    <MemberCareerProfileComponent 
+                      memberId={selectedMember} 
+                      onBack={handleMemberBack}
                       onRaceSelect={handleRaceSelect}
                     />
                   ) : (
-                    <CareerList onDriverSelect={handleDriverSelect} />
+                    <HistoryPage 
+                      onSeasonSelect={handleSeasonSelect}
+                      onMemberSelect={handleMemberSelect}
+                    />
                   )}
                 </>
               )}
@@ -252,7 +271,13 @@ function AppContent() {
                       onDriverSelect={handleDriverRaceSelect}
                     />
                   ) : (
-                    <RaceEvents onRaceSelect={handleRaceSelect} />
+                    currentSeason ? (
+                      <RacesDashboard seasonId={currentSeason.id} />
+                    ) : (
+                      <div className="text-center py-12">
+                        <p className="text-gray-500 dark:text-gray-400">No active season selected</p>
+                      </div>
+                    )
                   )}
                 </>
               )}

@@ -115,7 +115,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center space-x-4">
         <button

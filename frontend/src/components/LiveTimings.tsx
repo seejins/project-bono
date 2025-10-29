@@ -2,40 +2,71 @@ import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import MockLiveTimingsService, { MockDriverData, MockSessionData } from '../services/MockLiveTimingsService';
 import { convertToLiveTimingsFormat } from '../utils/f123DataMapping';
 
-// Get retirement status text based on F1 23 UDP resultStatus
-const getRetirementStatus = (resultStatus: number): string => {
-  switch (resultStatus) {
-    case 0: return 'INV'; // Invalid
-    case 1: return 'INA'; // Inactive
-    case 2: return ''; // Active - show gap instead
-    case 3: return 'FIN'; // Finished
-    case 4: return 'DNF'; // Did not finish
-    case 5: return 'DSQ'; // Disqualified
-    case 6: return 'NC'; // Not classified
-    case 7: return 'RET'; // Retired
+// Driver data interface for live timings
+interface DriverData {
+  id: string;
+  position: number;
+  driverName: string;
+  driverAbbreviation: string;
+  teamColor: string;
+  fastestLap: string;
+  fastestLapTire: 'S' | 'M' | 'H';
+  gap: string;
+  currentLapTime: string;
+  lastLapTime: string;
+  bestLap: string;
+  interval: string;
+  status: 'RUNNING' | 'OUT_LAP' | 'IN_LAP' | 'PITTING' | 'PIT' | 'OUT' | 'DNF';
+  positionChange: number;
+  lapsOnCompound: number;
+  tireCompound: 'S' | 'M' | 'H';
+  sector1Time?: string;
+  sector2Time?: string;
+  sector3Time?: string;
+  personalBestS1?: string;
+  personalBestS2?: string;
+  personalBestS3?: string;
+  microSectors: Array<'purple' | 'green' | 'yellow' | 'grey'>;
+  stintHistory: Array<{
+    compound: 'S' | 'M' | 'H';
+    laps: number;
+  }>;
+  currentTire: 'S' | 'M' | 'H';
+  stintLaps: number;
+  totalRaceLaps: number;
+}
+
+// Get retirement status text based on F1 23 UDP status
+const getRetirementStatus = (status: string): string => {
+  switch (status) {
+    case 'RUNNING': return ''; // Active - show gap instead
+    case 'OUT_LAP': return 'OUT';
+    case 'IN_LAP': return 'IN';
+    case 'PITTING': return 'PIT';
+    case 'PIT': return 'PIT';
+    case 'OUT': return 'OUT';
+    case 'DNF': return 'DNF';
     default: return 'OUT';
   }
 };
 
 // Get color for retirement status
-const getRetirementStatusColor = (resultStatus: number): string => {
-  switch (resultStatus) {
-    case 2: return 'text-white'; // Active - normal color
-    case 3: return 'text-blue-500'; // Finished
-    case 4: return 'text-red-500'; // DNF
-    case 5: return 'text-orange-500'; // Disqualified
-    case 6: return 'text-yellow-500'; // Not classified
-    case 7: return 'text-red-600'; // Retired
+const getRetirementStatusColor = (status: string): string => {
+  switch (status) {
+    case 'RUNNING': return 'text-white'; // Active - normal color
+    case 'DNF': return 'text-red-500'; // DNF
+    case 'OUT': return 'text-orange-500'; // OUT
+    case 'PIT': return 'text-yellow-500'; // PIT
+    case 'PITTING': return 'text-yellow-500'; // PITTING
     default: return 'text-gray-400';
   }
 };
 
 // Stint Graph Component - Simplified to use driver data directly
 interface StintGraphProps {
-  driver: MockDriverData;
+  driver: DriverData;
 }
 
 const StintGraph = ({ driver }: StintGraphProps) => {
@@ -123,13 +154,11 @@ const StintGraph = ({ driver }: StintGraphProps) => {
 };
 
 export const LiveTimings = () => {
-  const [sessionData, setSessionData] = useState<MockSessionData | null>(null);
-  const [drivers, setDrivers] = useState<MockDriverData[]>([]);
-  const [previousDrivers, setPreviousDrivers] = useState<MockDriverData[]>([]);
+  const [sessionData, setSessionData] = useState<any>(null);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [previousDrivers, setPreviousDrivers] = useState<any[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [mockService] = useState(() => MockLiveTimingsService.getInstance());
-  const [useMockData, setUseMockData] = useState(true);
   
   // Simplified - no complex stint tracking needed
 
@@ -151,19 +180,15 @@ export const LiveTimings = () => {
     // Listen for telemetry data
     newSocket.on('telemetry', (data: any) => {
       console.log('Received telemetry data:', data);
-      if (!useMockData) {
-        // Process telemetry data and update state
-        processSessionData(data);
-      }
+      // Process telemetry data and update state
+      processSessionData(data);
     });
 
     // Listen for session data
     newSocket.on('session', (data: any) => {
       console.log('Received session data:', data);
-      if (!useMockData) {
-        // Process session data and update state
-        processSessionData(data);
-      }
+      // Process session data and update state
+      processSessionData(data);
     });
 
     // Listen for session completion
@@ -174,37 +199,10 @@ export const LiveTimings = () => {
 
     setSocket(newSocket);
 
-    // Load mock data for testing
-    if (useMockData) {
-      loadMockData();
-    }
-
     return () => {
       newSocket.close();
-      if (useMockData) {
-        mockService.destroy();
-      }
     };
-  }, [mockService, useMockData]);
-
-  const loadMockData = () => {
-    mockService.initializeMockData('PRACTICE');
-    mockService.startRealTimeUpdates();
-    
-    // Set up interval to update state from mock service
-    const updateInterval = setInterval(() => {
-      const sessionData = mockService.getSessionData();
-      const driversData = mockService.getDrivers();
-      
-      setSessionData(sessionData);
-      
-      // Simplified - no stint processing needed
-      
-      setDrivers(driversData);
-    }, 1000);
-
-    return () => clearInterval(updateInterval);
-  };
+  }, []);
 
   const processSessionData = (data: any) => {
     // Process F1 23 UDP data and update session/driver states
@@ -221,7 +219,7 @@ export const LiveTimings = () => {
 
     // Convert F1 23 UDP data to our format
     if (data && Array.isArray(data)) {
-      const convertedDrivers: MockDriverData[] = data.map((driverData: any) => {
+      const convertedDrivers: DriverData[] = data.map((driverData: any) => {
         const converted = convertToLiveTimingsFormat(driverData);
         
         // Simplified - no stint processing needed
@@ -262,7 +260,8 @@ export const LiveTimings = () => {
   };
 
   const switchSessionType = (sessionType: 'PRACTICE' | 'QUALIFYING' | 'RACE') => {
-    mockService.switchSessionType(sessionType);
+    console.log('Switching session type to:', sessionType);
+    // TODO: Implement actual session type switching
   };
 
   const formatTime = (timeInMs: number): string => {
@@ -364,20 +363,6 @@ export const LiveTimings = () => {
                 Race
               </button>
             </div>
-            {/* Data Source Toggle */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-400">Data:</span>
-              <button
-                onClick={() => setUseMockData(!useMockData)}
-                className={`px-3 py-1 rounded text-sm ${
-                  useMockData 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-orange-600 text-white'
-                }`}
-              >
-                {useMockData ? 'Mock' : 'Real'}
-              </button>
-            </div>
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm">📡 {isConnected ? 'Connected' : 'Disconnected'}</span>
@@ -401,7 +386,7 @@ export const LiveTimings = () => {
 };
 
 // Practice/Qualifying Timing Table Component
-const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData[], previousDrivers: MockDriverData[] }) => {
+const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], previousDrivers: DriverData[] }) => {
   // Find fastest sector times for each sector (overall)
   const fastestS1 = Math.min(...drivers.map(d => parseFloat(d.sector1Time || '0') || Infinity));
   const fastestS2 = Math.min(...drivers.map(d => parseFloat(d.sector2Time || '0') || Infinity));
@@ -480,7 +465,7 @@ const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: 
             
             {/* Driver (no position change indicators for practice/qualifying) */}
             <div className={`px-2 border-r border-gray-500 flex items-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               <div className="flex items-center space-x-2">
                 <div 
@@ -493,7 +478,7 @@ const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: 
             
             {/* Lap Time - justify left for time, right for tire */}
             <div className={`px-2 border-r border-gray-500 flex items-center justify-between ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               <span className="text-sm">{driver.fastestLap}</span>
               <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
@@ -503,25 +488,25 @@ const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: 
             
             {/* Gap or Retirement Status */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-40' : ''
-            } ${getRetirementStatusColor(driver.resultStatus)}`}>
-              {driver.resultStatus === 2 ? driver.gap : getRetirementStatus(driver.resultStatus)}
+              driver.status !== 'RUNNING' ? 'opacity-40' : ''
+            } ${getRetirementStatusColor(driver.status)}`}>
+              {driver.status === 'RUNNING' ? driver.gap : getRetirementStatus(driver.status)}
             </div>
             
             {/* Current */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.currentLapTime}
             </div>
             
             {/* Micro-sectors as boxes (flexible width to fill remaining space) */}
             <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
-              driver.resultStatus !== 2 ? 'opacity-40' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40' : ''
             }`}>
               <div className="flex justify-center space-x-1 overflow-hidden w-full">
                 {driver.microSectors.map((sector, index) => {
@@ -546,32 +531,32 @@ const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: 
             
             {/* Driver Last Name */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
             {/* Sector Times with color coding */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector1Time || '0') === fastestS1 ? 'text-purple-400' :
                 parseFloat(driver.sector1Time || '0') < getDriverPersonalBest(driver.id || '', 's1') ? 'text-green-400' :
                 'text-white'
               )
             }`}>{driver.sector1Time || '--'}</div>
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector2Time || '0') === fastestS2 ? 'text-purple-400' :
                 parseFloat(driver.sector2Time || '0') < getDriverPersonalBest(driver.id || '', 's2') ? 'text-green-400' :
                 'text-white'
               )
             }`}>{driver.sector2Time || '--'}</div>
             <div className={`px-2 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector3Time || '0') === fastestS3 ? 'text-purple-400' :
                 parseFloat(driver.sector3Time || '0') < getDriverPersonalBest(driver.id || '', 's3') ? 'text-green-400' :
                 'text-white'
@@ -586,7 +571,7 @@ const PracticeQualifyingTimingTable = ({ drivers, previousDrivers }: { drivers: 
 };
 
 // Race Timing Table Component
-const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData[], previousDrivers: MockDriverData[] }) => {
+const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], previousDrivers: DriverData[] }) => {
   // Find fastest sector times for each sector (overall)
   const fastestS1 = Math.min(...drivers.map(d => parseFloat(d.sector1Time || '0') || Infinity));
   const fastestS2 = Math.min(...drivers.map(d => parseFloat(d.sector2Time || '0') || Infinity));
@@ -695,27 +680,27 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData
             
             {/* Gap or Retirement Status */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-40' : ''
-            } ${getRetirementStatusColor(driver.resultStatus)}`}>
-              {driver.resultStatus === 2 ? driver.gap : getRetirementStatus(driver.resultStatus)}
+              driver.status !== 'RUNNING' ? 'opacity-40' : ''
+            } ${getRetirementStatusColor(driver.status)}`}>
+              {driver.status === 'RUNNING' ? driver.gap : getRetirementStatus(driver.status)}
             </div>
             
             {/* Interval */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.interval}
             </div>
             
             {/* Best Lap */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 driver.bestLap === '1:27.146' ? 'text-purple-400' : ''
               )
             }`}>
@@ -724,9 +709,9 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData
             
             {/* Last Lap */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 driver.lastLapTime === '1:27.146' ? 'text-purple-400' : ''
               )
             }`}>
@@ -735,7 +720,7 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData
             
             {/* Stint Graph (flexible width to fill remaining space) */}
             <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
-              driver.resultStatus !== 2 ? 'opacity-40' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40' : ''
             }`}>
               <div className="flex justify-center items-center space-x-1 overflow-hidden w-full">
                 <StintGraph driver={driver} />
@@ -744,32 +729,32 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: MockDriverData
             
             {/* Driver Last Name */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
             {/* Sector Times with color coding */}
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector1Time || '0') === fastestS1 ? 'text-purple-400' :
                 parseFloat(driver.sector1Time || '0') < getDriverPersonalBest(driver.id || '', 's1') ? 'text-green-400' :
                 'text-white'
               )
             }`}>{driver.sector1Time || '--'}</div>
             <div className={`px-2 border-r border-gray-500 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-40 text-gray-400' : ''
+              driver.status !== 'RUNNING' ? 'opacity-40 text-gray-400' : ''
             } ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector2Time || '0') === fastestS2 ? 'text-purple-400' :
                 parseFloat(driver.sector2Time || '0') < getDriverPersonalBest(driver.id || '', 's2') ? 'text-green-400' :
                 'text-white'
               )
             }`}>{driver.sector2Time || '--'}</div>
             <div className={`px-2 text-sm text-center ${
-              driver.resultStatus !== 2 ? 'opacity-25 text-gray-400' : (
+              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
                 parseFloat(driver.sector3Time || '0') === fastestS3 ? 'text-purple-400' :
                 parseFloat(driver.sector3Time || '0') < getDriverPersonalBest(driver.id || '', 's3') ? 'text-green-400' :
                 'text-white'

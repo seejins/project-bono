@@ -104,7 +104,10 @@ export class F123UDPProcessor {
         return; // Don't throw error for port conflicts
       }
       
-      throw error;
+      // For other errors, log but don't crash the entire process
+      console.error('❌ F123UDPProcessor error (non-critical):', error.message);
+      this.isRunning = false;
+      return;
     }
   }
 
@@ -131,6 +134,15 @@ export class F123UDPProcessor {
       if (activeSeason) {
         this.activeSeasonId = activeSeason.id;
         console.log(`📊 Active season loaded: ${activeSeason.name} (${activeSeason.year})`);
+        
+        // Try to set the current event for this season
+        const currentEvent = await this.dbService.getCurrentEventForSeason(activeSeason.id);
+        if (currentEvent) {
+          this.currentEventId = currentEvent;
+          console.log(`🏁 Current event set: ${currentEvent}`);
+        } else {
+          console.log('⚠️ No current event found for active season - UDP data will be stored but not linked to specific event');
+        }
       } else {
         console.log('⚠️ No active season found - UDP data will not be processed');
       }
@@ -187,13 +199,16 @@ export class F123UDPProcessor {
     this.sessionUid = header.sessionUid;
 
     console.log(`👥 Processing participants packet for session ${header.sessionUid}`);
+    console.log(`📊 Packet details: Game Year: ${header.gameYear}, Session Time: ${header.sessionTime}, Frame: ${header.frameIdentifier}`);
 
     const participants = data.m_participants as UDPParticipantData[];
+    console.log(`👥 Found ${participants.length} participants in packet`);
     
     for (let i = 0; i < participants.length; i++) {
       const participant = participants[i];
       
       if (!participant.name || participant.name.trim() === '') {
+        console.log(`⚠️ Skipping empty participant at index ${i}`);
         continue; // Skip empty participants
       }
 
@@ -226,13 +241,17 @@ export class F123UDPProcessor {
           });
           
           console.log(`✅ Mapped participant ${participant.name} (vehicle ${i}) to member ${member.name}`);
+          console.log(`📊 Participant details: Team ID: ${participant.teamId}, Race Number: ${participant.raceNumber}, Platform: ${participant.platform}`);
         } else {
           console.log(`⚠️ No member found for Steam ID: ${participant.name}`);
+          console.log(`📊 Available members:`, await this.dbService.getAllMembers().then(members => members.map(m => ({ name: m.name, steam_id: m.steam_id }))));
         }
       } catch (error) {
         console.error(`❌ Error processing participant ${i}:`, error);
       }
     }
+    
+    console.log(`📊 Total participant mappings created: ${this.participantMappings.size}`);
   }
 
   private async handleFinalClassificationPacket(data: any): Promise<void> {
@@ -245,13 +264,14 @@ export class F123UDPProcessor {
     const classificationData = data.m_classificationData as UDPFinalClassificationData[];
 
     console.log(`🏁 Processing final classification packet for session ${header.sessionUid}`);
+    console.log(`📊 Found ${classificationData.length} classification entries`);
 
     for (let i = 0; i < classificationData.length; i++) {
       const result = classificationData[i];
       const memberId = this.participantMappings.get(i);
       
       if (!memberId) {
-        console.log(`⚠️ No member mapping found for vehicle index ${i}`);
+        console.log(`⚠️ No member mapping found for vehicle index ${i} - skipping classification entry`);
         continue;
       }
 
@@ -290,11 +310,13 @@ export class F123UDPProcessor {
           });
         }
 
-        console.log(`✅ Stored final classification for member ${memberId} - Position: ${result.position}`);
+        console.log(`✅ Stored final classification for member ${memberId} - Position: ${result.position}, Points: ${result.points}, Laps: ${result.numLaps}`);
       } catch (error) {
         console.error(`❌ Error storing final classification for vehicle ${i}:`, error);
       }
     }
+    
+    console.log(`🏁 Final classification processing completed for session ${header.sessionUid}`);
   }
 
   private async handleSessionHistoryPacket(data: any): Promise<void> {
@@ -309,13 +331,15 @@ export class F123UDPProcessor {
 
     const memberId = this.participantMappings.get(carIdx);
     if (!memberId) {
-      console.log(`⚠️ No member mapping found for car index ${carIdx}`);
+      console.log(`⚠️ No member mapping found for car index ${carIdx} - skipping session history`);
       return;
     }
 
     console.log(`📊 Processing session history packet for car ${carIdx} (member ${memberId})`);
+    console.log(`📊 Found ${lapHistoryData.length} lap history entries`);
 
     try {
+      let validLaps = 0;
       for (let lapIndex = 0; lapIndex < lapHistoryData.length; lapIndex++) {
         const lapData = lapHistoryData[lapIndex];
         
@@ -338,9 +362,11 @@ export class F123UDPProcessor {
           sessionTime: header.sessionTime,
           frameIdentifier: header.frameIdentifier
         });
+        
+        validLaps++;
       }
 
-      console.log(`✅ Stored ${lapHistoryData.length} laps for member ${memberId}`);
+      console.log(`✅ Stored ${validLaps} valid laps for member ${memberId} (${lapHistoryData.length - validLaps} empty laps skipped)`);
     } catch (error) {
       console.error(`❌ Error storing session history for car ${carIdx}:`, error);
     }
@@ -356,12 +382,66 @@ export class F123UDPProcessor {
     const trackLength = data.m_trackLength as number;
 
     console.log(`🏁 Session packet received - Track ID: ${trackId}, Session Type: ${sessionType}, Total Laps: ${totalLaps}`);
+    console.log(`📊 Session details: Track Length: ${trackLength}m, Session UID: ${header.sessionUid}, Session Time: ${header.sessionTime}`);
 
     // If we have an active season, we could create or update the current event
     // For now, we'll just log the session info
     if (this.activeSeasonId) {
       console.log(`📊 Session info for active season ${this.activeSeasonId}: Track ${trackId}, Type ${sessionType}`);
+      
+      // Try to find or create an event for this track
+      const trackName = this.getTrackNameFromId(trackId);
+      if (trackName) {
+        console.log(`🏁 Track identified as: ${trackName}`);
+        
+        // Try to find existing event for this track
+        const existingEvent = await this.dbService.findActiveEventByTrack(trackName);
+        if (existingEvent) {
+          this.currentEventId = existingEvent;
+          console.log(`✅ Found existing event for track ${trackName}: ${existingEvent}`);
+        } else {
+          console.log(`⚠️ No existing event found for track ${trackName} - UDP data will be stored but not linked to specific event`);
+        }
+      }
     }
+  }
+
+  private getTrackNameFromId(trackId: number): string | null {
+    // F1 23 Track ID mapping (simplified - you might want to expand this)
+    const trackMap: { [key: number]: string } = {
+      0: 'Melbourne',
+      1: 'Paul Ricard',
+      2: 'Shanghai',
+      3: 'Sakhir (Bahrain)',
+      4: 'Catalunya',
+      5: 'Monaco',
+      6: 'Montreal',
+      7: 'Silverstone',
+      8: 'Hockenheim',
+      9: 'Hungaroring',
+      10: 'Spa',
+      11: 'Monza',
+      12: 'Singapore',
+      13: 'Suzuka',
+      14: 'Abu Dhabi',
+      15: 'Texas',
+      16: 'Brazil',
+      17: 'Austria',
+      18: 'Sochi',
+      19: 'Mexico',
+      20: 'Baku (Azerbaijan)',
+      21: 'Sakhir Short',
+      22: 'Silverstone Short',
+      23: 'Texas Short',
+      24: 'Suzuka Short',
+      25: 'Miami',
+      26: 'Imola',
+      27: 'Zandvoort',
+      28: 'Las Vegas',
+      29: 'Losail'
+    };
+    
+    return trackMap[trackId] || null;
   }
 
   // Public methods for external control

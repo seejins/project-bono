@@ -62,47 +62,38 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
 
   const fetchDriverData = async () => {
     try {
-      // TODO: Replace with actual API calls
-      // Mock data for now
-      const mockDriver: Driver = {
-        id: driverId,
-        name: 'Lewis Hamilton',
-        team: 'Mercedes',
-        number: 44,
-        points: 95,
-        wins: 3,
-        podiums: 8,
-        fastestLaps: 2,
-        position: 1,
-        dnf: 0,
-        averageFinish: 2.1,
-        consistency: 100,
-        careerPoints: 450,
-        careerWins: 15,
-        careerPodiums: 25,
-        bestFinish: 1,
-        worstFinish: 5
-      };
-
-      const mockResults: RaceResult[] = [
-        { id: '1', trackName: 'Monaco', date: '2024-05-26', position: 1, points: 25, fastestLap: true, polePosition: true, dnf: false },
-        { id: '2', trackName: 'Silverstone', date: '2024-07-07', position: 2, points: 18, fastestLap: false, polePosition: false, dnf: false },
-        { id: '3', trackName: 'Spa-Francorchamps', date: '2024-07-28', position: 1, points: 25, fastestLap: false, polePosition: true, dnf: false },
-        { id: '4', trackName: 'Monza', date: '2024-09-01', position: 3, points: 15, fastestLap: false, polePosition: false, dnf: false },
-        { id: '5', trackName: 'Singapore', date: '2024-09-15', position: 2, points: 18, fastestLap: true, polePosition: false, dnf: false }
-      ];
-
-      const mockAchievements: Achievement[] = [
-        { id: '1', type: 'first_win', name: 'First Victory', description: 'First race win', dateEarned: '2024-03-15', raceId: '1', raceName: 'Bahrain' },
-        { id: '2', type: 'pole_master', name: 'Pole Master', description: '5 pole positions', dateEarned: '2024-05-26', raceId: '2', raceName: 'Monaco' },
-        { id: '3', type: 'consistency', name: 'Consistency King', description: 'Points in 10 consecutive races', dateEarned: '2024-07-28', raceId: '3', raceName: 'Spa-Francorchamps' }
-      ];
-
-      setDriver(mockDriver);
-      setRaceResults(mockResults);
-      setAchievements(mockAchievements);
+      setLoading(true);
+      
+      // Fetch real driver data from API
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      
+      // Fetch driver profile
+      const driverResponse = await fetch(`${apiUrl}/api/members/${driverId}`);
+      if (driverResponse.ok) {
+        const driverData = await driverResponse.json();
+        setDriver(driverData.member || null);
+      }
+      
+      // Fetch driver race results
+      const resultsResponse = await fetch(`${apiUrl}/api/members/${driverId}/race-results`);
+      if (resultsResponse.ok) {
+        const resultsData = await resultsResponse.json();
+        setRaceResults(resultsData.results || []);
+      }
+      
+      // Fetch driver achievements
+      const achievementsResponse = await fetch(`${apiUrl}/api/members/${driverId}/achievements`);
+      if (achievementsResponse.ok) {
+        const achievementsData = await achievementsResponse.json();
+        setAchievements(achievementsData.achievements || []);
+      }
+      
     } catch (error) {
       console.error('Error fetching driver data:', error);
+      // Set empty data on error
+      setDriver(null);
+      setRaceResults([]);
+      setAchievements([]);
     } finally {
       setLoading(false);
     }

@@ -43,87 +43,34 @@ export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => 
 
   const fetchTrackDetails = async () => {
     try {
-      // TODO: Replace with actual API call
-      // For now, using mock data
-      const mockTrack: TrackData = {
-        id: trackId,
-        name: trackId === 'track-1' ? 'Bahrain International Circuit' : 'Silverstone Circuit',
-        country: trackId === 'track-1' ? 'Bahrain' : 'United Kingdom',
-        length: trackId === 'track-1' ? 5.412 : 5.891,
-        races: trackId === 'track-1' ? [
-          {
-            id: 'race-1',
-            date: '2024-03-02',
-            winner: 'Lewis Hamilton',
-            polePosition: 'Max Verstappen',
-            fastestLap: 'Max Verstappen',
-            fastestTime: '1:32.874',
-            winningMargin: '2.341s',
-            laps: 57
-          },
-          {
-            id: 'race-2',
-            date: '2023-03-05',
-            winner: 'Max Verstappen',
-            polePosition: 'Max Verstappen',
-            fastestLap: 'Lewis Hamilton',
-            fastestTime: '1:33.245',
-            winningMargin: '5.872s',
-            laps: 57
-          },
-          {
-            id: 'race-3',
-            date: '2022-03-20',
-            winner: 'Charles Leclerc',
-            polePosition: 'Charles Leclerc',
-            fastestLap: 'Max Verstappen',
-            fastestTime: '1:34.168',
-            winningMargin: '1.098s',
-            laps: 57
-          }
-        ] : [
-          {
-            id: 'race-4',
-            date: '2024-07-07',
-            winner: 'Lando Norris',
-            polePosition: 'Lewis Hamilton',
-            fastestLap: 'Lewis Hamilton',
-            fastestTime: '1:27.097',
-            winningMargin: '1.845s',
-            laps: 52
-          },
-          {
-            id: 'race-5',
-            date: '2023-07-09',
-            winner: 'Lewis Hamilton',
-            polePosition: 'Max Verstappen',
-            fastestLap: 'Lewis Hamilton',
-            fastestTime: '1:28.012',
-            winningMargin: '3.294s',
-            laps: 52
-          }
-        ],
-        statistics: trackId === 'track-1' ? {
-          totalRaces: 3,
-          uniqueWinners: 3,
-          mostWins: 'Max Verstappen (1)',
-          mostPoles: 'Max Verstappen (2)',
-          bestLapHolder: 'Max Verstappen',
-          averageGap: '3.103s'
-        } : {
-          totalRaces: 2,
-          uniqueWinners: 2,
-          mostWins: 'Lewis Hamilton (1)',
-          mostPoles: 'Lewis Hamilton (1)',
-          bestLapHolder: 'Lewis Hamilton',
-          averageGap: '2.570s'
-        }
-      };
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
-      setTrack(mockTrack);
-      setLoading(false);
+      // Fetch track data
+      const trackResponse = await fetch(`${apiUrl}/api/tracks/${trackId}`);
+      if (trackResponse.ok) {
+        const trackDataResult = await trackResponse.json();
+        setTrack(trackDataResult.track);
+      }
+      
+      // Fetch races at this track
+      const racesResponse = await fetch(`${apiUrl}/api/tracks/${trackId}/races`);
+      if (racesResponse.ok) {
+        const racesData = await racesResponse.json();
+        setTrack(prev => prev ? { ...prev, races: racesData.races || [] } : null);
+      }
+      
+      // Fetch track statistics
+      const statsResponse = await fetch(`${apiUrl}/api/tracks/${trackId}/statistics`);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setTrack(prev => prev ? { ...prev, statistics: statsData.statistics } : null);
+      }
+      
     } catch (error) {
       console.error('Error fetching track details:', error);
+      setError('Failed to load track details');
+    } finally {
       setLoading(false);
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, MapPin, Trophy, Flag, Zap } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
 
@@ -8,160 +8,75 @@ interface RaceDetailProps {
   onDriverSelect: (driverId: string, raceId: string) => void;
 }
 
-export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId: _raceId, onBack, onDriverSelect }) => {
+export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriverSelect }) => {
   const [activeSession, setActiveSession] = useState<'qualifying' | 'race'>('race');
+  const [raceData, setRaceData] = useState<any>(null);
+  const [drivers, setDrivers] = useState<F123DriverResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data for Bahrain Grand Prix
-  const raceData = {
-    id: 'race-1',
-    name: 'Bahrain Grand Prix',
-    track: 'Bahrain International Circuit',
-    date: '2024-03-02',
-    country: 'Bahrain',
-    circuitLength: '5.412 km',
-    laps: 57,
-    status: 'completed'
-  };
+  useEffect(() => {
+    fetchRaceData();
+  }, [raceId]);
 
-  const drivers: F123DriverResult[] = [
-    {
-      id: '1',
-      name: 'Lewis Hamilton',
-      team: 'Mercedes',
-      number: 44,
+  const fetchRaceData = async () => {
+    try {
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
-      // Qualifying data
-      qualifyingPosition: 1,
-      qualifyingTime: 89708, // 1:29.708 in milliseconds
-      qualifyingGap: 0, // Pole position
-      qualifyingSector1Time: 28500,
-      qualifyingSector2Time: 31200,
-      qualifyingSector3Time: 30008,
-      qualifyingBestLapTime: 89708,
+      // Fetch race data
+      const raceResponse = await fetch(`${apiUrl}/api/races/${raceId}`);
+      if (raceResponse.ok) {
+        const raceDataResult = await raceResponse.json();
+        setRaceData(raceDataResult.race);
+      }
       
-      // Race data
-      racePosition: 1,
-      raceTime: '1:31:15.123',
-      raceLapTime: 9115123, // Race time in milliseconds
-      raceSector1Time: 29000,
-      raceSector2Time: 32000,
-      raceSector3Time: 30123,
-      raceBestLapTime: 9115123,
+      // Fetch race results
+      const resultsResponse = await fetch(`${apiUrl}/api/races/${raceId}/results`);
+      if (resultsResponse.ok) {
+        const resultsData = await resultsResponse.json();
+        setDrivers(resultsData.results || []);
+      }
       
-      // New fields
-      status: 'finished',
-      gridPosition: 1,
-      pitStops: 2,
-      tireCompound: 'medium',
-      
-      // Points and achievements
-      points: 25,
-      fastestLap: false,
-      fastestLapTime: 92456, // 1:32.456 in milliseconds
-      
-      // Penalties and DNF
-      penalties: 0,
-      warnings: 0,
-      dnf: false,
-      
-      // Data source
-      dataSource: 'UDP'
-    },
-    {
-      id: '2',
-      name: 'Max Verstappen',
-      team: 'Red Bull Racing',
-      number: 1,
-      
-      // Qualifying data
-      qualifyingPosition: 2,
-      qualifyingTime: 89856, // 1:29.856 in milliseconds
-      qualifyingGap: 148, // +0.148 seconds behind pole
-      qualifyingSector1Time: 28600,
-      qualifyingSector2Time: 31300,
-      qualifyingSector3Time: 29956,
-      qualifyingBestLapTime: 89856,
-      
-      // Race data
-      racePosition: 2,
-      raceTime: '+2.456',
-      raceLapTime: 9115123 + 2456, // Race time + gap
-      raceSector1Time: 29100,
-      raceSector2Time: 32100,
-      raceSector3Time: 29956,
-      raceBestLapTime: 89856,
-      
-      // New fields
-      status: 'finished',
-      gridPosition: 2,
-      pitStops: 2,
-      tireCompound: 'soft',
-      
-      // Points and achievements
-      points: 19,
-      fastestLap: true,
-      fastestLapTime: 92123, // 1:32.123 in milliseconds
-      
-      // Penalties and DNF
-      penalties: 0,
-      warnings: 0,
-      dnf: false,
-      
-      // Data source
-      dataSource: 'UDP'
-    },
-    {
-      id: '3',
-      name: 'Charles Leclerc',
-      team: 'Ferrari',
-      number: 16,
-      
-      // Qualifying data
-      qualifyingPosition: 3,
-      qualifyingTime: 90123, // 1:30.123 in milliseconds
-      qualifyingGap: 415, // +0.415 seconds behind pole
-      qualifyingSector1Time: 28800,
-      qualifyingSector2Time: 31500,
-      qualifyingSector3Time: 29823,
-      qualifyingBestLapTime: 90123,
-      
-      // Race data
-      racePosition: 3,
-      raceTime: '+8.234',
-      raceLapTime: 9115123 + 8234, // Race time + gap
-      raceSector1Time: 29200,
-      raceSector2Time: 32300,
-      raceSector3Time: 29623,
-      raceBestLapTime: 90123,
-      
-      // New fields
-      status: 'finished',
-      gridPosition: 3,
-      pitStops: 1,
-      tireCompound: 'hard',
-      
-      // Points and achievements
-      points: 15,
-      fastestLap: false,
-      fastestLapTime: 92789, // 1:32.789 in milliseconds
-      
-      // Penalties and DNF
-      penalties: 0,
-      warnings: 0,
-      dnf: false,
-      
-      // Data source
-      dataSource: 'UDP'
+    } catch (error) {
+      console.error('Error fetching race data:', error);
+      setError('Failed to load race data');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const getTeamColor = (team: string) => F123DataService.getTeamColor(team);
 
   const getPositionColor = (position: number) => F123DataService.getPositionColor(position);
 
   const handleDriverClick = (driver: F123DriverResult) => {
-    onDriverSelect(driver.id, _raceId);
+    onDriverSelect(driver.id, raceId);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500 dark:text-gray-400">Loading race data...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
+
+  if (!raceData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500 dark:text-gray-400">No race data found</div>
+      </div>
+    );
+  }
 
   // Find fastest sectors for qualifying
   const fastestS1 = Math.min(...drivers.map(d => d.qualifyingSector1Time || Infinity));
@@ -169,7 +84,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId: _raceId, onBack,
   const fastestS3 = Math.min(...drivers.map(d => d.qualifyingSector3Time || Infinity));
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button 
@@ -199,93 +114,76 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId: _raceId, onBack,
             </div>
           </div>
           <div className="text-right">
-            <div className="flex items-center space-x-2 text-green-600 dark:text-green-400 mb-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium">Completed</span>
+            <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+              <Calendar className="w-4 h-4" />
+              <span>{raceData.date}</span>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {new Date(raceData.date).toLocaleDateString()}
-            </p>
+            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              {raceData.circuitLength} • {raceData.laps} laps
+            </div>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400">
-              <Calendar className="w-5 h-5" />
-              <span className="font-medium">Circuit Length</span>
-            </div>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">{raceData.circuitLength}</p>
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2">
+            <div className={`w-3 h-3 rounded-full ${raceData.status === 'completed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{raceData.status}</span>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 text-purple-600 dark:text-purple-400">
-              <Flag className="w-5 h-5" />
-              <span className="font-medium">Total Laps</span>
-            </div>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">{raceData.laps}</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-              <Trophy className="w-5 h-5" />
-              <span className="font-medium">Winner</span>
-            </div>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">Lewis Hamilton</p>
+          <div className="flex items-center space-x-2">
+            <MapPin className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-500 dark:text-gray-400">{raceData.country}</span>
           </div>
         </div>
       </div>
 
       {/* Session Toggle */}
-      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-        <button
-          onClick={() => setActiveSession('qualifying')}
-          className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeSession === 'qualifying'
-              ? 'bg-red-600 text-white'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          Qualifying
-        </button>
-        <button
-          onClick={() => setActiveSession('race')}
-          className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeSession === 'race'
-              ? 'bg-red-600 text-white'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          Race Results
-        </button>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setActiveSession('qualifying')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeSession === 'qualifying'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            }`}
+          >
+            Qualifying
+          </button>
+          <button
+            onClick={() => setActiveSession('race')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeSession === 'race'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+            }`}
+          >
+            Race
+          </button>
+        </div>
       </div>
 
       {/* Results Table */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">
-                  Pos
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Driver</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Team</th>
-                {activeSession === 'race' && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pos</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Driver</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Team</th>
+                {activeSession === 'qualifying' ? (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Grid</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Best Lap</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Stops</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tire</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Gap</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S1</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S2</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S3</th>
                   </>
-                )}
-                {activeSession === 'qualifying' && (
+                ) : (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S1</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S2</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">S3</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Gap</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Points</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
                   </>
                 )}
               </tr>
@@ -297,88 +195,76 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId: _raceId, onBack,
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                   onClick={() => handleDriverClick(driver)}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap w-24">
-                    <span className={`text-lg font-bold ${getPositionColor(
-                      activeSession === 'qualifying' ? driver.qualifyingPosition! : driver.racePosition!
-                    )}`}>
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${getPositionColor(activeSession === 'qualifying' ? driver.qualifyingPosition : driver.racePosition)}`}>
                       {activeSession === 'qualifying' ? driver.qualifyingPosition : driver.racePosition}
-                    </span>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center mr-3">
-                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                          {driver.number}
-                        </span>
+                      <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm font-bold text-gray-700 dark:text-gray-300 mr-3">
+                        {driver.number}
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{driver.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {F123DataService.getDataSourceIcon(driver.dataSource)}
-                        </div>
                       </div>
                     </div>
                   </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm ${getTeamColor(driver.team)}`}>
-                    {driver.team}
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full mr-2 ${getTeamColor(driver.team)}`}></div>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{driver.team}</span>
+                    </div>
                   </td>
-                  {activeSession === 'race' && (
+                  {activeSession === 'qualifying' ? (
                     <>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`font-medium ${F123DataService.getStatusColor(driver.status)}`}>
-                          {F123DataService.getStatusText(driver.status)}
-                        </span>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {driver.qualifyingTime ? F123DataService.formatTimeFromMs(driver.qualifyingTime) : 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        P{driver.gridPosition || '-'}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {driver.qualifyingGap ? `+${F123DataService.formatTimeFromMs(driver.qualifyingGap)}` : 'Pole'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {driver.fastestLapTime ? (
-                          <div className="flex items-center space-x-1">
-                            {driver.fastestLap && (
-                              <Zap className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                            )}
-                            <span className={driver.fastestLap ? 'text-purple-600 dark:text-purple-400 font-bold' : 'text-gray-600 dark:text-gray-400'}>
-                              {F123DataService.formatTimeFromMs(driver.fastestLapTime)}
-                            </span>
-                          </div>
-                        ) : '-'}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {driver.qualifyingSector1Time ? (
+                          <span className={driver.qualifyingSector1Time === fastestS1 ? 'text-purple-600 font-bold' : ''}>
+                            {F123DataService.formatTimeFromMs(driver.qualifyingSector1Time)}
+                          </span>
+                        ) : 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {driver.raceTime || '-'}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {driver.qualifyingSector2Time ? (
+                          <span className={driver.qualifyingSector2Time === fastestS2 ? 'text-purple-600 font-bold' : ''}>
+                            {F123DataService.formatTimeFromMs(driver.qualifyingSector2Time)}
+                          </span>
+                        ) : 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {driver.pitStops || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`font-bold ${F123DataService.getTireCompoundColor(driver.tireCompound)}`}>
-                          {F123DataService.getTireCompoundText(driver.tireCompound)}
-                        </span>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {driver.qualifyingSector3Time ? (
+                          <span className={driver.qualifyingSector3Time === fastestS3 ? 'text-purple-600 font-bold' : ''}>
+                            {F123DataService.formatTimeFromMs(driver.qualifyingSector3Time)}
+                          </span>
+                        ) : 'N/A'}
                       </td>
                     </>
-                  )}
-                  {activeSession === 'qualifying' && (
+                  ) : (
                     <>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-mono ${
-                        driver.qualifyingSector1Time === fastestS1 ? 'text-purple-600 dark:text-purple-400 font-bold' : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector1Time ? F123DataService.formatTimeThousandths(driver.qualifyingSector1Time) : '-'}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {driver.raceTime || 'N/A'}
                       </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-mono ${
-                        driver.qualifyingSector2Time === fastestS2 ? 'text-purple-600 dark:text-purple-400 font-bold' : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector2Time ? F123DataService.formatTimeThousandths(driver.qualifyingSector2Time) : '-'}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        <div className="flex items-center space-x-1">
+                          <span>{driver.points}</span>
+                          {driver.fastestLap && <Zap className="w-4 h-4 text-purple-600" />}
+                        </div>
                       </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-mono ${
-                        driver.qualifyingSector3Time === fastestS3 ? 'text-purple-600 dark:text-purple-400 font-bold' : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector3Time ? F123DataService.formatTimeThousandths(driver.qualifyingSector3Time) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
-                        {driver.qualifyingTime ? F123DataService.formatTimeThousandths(driver.qualifyingTime) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {driver.qualifyingGap !== undefined ? F123DataService.formatGapFromMs(driver.qualifyingGap) : '-'}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          driver.status === 'finished' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          driver.status === 'dnf' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                        }`}>
+                          {driver.status}
+                        </span>
                       </td>
                     </>
                   )}

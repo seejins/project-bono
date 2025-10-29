@@ -3,11 +3,14 @@ import { TelemetryService } from '../services/TelemetryService';
 import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
 import { F123UDPProcessor } from '../services/F123UDPProcessor';
+import { PostSessionProcessor } from '../services/PostSessionProcessor';
+import { RaceResultsEditor } from '../services/RaceResultsEditor';
 import uploadRoutes from './upload';
 import seasonsRoutes from './seasons';
 import sessionsRoutes from './sessions';
 import membersRoutes from './members';
 import tracksRoutes from './tracks';
+import racesRoutes, { setupRacesRoutes } from './races';
 
 export function setupRoutes(
   app: Express,
@@ -16,6 +19,8 @@ export function setupRoutes(
     strategyEngine: StrategyEngine;
     databaseService: DatabaseService;
     f123UDPProcessor: F123UDPProcessor;
+    postSessionProcessor: PostSessionProcessor;
+    raceResultsEditor: RaceResultsEditor;
   }
 ) {
   // Health check endpoint
@@ -118,7 +123,7 @@ export function setupRoutes(
     try {
       const { seasonId } = req.params;
       const { eventId } = req.query;
-      const results = await services.databaseService.getUDPSessionResults(seasonId, eventId as string);
+      const results = await services.databaseService.getUDPSessionResults();
       res.json({ results });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get session results' });
@@ -130,7 +135,7 @@ export function setupRoutes(
     try {
       const { memberId } = req.params;
       const { sessionUid } = req.query;
-      const lapHistory = await services.databaseService.getUDPLapHistory(memberId, sessionUid ? BigInt(sessionUid as string) : undefined);
+      const lapHistory = await services.databaseService.getUDPLapHistory();
       res.json({ lapHistory });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get lap history' });
@@ -151,4 +156,8 @@ export function setupRoutes(
   
   // Session data routes (for local host app)
   app.use('/api/sessions', sessionsRoutes(services.databaseService));
+  
+  // Race results and editing routes
+  setupRacesRoutes(services.databaseService, services.raceResultsEditor);
+  app.use('/api/races', racesRoutes);
 }

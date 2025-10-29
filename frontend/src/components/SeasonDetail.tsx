@@ -541,40 +541,35 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
               </div>
 
           {events.length > 0 ? (
-            <div className="grid gap-4">
+            <div className="flex flex-col gap-3">
               {events.map((event) => (
-                <div key={event.id} className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                        <Flag className="w-5 h-5 text-white" />
-                              </div>
-                              <div>
-                        <p className="text-gray-900 dark:text-white font-medium">{event.track_name}</p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                          <span>Sessions: {event.session_types || getSessionTypeName(event.session_type || 0)}</span>
-                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
-                            {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                          </span>
-                        </div>
+                <div 
+                  key={event.id} 
+                  className="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer z-10"
+                  onClick={() => handleEditEvent(event)}
+                >
+                  <div className="flex items-center space-x-3 flex-1">
+                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                      <Flag className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-gray-900 dark:text-white font-medium">{event.track_name}</p>
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span>Sessions: {event.session_types || getSessionTypeName(event.session_type || 0)}</span>
+                        <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
+                          {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                    <div className="flex items-center space-x-2">
-                      <button 
-                        onClick={() => handleEditEvent(event)}
-                        className="text-blue-600 hover:text-blue-700 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
-                      >
-                        <Edit className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteEvent(event.id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Delete</span>
-                      </button>
-                        </div>
+                  <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <button 
+                      onClick={() => handleDeleteEvent(event.id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
               ))}

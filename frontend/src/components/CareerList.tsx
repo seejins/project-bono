@@ -29,20 +29,22 @@ export const CareerList: React.FC<CareerListProps> = ({ onDriverSelect }) => {
     try {
       setLoading(true);
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/members`);
+      
+      // Fetch members with career statistics
+      const response = await fetch(`${apiUrl}/api/members/career-stats`);
       const data = await response.json();
       
       if (data.success && data.members) {
-        // Transform members to Driver format with mock career stats for now
+        // Transform members to Driver format with real career stats
         const careerDrivers = data.members.map((member: any) => ({
           id: member.id,
           name: member.name,
-          wins: Math.floor(Math.random() * 15) + 1, // Mock wins
-          poles: Math.floor(Math.random() * 10) + 1, // Mock poles
-          points: Math.floor(Math.random() * 1000) + 200, // Mock points
-          seasons: Math.floor(Math.random() * 3) + 1, // Mock seasons
-          bestFinish: Math.floor(Math.random() * 5) + 1, // Mock best finish
-          championships: Math.floor(Math.random() * 3) // Mock championships
+          wins: member.career_stats?.wins || 0,
+          poles: member.career_stats?.poles || 0,
+          points: member.career_stats?.points || 0,
+          seasons: member.career_stats?.seasons || 0,
+          bestFinish: member.career_stats?.best_finish || 0,
+          championships: member.career_stats?.championships || 0
         }));
         
         setDrivers(careerDrivers);

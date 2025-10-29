@@ -23,6 +23,64 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
     }
   });
 
+  // Get historic insights (league-wide statistics)
+  router.get('/history/insights', async (req, res) => {
+    try {
+      await dbService.ensureInitialized();
+      const insights = await dbService.getHistoricInsights();
+      
+      res.json({
+        success: true,
+        insights
+      });
+    } catch (error) {
+      console.error('Get historic insights error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get historic insights',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get seasons for history (completed and active)
+  router.get('/history', async (req, res) => {
+    try {
+      await dbService.ensureInitialized();
+      const seasons = await dbService.getSeasonsForHistory();
+      
+      res.json({
+        success: true,
+        seasons
+      });
+    } catch (error) {
+      console.error('Get seasons history error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get seasons history',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get previous race results for a season
+  router.get('/:id/previous-race', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await dbService.ensureInitialized();
+      const previousRace = await dbService.getPreviousRaceResults(id);
+      
+      res.json({
+        success: true,
+        previousRace
+      });
+    } catch (error) {
+      console.error('Get previous race error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get previous race results',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Get season by ID
   router.get('/:id', async (req, res) => {
     try {

@@ -23,6 +23,8 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
   const [newMember, setNewMember] = useState({ name: '', steam_id: '' });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const [formErrors, setFormErrors] = useState<{name?: string, steam_id?: string}>({});
+  const [editFormErrors, setEditFormErrors] = useState<{name?: string, steam_id?: string}>({});
 
   // Load members on component mount
   useEffect(() => {
@@ -61,17 +63,22 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
   };
 
   const handleAddMember = async () => {
+    const errors: {name?: string, steam_id?: string} = {};
+    
     if (!newMember.name.trim()) {
-      setStatus('error');
-      setStatusMessage('Name is required');
-      return;
+      errors.name = 'Name is required';
     }
 
     if (newMember.steam_id && !validateSteamId(newMember.steam_id)) {
-      setStatus('error');
-      setStatusMessage('Steam ID must be 17 digits');
+      errors.steam_id = 'Steam ID must be 17 digits';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
+
+    setFormErrors({});
 
     try {
       setStatus('loading');
@@ -86,6 +93,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
         setStatus('success');
         setStatusMessage('Member added successfully');
         setNewMember({ name: '', steam_id: '' });
+        setFormErrors({});
         setShowAddModal(false);
         loadMembers(); // Reload the list
       } else {
@@ -106,17 +114,22 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
   const handleUpdateMember = async () => {
     if (!editingMember) return;
 
+    const errors: {name?: string, steam_id?: string} = {};
+    
     if (!editingMember.name.trim()) {
-      setStatus('error');
-      setStatusMessage('Name is required');
-      return;
+      errors.name = 'Name is required';
     }
 
     if (editingMember.steam_id && !validateSteamId(editingMember.steam_id)) {
-      setStatus('error');
-      setStatusMessage('Steam ID must be 17 digits');
+      errors.steam_id = 'Steam ID must be 17 digits';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditFormErrors(errors);
       return;
     }
+
+    setEditFormErrors({});
 
     try {
       setStatus('loading');
@@ -130,6 +143,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
       if (response.ok) {
         setStatus('success');
         setStatusMessage('Member updated successfully');
+        setEditFormErrors({});
         setShowEditModal(false);
         setEditingMember(null);
         loadMembers(); // Reload the list
@@ -199,13 +213,6 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
         </button>
       </div>
 
-      {/* Info Box */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <p className="text-sm text-blue-800 dark:text-blue-300">
-          <strong>Note:</strong> Add your league members here. These are the people who can participate in your F1 league seasons. 
-          Steam IDs are used to automatically map F1 23 UDP data to the correct member.
-        </p>
-      </div>
 
       {/* Status Message */}
       {status !== 'idle' && (
@@ -229,10 +236,14 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
       {/* Members List */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
         {members.length > 0 ? (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {members.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div className="flex items-center space-x-4">
+              <div 
+                key={member.id} 
+                className="relative flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer z-10"
+                onClick={() => handleEditMember(member)}
+              >
+                <div className="flex items-center space-x-4 flex-1">
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white font-bold">
                     {member.name.charAt(0).toUpperCase()}
                   </div>
@@ -245,14 +256,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <button 
-                    onClick={() => handleEditMember(member)}
-                    className="text-blue-600 hover:text-blue-700 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
-                  >
-                    <Edit className="w-3 h-3" />
-                    <span>Edit</span>
-                  </button>
+                <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                   <button 
                     onClick={() => handleDeleteMember(member.id)}
                     className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
@@ -275,8 +279,14 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
 
       {/* Add Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Member</h3>
             
             <div className="space-y-4">
@@ -287,10 +297,22 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 <input
                   type="text"
                   value={newMember.name}
-                  onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(e) => {
+                    setNewMember({ ...newMember, name: e.target.value });
+                    if (formErrors.name) {
+                      setFormErrors({ ...formErrors, name: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    formErrors.name 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
                   placeholder="e.g., John Smith"
                 />
+                {formErrors.name && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.name}</p>
+                )}
               </div>
               
               <div>
@@ -300,14 +322,27 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 <input
                   type="text"
                   value={newMember.steam_id}
-                  onChange={(e) => setNewMember({ ...newMember, steam_id: formatSteamId(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(e) => {
+                    setNewMember({ ...newMember, steam_id: formatSteamId(e.target.value) });
+                    if (formErrors.steam_id) {
+                      setFormErrors({ ...formErrors, steam_id: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    formErrors.steam_id 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
                   placeholder="e.g., 76561198000000000"
                   maxLength={17}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  17-digit Steam ID for F1 23 UDP mapping
-                </p>
+                {formErrors.steam_id ? (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.steam_id}</p>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    17-digit Steam ID for F1 23 UDP mapping
+                  </p>
+                )}
               </div>
             </div>
             
@@ -336,8 +371,14 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
 
       {/* Edit Member Modal */}
       {showEditModal && editingMember && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowEditModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Member</h3>
             
             <div className="space-y-4">
@@ -348,10 +389,22 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 <input
                   type="text"
                   value={editingMember.name}
-                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(e) => {
+                    setEditingMember({ ...editingMember, name: e.target.value });
+                    if (editFormErrors.name) {
+                      setEditFormErrors({ ...editFormErrors, name: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    editFormErrors.name 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
                   placeholder="e.g., John Smith"
                 />
+                {editFormErrors.name && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editFormErrors.name}</p>
+                )}
               </div>
               
               <div>
@@ -361,14 +414,27 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 <input
                   type="text"
                   value={editingMember.steam_id || ''}
-                  onChange={(e) => setEditingMember({ ...editingMember, steam_id: formatSteamId(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(e) => {
+                    setEditingMember({ ...editingMember, steam_id: formatSteamId(e.target.value) });
+                    if (editFormErrors.steam_id) {
+                      setEditFormErrors({ ...editFormErrors, steam_id: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    editFormErrors.steam_id 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
                   placeholder="e.g., 76561198000000000"
                   maxLength={17}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  17-digit Steam ID for F1 23 UDP mapping
-                </p>
+                {editFormErrors.steam_id ? (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editFormErrors.steam_id}</p>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    17-digit Steam ID for F1 23 UDP mapping
+                  </p>
+                )}
               </div>
             </div>
             

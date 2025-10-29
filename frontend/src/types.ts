@@ -71,3 +71,85 @@ export interface RaceStrategy {
   confidence: number; // 0-1
 }
 
+// History page interfaces
+export interface HistoricInsights {
+  totalRaces: number;
+  totalSeasons: number;
+  totalDrivers: number;
+  totalPodiums: number;
+  totalWins: number;
+  totalChampionships: number;
+}
+
+export interface SeasonSummary {
+  id: string;
+  name: string;
+  year: number;
+  status: 'active' | 'completed' | 'draft';
+  totalRaces: number;
+  totalDrivers: number;
+  champion: string;
+}
+
+export interface MemberCareerStats {
+  wins: number;
+  podiums: number;
+  points: number;
+  seasons: number;
+  polePositions: number;
+  fastestLaps: number;
+  averageFinish: number;
+  finishRate: number;
+  championships: number;
+  bestFinish: number;
+}
+
+export interface MemberCareerProfile {
+  member: {
+    id: string;
+    name: string;
+    steam_id?: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  careerStats: MemberCareerStats;
+  seasons: Array<{
+    id: string;
+    year: number;
+    name: string;
+  }>;
+}
+
+export interface RaceHistoryEntry {
+  id: string;
+  seasonId: string;
+  seasonYear: number;
+  raceName: string;
+  trackName: string;
+  date: string;
+  position: number;
+  points: number;
+  gridPosition: number;
+  fastestLap: boolean;
+  polePosition: boolean;
+  status: string;
+  teamColor: string;
+}
+
+export interface PreviousRaceResults {
+  raceId: string;
+  raceName: string;
+  trackName: string;
+  date: string;
+  drivers: Array<{
+    position: number;
+    name: string;
+    abbreviation: string;
+    teamColor: string;
+    points: number;
+    fastestLap: boolean;
+    status?: string;
+  }>;
+}
+

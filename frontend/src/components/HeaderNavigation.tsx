@@ -1,17 +1,17 @@
 import React from 'react';
-import { Trophy, Users, Calendar, Award, Settings, Clock } from 'lucide-react';
+import { Trophy, Users, Calendar, History, Settings, Clock } from 'lucide-react';
 
 interface HeaderNavigationProps {
   activeTab: string;
-  onTabChange: (tab: 'season' | 'grid' | 'races' | 'career' | 'admin' | 'live') => void;
+  onTabChange: (tab: 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live') => void;
 }
 
 export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'season', label: 'Season', icon: Trophy },
     { id: 'grid', label: 'Grid', icon: Users },
-    { id: 'races', label: 'Races', icon: Calendar },
-    { id: 'career', label: 'Career', icon: Award },
+    { id: 'races', label: 'Schedule', icon: Calendar },
+    { id: 'history', label: 'History', icon: History },
     { id: 'live', label: 'Live Timings', icon: Clock },
     { id: 'admin', label: 'Admin', icon: Settings },
   ] as const;

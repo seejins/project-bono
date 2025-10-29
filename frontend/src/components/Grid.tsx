@@ -45,20 +45,24 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       const data = await response.json();
       
       if (data.success && data.participants) {
-        // Transform participants to Driver format with realistic mock stats
-        const driversWithStats = data.participants.map((participant: any, index: number) => {
-          // Create realistic F1-style points distribution
-          const basePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1][index] || 0;
-          const bonusPoints = Math.floor(Math.random() * 5); // Fastest lap points
-          const totalPoints = basePoints + bonusPoints;
+        // Transform participants to Driver format with real stats from API
+        const driversWithStats = await Promise.all(data.participants.map(async (participant: any, index: number) => {
+          // Fetch real stats for this driver
+          const statsResponse = await fetch(`${apiUrl}/api/members/${participant.id}/season-stats?seasonId=${currentSeason.id}`);
+          let stats = {
+            points: 0,
+            wins: 0,
+            podiums: 0,
+            fastestLaps: 0,
+            dnf: 0,
+            averageFinish: 0,
+            consistency: 0
+          };
           
-          // Calculate realistic stats based on position
-          const wins = index === 0 ? Math.floor(Math.random() * 3) + 1 : Math.floor(Math.random() * 2);
-          const podiums = Math.max(wins, Math.floor(Math.random() * 5) + (index < 3 ? 2 : 0));
-          const fastestLaps = Math.floor(Math.random() * 3);
-          const dnf = Math.floor(Math.random() * 2);
-          const averageFinish = Math.max(1, index + Math.floor(Math.random() * 3) - 1);
-          const consistency = Math.max(60, 100 - (index * 5) - Math.floor(Math.random() * 10));
+          if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            stats = statsData.stats || stats;
+          }
           
           return {
             id: participant.id,
@@ -66,16 +70,16 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
             team: participant.team || 'TBD',
             number: participant.number || (index + 1),
             seasonId: currentSeason.id,
-            points: totalPoints,
-            wins,
-            podiums,
-            fastestLaps,
+            points: stats.points,
+            wins: stats.wins,
+            podiums: stats.podiums,
+            fastestLaps: stats.fastestLaps,
             position: index + 1,
-            dnf,
-            averageFinish,
-            consistency
+            dnf: stats.dnf,
+            averageFinish: stats.averageFinish,
+            consistency: stats.consistency
           };
-        });
+        }));
         
         // Sort by points to get correct championship order
         const sortedDrivers = driversWithStats.sort((a: any, b: any) => b.points - a.points);
@@ -149,7 +153,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">

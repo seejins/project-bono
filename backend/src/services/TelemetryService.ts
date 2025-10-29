@@ -232,6 +232,12 @@ export class TelemetryService extends EventEmitter {
     sessionDuration: 0
   };
 
+  // Current session metadata for post-session processing
+  private currentSessionType: number = 10;
+  private currentTrackName: string = 'Unknown';
+  private currentTrackLength: number = 0;
+  private currentTotalLaps: number = 0;
+
   constructor() {
     super();
     this.f123 = new F123UDP();
@@ -436,14 +442,43 @@ export class TelemetryService extends EventEmitter {
   // Process Participants Packet (ID: 4)
   private processParticipantsPacket(data: any): void {
     if (data.m_participants && Array.isArray(data.m_participants)) {
-      data.m_participants.forEach((participant: any, index: number) => {
+      const participants = data.m_participants.map((participant: any, index: number) => {
         if (participant && participant.m_name) {
-          this.participantsMap.set(index, {
-            driverName: Buffer.from(participant.m_name).toString('utf8').replace(/\0/g, ''),
-            teamName: this.getTeamName(participant.m_teamId || 0),
-            carNumber: participant.m_raceNumber || 0,
-          });
+          const driverName = Buffer.from(participant.m_name).toString('utf8').replace(/\0/g, '');
+          const steamId = this.extractSteamId(participant.m_name);
+          
+          return {
+            carIndex: index,
+            aiControlled: participant.m_aiControlled,
+            driverId: participant.m_driverId,
+            networkId: participant.m_networkId,
+            teamId: participant.m_teamId,
+            raceNumber: participant.m_raceNumber,
+            name: driverName,
+            platform: participant.m_platform,
+            steamId: steamId
+          };
         }
+        return null;
+      }).filter(Boolean);
+
+      // Store participants with enhanced data
+      participants.forEach((participant: any) => {
+        this.participantsMap.set(participant.carIndex, {
+          driverName: participant.name,
+          teamName: this.getTeamName(participant.teamId || 0),
+          carNumber: participant.raceNumber || 0,
+          steamId: participant.steamId,
+          platform: participant.platform,
+          networkId: participant.networkId
+        });
+      });
+
+      // Emit participants event with enhanced data
+      this.emit('participants', {
+        sessionUid: data.m_header?.m_sessionUid,
+        participants: participants,
+        timestamp: new Date()
       });
     }
   }
@@ -471,6 +506,12 @@ export class TelemetryService extends EventEmitter {
     if (data.m_sessionDuration !== undefined) {
       this.sessionData.sessionDuration = data.m_sessionDuration;
     }
+
+    // Store current session metadata for post-session processing
+    this.currentSessionType = data.m_sessionType || 10;
+    this.currentTrackName = this.getTrackName(data.m_trackId || -1);
+    this.currentTrackLength = data.m_trackLength || 0;
+    this.currentTotalLaps = data.m_totalLaps || 0;
   }
 
   // Process Event Packet (ID: 3)
@@ -482,34 +523,45 @@ export class TelemetryService extends EventEmitter {
   // Process Final Classification Packet (ID: 8) - Post-session results
   private processFinalClassificationPacket(data: any): void {
     if (data.m_classificationData && Array.isArray(data.m_classificationData)) {
-      const finalResults = data.m_classificationData.map((result: any, index: number) => ({
-        position: result.m_position || 0,
-        numLaps: result.m_numLaps || 0,
-        gridPosition: result.m_gridPosition || 0,
-        points: result.m_points || 0,
-        numPitStops: result.m_numPitStops || 0,
-        resultStatus: result.m_resultStatus || 0,
-        bestLapTimeInMS: result.m_bestLapTimeInMS || 0,
-        totalRaceTime: result.m_totalRaceTime || 0,
-        penaltiesTime: result.m_penaltiesTime || 0,
-        numPenalties: result.m_numPenalties || 0,
-        numTyreStints: result.m_numTyreStints || 0,
-        tyreStintsActual: result.m_tyreStintsActual || [],
-        tyreStintsVisual: result.m_tyreStintsVisual || [],
-        tyreStintsEndLaps: result.m_tyreStintsEndLaps || [],
-        carIndex: index
-      }));
+      const finalResults = data.m_classificationData.map((result: any, index: number) => {
+        const participant = this.participantsMap.get(index);
+        return {
+          position: result.m_position || 0,
+          numLaps: result.m_numLaps || 0,
+          gridPosition: result.m_gridPosition || 0,
+          points: result.m_points || 0,
+          numPitStops: result.m_numPitStops || 0,
+          resultStatus: result.m_resultStatus || 0,
+          bestLapTimeInMS: result.m_bestLapTimeInMS || 0,
+          totalRaceTime: result.m_totalRaceTime || 0,
+          penaltiesTime: result.m_penaltiesTime || 0,
+          numPenalties: result.m_numPenalties || 0,
+          numTyreStints: result.m_numTyreStints || 0,
+          tyreStintsActual: result.m_tyreStintsActual || [],
+          tyreStintsVisual: result.m_tyreStintsVisual || [],
+          tyreStintsEndLaps: result.m_tyreStintsEndLaps || [],
+          // Add driver name and team from participants map
+          driverName: participant?.driverName || 'Unknown',
+          teamName: participant?.teamName || 'Unknown',
+          carNumber: participant?.carNumber || 0,
+          steamId: participant?.steamId || null,
+          platform: participant?.platform || 255,
+          networkId: participant?.networkId || 0,
+          carIndex: index,
+          // Add session metadata
+          sessionType: this.currentSessionType,
+          trackName: this.currentTrackName,
+          trackLength: this.currentTrackLength,
+          totalLaps: this.currentTotalLaps,
+          sessionUID: data.m_header?.m_sessionUid
+        };
+      });
 
       // Store final classification data
       this.finalClassificationData = finalResults;
       
       // Emit final classification event
-      this.emit('finalClassification', {
-        sessionUid: data.m_header?.m_sessionUid,
-        numCars: data.m_numCars || 0,
-        results: finalResults,
-        timestamp: new Date()
-      });
+      this.emit('finalClassification', finalResults);
 
       console.log('🏁 Final classification received:', finalResults.length, 'cars');
     }
@@ -639,6 +691,31 @@ export class TelemetryService extends EventEmitter {
       9: 'Alfa Romeo',
     };
     return teamNames[teamId] || 'Unknown Team';
+  }
+
+  // Extract Steam ID from participant name buffer
+  private extractSteamId(nameBuffer: Uint8Array): string | null {
+    const name = Buffer.from(nameBuffer).toString('utf8').replace(/\0/g, '');
+    // Steam ID format: "STEAM_0:0:12345678" or similar
+    // Extract from the name field
+    const steamIdMatch = name.match(/STEAM_\d+:\d+:\d+/);
+    return steamIdMatch ? steamIdMatch[0] : null;
+  }
+
+  // Get track name from track ID
+  private getTrackName(trackId: number): string {
+    const trackNames: { [key: number]: string } = {
+      0: 'Melbourne', [1]: 'Paul Ricard', [2]: 'Shanghai', [3]: 'Sakhir (Bahrain)',
+      4: 'Catalunya', [5]: 'Monaco', [6]: 'Montreal', [7]: 'Silverstone',
+      8: 'Hockenheim', [9]: 'Hungaroring', [10]: 'Spa', [11]: 'Monza',
+      12: 'Singapore', [13]: 'Suzuka', [14]: 'Abu Dhabi', [15]: 'Texas',
+      16: 'Brazil', [17]: 'Austria', [18]: 'Sochi', [19]: 'Mexico',
+      20: 'Baku (Azerbaijan)', [21]: 'Sakhir Short', [22]: 'Silverstone Short',
+      23: 'Texas Short', [24]: 'Suzuka Short', [25]: 'Hanoi', [26]: 'Zandvoort',
+      27: 'Imola', [28]: 'Portimão', [29]: 'Jeddah', [30]: 'Miami',
+      31: 'Las Vegas', [32]: 'Losail'
+    };
+    return trackNames[trackId] || 'Unknown Track';
   }
 
   // Convert F1 23 UDP motion data to our format

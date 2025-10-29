@@ -52,35 +52,29 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [viewSelectedSeason, setViewSelectedSeason] = useState(false);
 
-  // Mock data for demonstration
+  // Fetch seasons from API
   useEffect(() => {
-    const mockSeasons: Season[] = [
-      {
-        id: '1',
-        name: 'F1 Championship 2024',
-        year: 2024,
-        startDate: '2024-03-02',
-        endDate: '2024-12-08',
-        pointsSystem: 'f1_standard',
-        fastestLapPoint: true,
-        isActive: true,
-        drivers: [
-          { id: '1', name: 'Lewis Hamilton', team: 'Mercedes', number: 44 },
-          { id: '2', name: 'Max Verstappen', team: 'Red Bull', number: 1 },
-          { id: '3', name: 'Charles Leclerc', team: 'Ferrari', number: 16 }
-        ],
-        tracks: [
-          { id: '1', name: 'Bahrain International Circuit', country: 'Bahrain', length: 5.412, laps: 57 },
-          { id: '2', name: 'Silverstone Circuit', country: 'United Kingdom', length: 5.891, laps: 52 }
-        ],
-        races: [
-          { id: '1', trackId: '1', trackName: 'Bahrain International Circuit', date: '2024-03-02', time: '15:00', status: 'completed', type: 'race' }
-        ]
-      }
-    ];
-    
-    setSeasons(mockSeasons);
+    fetchSeasons();
   }, []);
+
+  const fetchSeasons = async () => {
+    try {
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      
+      const response = await fetch(`${apiUrl}/api/seasons`);
+      if (response.ok) {
+        const data = await response.json();
+        setSeasons(data.seasons || []);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+      setSeasons([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateSeason = (season: Season) => {
     setSeasons([...seasons, season]);

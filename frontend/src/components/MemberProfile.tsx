@@ -39,70 +39,57 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ driverId, onBack, 
 
   const fetchDriverData = async () => {
     try {
-      // Mock data - in real implementation, this would come from API
-      const mockCareerStats = {
-        totalWins: 15,
-        totalPoles: 8,
-        totalPoints: 1247,
-        totalPodiums: 45,
-        totalFastestLaps: 12,
-        championships: 2,
-        seasonsActive: 3,
-        bestFinish: 1,
-        consistency: 94
-      };
-
-      const mockSeasonStats: SeasonStats[] = [
-        {
-          season: '2024',
-          wins: 3,
-          poles: 2,
-          points: 95,
-          position: 1,
-          podiums: 8,
-          fastestLaps: 2,
-          consistency: 100
-        },
-        {
-          season: '2023',
-          wins: 8,
-          poles: 4,
-          points: 575,
-          position: 1,
-          podiums: 21,
-          fastestLaps: 9,
-          consistency: 100
-        },
-        {
-          season: '2022',
-          wins: 4,
-          poles: 2,
-          points: 240,
-          position: 2,
-          podiums: 16,
-          fastestLaps: 1,
-          consistency: 85
-        }
-      ];
-
-      const mockRaceHistory: RaceResult[] = [
-        { id: 'race-1', trackName: 'Bahrain GP', date: '2024-03-02', position: 1, season: '2024' },
-        { id: 'race-2', trackName: 'Saudi Arabia GP', date: '2024-03-09', position: 2, season: '2024' },
-        { id: 'race-3', trackName: 'Australia GP', date: '2024-03-24', position: 1, season: '2024' },
-        { id: 'race-4', trackName: 'Azerbaijan GP', date: '2024-04-07', position: 3, season: '2024' },
-        { id: 'race-5', trackName: 'Bahrain GP', date: '2023-03-05', position: 1, season: '2023' },
-        { id: 'race-6', trackName: 'Saudi Arabia GP', date: '2023-03-19', position: 3, season: '2023' },
-        { id: 'race-7', trackName: 'Australia GP', date: '2023-03-26', position: 2, season: '2023' },
-        { id: 'race-8', trackName: 'Bahrain GP', date: '2022-03-20', position: 2, season: '2022' },
-        { id: 'race-9', trackName: 'Saudi Arabia GP', date: '2022-03-27', position: 1, season: '2022' }
-      ];
-
-      setCareerStats(mockCareerStats);
-      setSeasonStats(mockSeasonStats);
-      setRaceHistory(mockRaceHistory);
-      setLoading(false);
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      
+      // Fetch member career stats
+      const careerResponse = await fetch(`${apiUrl}/api/members/${memberId}/career-stats`);
+      if (careerResponse.ok) {
+        const careerData = await careerResponse.json();
+        setCareerStats(careerData.stats || {
+          totalWins: 0,
+          totalPoles: 0,
+          totalPoints: 0,
+          totalPodiums: 0,
+          totalFastestLaps: 0,
+          championships: 0,
+          seasonsActive: 0,
+          bestFinish: 0,
+          consistency: 0
+        });
+      }
+      
+      // Fetch member season stats
+      const seasonResponse = await fetch(`${apiUrl}/api/members/${memberId}/season-stats`);
+      if (seasonResponse.ok) {
+        const seasonData = await seasonResponse.json();
+        setSeasonStats(seasonData.stats || []);
+      }
+      
+      // Fetch member race history
+      const historyResponse = await fetch(`${apiUrl}/api/members/${memberId}/race-history`);
+      if (historyResponse.ok) {
+        const historyData = await historyResponse.json();
+        setRaceHistory(historyData.history || []);
+      }
+      
     } catch (error) {
-      console.error('Error fetching driver data:', error);
+      console.error('Error fetching member data:', error);
+      // Set empty data on error
+      setCareerStats({
+        totalWins: 0,
+        totalPoles: 0,
+        totalPoints: 0,
+        totalPodiums: 0,
+        totalFastestLaps: 0,
+        championships: 0,
+        seasonsActive: 0,
+        bestFinish: 0,
+        consistency: 0
+      });
+      setSeasonStats([]);
+      setRaceHistory([]);
+    } finally {
       setLoading(false);
     }
   };

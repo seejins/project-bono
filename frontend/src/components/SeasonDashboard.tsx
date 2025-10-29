@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Calendar, Award, Star, Zap } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
+import { PreviousRaceResultsComponent } from './PreviousRaceResults';
 
 interface Driver {
   id: string;
   name: string;
   team: string;
   number: number;
-  points: number;
-  wins: number;
-  podiums: number;
-  fastestLaps: number;
-  position: number;
+  points?: number;
+  wins?: number;
+  podiums?: number;
+  fastestLaps?: number;
+  position?: number;
 }
 
 interface Race {
@@ -57,6 +58,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const [previousRace, setPreviousRace] = useState<Race | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [stats, setStats] = useState<SeasonStats | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,169 +71,62 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     try {
       if (!currentSeason) return;
       
-      // TODO: Replace with actual API calls
-      // For now, using mock data that changes based on season
+      setLoading(true);
       
-      // Different mock data based on season year
-      let mockStandings: Driver[] = [];
-      let mockNextRace: Race | null = null;
-      let mockPreviousRace: Race | null = null;
-      let mockAchievements: Achievement[] = [];
-      let mockStats: SeasonStats | null = null;
-
-      if (currentSeason.year === 2024) {
-        mockStandings = [
-          { id: '1', name: 'Lewis Hamilton', team: 'Mercedes', number: 44, points: 95, wins: 3, podiums: 8, fastestLaps: 2, position: 1 },
-          { id: '2', name: 'Max Verstappen', team: 'Red Bull', number: 1, points: 87, wins: 2, podiums: 7, fastestLaps: 3, position: 2 },
-          { id: '3', name: 'Charles Leclerc', team: 'Ferrari', number: 16, points: 78, wins: 1, podiums: 6, fastestLaps: 1, position: 3 },
-          { id: '4', name: 'Lando Norris', team: 'McLaren', number: 4, points: 65, wins: 1, podiums: 4, fastestLaps: 1, position: 4 },
-          { id: '5', name: 'Carlos Sainz', team: 'Ferrari', number: 55, points: 58, wins: 0, podiums: 3, fastestLaps: 0, position: 5 }
-        ];
-
-        mockNextRace = {
-          id: '4',
-          trackName: 'Monza',
-          date: '2024-09-01',
-          time: '15:00',
-          status: 'scheduled'
-        };
-
-        mockPreviousRace = {
-          id: '3',
-          trackName: 'Spa-Francorchamps',
-          date: '2024-07-28',
-          status: 'completed',
-          winner: 'Charles Leclerc',
-          fastestLap: 'Lando Norris'
-        };
-
-        mockAchievements = [
-          {
-            id: '1',
-            driverName: 'Lando Norris',
-            driverTeam: 'McLaren',
-            achievement: 'First Career Win',
-            raceName: 'Spa-Francorchamps',
-            date: '2024-07-28',
-            type: 'first_win'
-          },
-          {
-            id: '2',
-            driverName: 'Carlos Sainz',
-            driverTeam: 'Ferrari',
-            achievement: 'First Pole Position',
-            raceName: 'Silverstone',
-            date: '2024-07-07',
-            type: 'first_pole'
-          },
-          {
-            id: '3',
-            driverName: 'Max Verstappen',
-            driverTeam: 'Red Bull',
-            achievement: 'Championship Lead',
-            raceName: 'Monaco',
-            date: '2024-05-26',
-            type: 'championship_lead'
-          }
-        ];
-
-        mockStats = {
-          totalRaces: 12,
-          completedRaces: 8,
-          totalDrivers: 5,
-          currentLeader: 'Lewis Hamilton',
-          mostWins: 'Lewis Hamilton',
-          fastestLapHolder: 'Max Verstappen',
-          driverOfTheDay: 'Lando Norris'
-        };
-      } else if (currentSeason.year === 2023) {
-        mockStandings = [
-          { id: '1', name: 'Max Verstappen', team: 'Red Bull', number: 1, points: 575, wins: 19, podiums: 21, fastestLaps: 9, position: 1 },
-          { id: '2', name: 'Sergio Perez', team: 'Red Bull', number: 11, points: 285, wins: 2, podiums: 9, fastestLaps: 2, position: 2 },
-          { id: '3', name: 'Lewis Hamilton', team: 'Mercedes', number: 44, points: 234, wins: 0, podiums: 6, fastestLaps: 1, position: 3 },
-          { id: '4', name: 'Fernando Alonso', team: 'Aston Martin', number: 14, points: 206, wins: 0, podiums: 8, fastestLaps: 0, position: 4 },
-          { id: '5', name: 'Carlos Sainz', team: 'Ferrari', number: 55, points: 200, wins: 1, podiums: 3, fastestLaps: 1, position: 5 }
-        ];
-
-        mockNextRace = null; // Season completed
-
-        mockPreviousRace = {
-          id: '22',
-          trackName: 'Abu Dhabi',
-          date: '2023-11-26',
-          status: 'completed',
-          winner: 'Max Verstappen',
-          fastestLap: 'Max Verstappen'
-        };
-
-        mockAchievements = [
-          {
-            id: '1',
-            driverName: 'Max Verstappen',
-            driverTeam: 'Red Bull',
-            achievement: 'Championship Victory',
-            raceName: 'Abu Dhabi',
-            date: '2023-11-26',
-            type: 'championship_lead'
-          },
-          {
-            id: '2',
-            driverName: 'Carlos Sainz',
-            driverTeam: 'Ferrari',
-            achievement: 'First Career Win',
-            raceName: 'Singapore',
-            date: '2023-09-17',
-            type: 'first_win'
-          }
-        ];
-
-        mockStats = {
-          totalRaces: 22,
-          completedRaces: 22,
-          totalDrivers: 5,
-          currentLeader: 'Max Verstappen',
-          mostWins: 'Max Verstappen',
-          fastestLapHolder: 'Max Verstappen',
-          driverOfTheDay: 'Max Verstappen'
-        };
-      } else if (currentSeason.year === 2025) {
-        mockStandings = [
-          { id: '1', name: 'Lewis Hamilton', team: 'Ferrari', number: 44, points: 0, wins: 0, podiums: 0, fastestLaps: 0, position: 1 },
-          { id: '2', name: 'Max Verstappen', team: 'Red Bull', number: 1, points: 0, wins: 0, podiums: 0, fastestLaps: 0, position: 2 },
-          { id: '3', name: 'Charles Leclerc', team: 'Ferrari', number: 16, points: 0, wins: 0, podiums: 0, fastestLaps: 0, position: 3 },
-          { id: '4', name: 'Lando Norris', team: 'McLaren', number: 4, points: 0, wins: 0, podiums: 0, fastestLaps: 0, position: 4 },
-          { id: '5', name: 'George Russell', team: 'Mercedes', number: 63, points: 0, wins: 0, podiums: 0, fastestLaps: 0, position: 5 }
-        ];
-
-        mockNextRace = {
-          id: '1',
-          trackName: 'Bahrain',
-          date: '2025-03-02',
-          status: 'scheduled'
-        };
-
-        mockPreviousRace = null; // Season hasn't started
-
-        mockAchievements = []; // No achievements yet
-
-        mockStats = {
-          totalRaces: 24,
-          completedRaces: 0,
-          totalDrivers: 5,
-          currentLeader: 'Lewis Hamilton',
-          mostWins: 'Lewis Hamilton',
-          fastestLapHolder: 'Lewis Hamilton',
-          driverOfTheDay: 'Lewis Hamilton'
-        };
+      // Fetch real season data from API
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      
+      // Fetch season participants (drivers)
+      const participantsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/participants`);
+      if (participantsResponse.ok) {
+        const participantsData = await participantsResponse.json();
+        setStandings(participantsData.participants || []);
       }
-
-      setStandings(mockStandings);
-      setNextRace(mockNextRace);
-      setPreviousRace(mockPreviousRace);
-      setAchievements(mockAchievements);
-      setStats(mockStats);
+      
+      // Fetch season events/races
+      const eventsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/events`);
+      if (eventsResponse.ok) {
+        const eventsData = await eventsResponse.json();
+        const events = eventsData.events || [];
+        setEvents(events);
+        
+        // Find next and previous races
+        const now = new Date();
+        const upcomingRaces = events.filter((event: any) => 
+          event.status === 'scheduled' && 
+          (!event.race_date || new Date(event.race_date) > now)
+        ).sort((a: any, b: any) => 
+          new Date(a.race_date || '').getTime() - new Date(b.race_date || '').getTime()
+        );
+        
+        const completedRaces = events.filter((event: any) => 
+          event.status === 'completed'
+        ).sort((a: any, b: any) => 
+          new Date(b.race_date || '').getTime() - new Date(a.race_date || '').getTime()
+        );
+        
+        setNextRace(upcomingRaces[0] || null);
+        setPreviousRace(completedRaces[0] || null);
+      }
+      
+      // Fetch season statistics
+      const statsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/stats`);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData.stats || null);
+      }
+      
+      // For now, set empty achievements - will be populated from race results
+      setAchievements([]);
+      
     } catch (error) {
       console.error('Error fetching season data:', error);
+      // Set empty data on error
+      setStandings([]);
+      setNextRace(null);
+      setPreviousRace(null);
+      setAchievements([]);
+      setStats(null);
     } finally {
       setLoading(false);
     }
@@ -300,33 +195,60 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   }
 
   return (
-    <div className="space-y-6">
-      {/* Season Header */}
+    <div className="max-w-[2048px] mx-auto space-y-6">
+      {/* Hero Banner with F1 Grid Background */}
       <div 
-        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        className="relative h-80 md:h-96 lg:h-[500px] overflow-hidden rounded-xl shadow-2xl cursor-pointer group"
         onClick={onScheduleView}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{currentSeason?.name}</h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">Season {currentSeason?.year}</p>
-          </div>
-          <div className="text-right">
-            <div className={`flex items-center space-x-2 ${
-              currentSeason?.status === 'active' ? 'text-green-500' :
-              currentSeason?.status === 'completed' ? 'text-blue-500' :
-              'text-gray-500'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                currentSeason?.status === 'active' ? 'bg-green-500' :
-                currentSeason?.status === 'completed' ? 'bg-blue-500' :
-                'bg-gray-500'
-              }`}></div>
-              <span className="text-sm font-medium capitalize">{currentSeason?.status}</span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {stats?.completedRaces} of {stats?.totalRaces} races completed
+        {/* F1 Grid Background */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat group-hover:scale-105 transition-transform duration-700"
+          style={{ backgroundImage: 'url(/banner/2024-Formula1-Ferrari-SF-24-007-1440sw.jpg)' }}
+        />
+        
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black bg-opacity-50" />
+        
+        
+        {/* Content */}
+        <div className="relative z-10 h-full flex flex-col justify-center items-start text-white p-8 md:p-12">
+          <div className="max-w-2xl">
+            <h1 className="text-5xl md:text-7xl font-black mb-4 tracking-tight text-shadow-lg">
+              {currentSeason?.name}
+            </h1>
+            <p className="text-2xl md:text-3xl mb-8 font-light">
+              Season {currentSeason?.year}
             </p>
+            
+            {/* Status Badge with F1 styling */}
+            <div className={`inline-flex items-center px-6 py-3 rounded-full text-lg font-bold mb-8 ${
+              currentSeason?.status === 'active' ? 'bg-green-500 text-white shadow-lg' :
+              currentSeason?.status === 'completed' ? 'bg-blue-500 text-white shadow-lg' :
+              'bg-gray-500 text-white shadow-lg'
+            }`}>
+              <div className={`w-3 h-3 rounded-full mr-3 ${
+                currentSeason?.status === 'active' ? 'bg-white animate-pulse' :
+                'bg-white'
+              }`}></div>
+              {currentSeason?.status?.toUpperCase()}
+            </div>
+            
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-3 gap-8">
+              <div className="text-center">
+                <div className="text-3xl md:text-4xl font-bold text-red-400">{events.length}</div>
+                <div className="text-sm uppercase tracking-wider font-medium">Events</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl md:text-4xl font-bold text-red-400">{standings.length}</div>
+                <div className="text-sm uppercase tracking-wider font-medium">Drivers</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl md:text-4xl font-bold text-red-400">{events.filter(event => event.status === 'completed').length}</div>
+                <div className="text-sm uppercase tracking-wider font-medium">Completed</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -435,7 +357,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
                       driver.position === 3 ? 'position-3' :
                       'bg-gray-600 text-white'
                     }`}>
-                      {driver.position}
+                      {driver.position || '#'}
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{driver.name}</p>
@@ -443,8 +365,8 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{driver.points} pts</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{driver.wins}W {driver.podiums}P</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{driver.points || 0} pts</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{driver.wins || 0}W {driver.podiums || 0}P</p>
                   </div>
                 </div>
               ))}
@@ -452,14 +374,21 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
           </div>
         </div>
 
-        {/* New Achievements - Right Sidebar */}
+        {/* Previous Race Results - Right Sidebar */}
+        <div className="space-y-6">
+          <PreviousRaceResultsComponent 
+            seasonId={currentSeason?.id || ''} 
+            onRaceSelect={onRaceSelect}
+          />
+          
+          {/* Achievements - Below Previous Race */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
                 <Star className="w-4 h-4 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">New Achievements</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Achievements</h2>
             </div>
           </div>
           
@@ -489,6 +418,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
