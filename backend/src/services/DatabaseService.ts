@@ -130,18 +130,20 @@ export class DatabaseService {
   private initializationPromise: Promise<void> | null = null;
 
   constructor() {
-    const databaseUrl = process.env.DATABASE_URL || 'postgresql://localhost:5432/f1_race_engineer_dev';
-    
     console.log('🐘 Using PostgreSQL database');
-      this.db = new Client({
-        connectionString: databaseUrl,
+    this.db = new Client({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'f1_race_engineer_dev',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'test123',
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-      });
+    });
     
-      this.db.connect().catch((error) => {
-        console.error('❌ PostgreSQL connection failed:', error);
-        process.exit(1);
-      });
+    this.db.connect().catch((error) => {
+      console.error('❌ PostgreSQL connection failed:', error);
+      process.exit(1);
+    });
     
     this.initializeTables();
   }

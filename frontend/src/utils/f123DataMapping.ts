@@ -4,11 +4,26 @@
 export const getDriverStatus = (status: number): string => {
   switch (status) {
     case 0: return 'IN_GARAGE';
-    case 1: return 'FLYING_LAP';
+    case 1: return 'RUNNING';  // FLYING_LAP -> RUNNING
     case 2: return 'IN_LAP';
     case 3: return 'OUT_LAP';
-    case 4: return 'ON_TRACK';
-    default: return 'UNKNOWN';
+    case 4: return 'RUNNING';  // ON_TRACK -> RUNNING
+    default: return 'RUNNING';
+  }
+};
+
+// Result Status Mapping (for retirements)
+export const getResultStatus = (resultStatus: number): string => {
+  switch (resultStatus) {
+    case 0: return 'INVALID';
+    case 1: return 'INACTIVE';
+    case 2: return 'RUNNING';  // ACTIVE
+    case 3: return 'FINISHED';
+    case 4: return 'DNF';      // DID NOT FINISH
+    case 5: return 'DSQ';     // DISQUALIFIED
+    case 6: return 'NCL';     // NOT CLASSIFIED
+    case 7: return 'RET';     // RETIRED
+    default: return 'RUNNING';
   }
 };
 
@@ -29,7 +44,7 @@ export const getTireCompound = (compound: number): 'S' | 'M' | 'H' | 'I' | 'W' =
 
 // Gap Formatting
 export const formatGap = (gapMs: number): string => {
-  if (gapMs === 0) return 'LEADER';
+  if (gapMs === 0) return '0.000'; // Show 0.000 instead of LEADER for consistency
   const seconds = gapMs / 1000;
   if (seconds < 60) {
     return seconds.toFixed(3);
@@ -46,7 +61,13 @@ export const formatLapTime = (timeInMs: number): string => {
   const totalSeconds = timeInMs / 1000;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = (totalSeconds % 60).toFixed(3);
-  return `${minutes}:${seconds}`;
+  
+  // Only show minutes if time is >= 60 seconds
+  if (minutes > 0) {
+    return `${minutes}:${seconds}`;
+  } else {
+    return seconds;
+  }
 };
 
 // Sector Time Formatting
@@ -95,8 +116,40 @@ export const getDriverAbbreviation = (driverName: string): string => {
   return driverName.substring(0, 3).toUpperCase();
 };
 
+// Helper to map status text for STATUS column (include all statuses; keep PITTING/PIT)
+const getDriverStatusDisplay = (udpData: any): string => {
+  const lapData = udpData?.lapData || {};
+  const resultStatus = lapData.resultStatus ?? 2; // 0 INVALID, 1 INACTIVE, 2 ACTIVE, 3 FINISHED, 4 DNF, 5 DSQ, 6 NCL, 7 RET
+  const pitStatus = lapData.pitStatus ?? 0;       // 0 none, 1 pitting, 2 in pit area
+  const driverStatus = lapData.driverStatus ?? 0; // 0 in garage, 1 flying, 2 in lap, 3 out lap, 4 on track
+
+  // Show all result statuses when present
+  switch (resultStatus) {
+    case 5: return 'DSQ';
+    case 7: return 'RET';
+    case 4: return 'DNF';
+    case 6: return 'NCL';
+    case 3: return 'FINISHED';
+    case 1: return 'INACTIVE';
+    case 0: return 'INVALID';
+    // 2 ACTIVE: fall through to live/pit statuses below
+  }
+
+  // Pit statuses (map both to PIT)
+  if (pitStatus === 1) return 'PIT';
+  if (pitStatus === 2) return 'PIT';
+
+  // Driver live statuses
+  if (driverStatus === 0) return 'PIT';      // in garage
+  if (driverStatus === 3) return 'OUT LAP';
+  if (driverStatus === 2) return 'IN LAP';
+  if (driverStatus === 1 || driverStatus === 4) return 'RUNNING';
+
+  return 'RUNNING';
+};
+
 // Convert F1 23 UDP data to LiveTimings format
-export const convertToLiveTimingsFormat = (udpData: any): any => {
+export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: number): any => {
   const lapData = udpData.lapData;
   const carStatus = udpData.carStatus;
   const stintHistory = udpData.stintHistory || [];
@@ -110,24 +163,38 @@ export const convertToLiveTimingsFormat = (udpData: any): any => {
     
     // Timing data
     fastestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),
-    currentLapTime: formatLapTime(lapData.currentLapTimeInMS || 0),
+    status: getDriverStatusDisplay(udpData),
     lastLapTime: formatLapTime(lapData.lastLapTimeInMS || 0),
     bestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),
     
-    // Gap and interval - DIRECT FROM UDP!
-    gap: lapData.deltaToRaceLeaderInMS ? formatGap(lapData.deltaToRaceLeaderInMS) : 'LEADER',
+    // Gap and interval - show terminal status when applicable, else gap to leader best
+    gap: (() => {
+      const result = lapData.resultStatus || 0;
+      if (result === 5) return 'DSQ';
+      if (result === 7) return 'RET';
+      if (result === 4) return 'DNF';
+      if (lapData.carPosition === 1) return 'LEADER';
+      
+      const driverBestLap = lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0;
+      if (!leaderBestLapTime || leaderBestLapTime === 0 || driverBestLap === 0) {
+        return '--';
+      }
+      
+      const gapToLeaderBest = driverBestLap - leaderBestLapTime;
+      return formatGap(gapToLeaderBest);
+    })(),
     interval: lapData.deltaToCarInFrontInMS ? `+${formatGap(lapData.deltaToCarInFrontInMS)}` : '',
     
     // Position changes
     positionChange: calculatePositionChange(lapData.gridPosition || 0, lapData.carPosition || 0),
     
-    // Sector times
-    sector1Time: formatSectorTime(lapData.sector1TimeInMS || 0, lapData.sector1TimeMinutes || 0),
-    sector2Time: formatSectorTime(lapData.sector2TimeInMS || 0, lapData.sector2TimeMinutes || 0),
-    sector3Time: formatSectorTime(lapData.sector3TimeInMS || 0, lapData.sector3TimeMinutes || 0),
+    // Sector times - use best lap sector times for practice/qualifying tables
+    sector1Time: formatSectorTime((udpData.bestLapSector1Time || 0) * 1000, 0), // Convert back to ms for formatting
+    sector2Time: formatSectorTime((udpData.bestLapSector2Time || 0) * 1000, 0), // Convert back to ms for formatting
+    sector3Time: formatSectorTime((udpData.bestLapSector3Time || 0) * 1000, 0), // Convert back to ms for formatting
     
-    // Status
-    status: getDriverStatus(lapData.driverStatus || 0),
+    // Status fields
+    driverStatus: getDriverStatus(lapData.driverStatus || 0),
     
     // Tire data
     tireCompound: getTireCompound(carStatus.actualTyreCompound || 0),
@@ -139,9 +206,33 @@ export const convertToLiveTimingsFormat = (udpData: any): any => {
     totalRaceLaps: udpData.sessionData?.totalLaps || 52, // Use dynamic session data
     lapNumber: lapData.currentLapNum || 0,
     
-    // F1 23 UDP status fields
-    resultStatus: lapData.resultStatus || 2, // Default to active
-    driverStatus: lapData.driverStatus || 4, // Default to on track
+    
+    // Micro-sectors for practice/qualifying sessions
+    microSectors: generateMicroSectorsFromSectors(
+      lapData.sector1TimeInMS || 0,
+      lapData.sector2TimeInMS || 0,
+      (udpData.sector3Time || 0) * 1000 // Convert from seconds to milliseconds
+    ),
+    
+    // Current lap sector times (for the right side S1, S2, S3 columns)
+    personalBestS1: formatSectorTime(lapData.sector1TimeInMS || 0, lapData.sector1TimeMinutes || 0),
+    personalBestS2: formatSectorTime(lapData.sector2TimeInMS || 0, lapData.sector2TimeMinutes || 0),
+    personalBestS3: (() => {
+      // Only show S3 time if we have a completed lap S3 time
+      if (udpData.sector3Time && udpData.sector3Time > 0) {
+        return formatSectorTime(
+          udpData.sector3Time * 1000, // Convert back to ms for formatting
+          0 // No minutes for calculated S3
+        );
+      }
+      return '--:--'; // Show placeholder during current lap
+    })(),
+    
+    // Stint history
+    stintHistory: stintHistory.map((stint: any) => ({
+      compound: getTireCompound(stint.tyreActualCompound || stint.tyreVisualCompound || 18),
+      laps: stint.endLap || 0
+    })),
   };
 };
 

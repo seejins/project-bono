@@ -22,8 +22,11 @@ const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177"],
     methods: ["GET", "POST"]
-  }
+  },
+  pingTimeout: 30000,  // Wait 30s before consider client dead
+  pingInterval: 10000, // Send ping every 10s
 });
+console.log('[Socket.IO] Server initialized with robust pingTimeout/pingInterval');
 
 // Middleware
 app.use(helmet());
@@ -67,13 +70,12 @@ const disableUDP = process.env.DISABLE_UDP === 'true';
 if (!isProduction && !disableUDP) {
   telemetryService.start();
   console.log('📡 UDP Telemetry service started (local mode)');
-  
-  // Start F1 23 UDP processor
-  f123UDPProcessor.start().then(() => {
-    console.log('🏎️ F1 23 UDP Processor started');
-  }).catch((error) => {
-    console.error('❌ Failed to start F1 23 UDP Processor:', error);
-  });
+  // Do NOT start F1 23 UDP processor to avoid double-binding UDP port
+  // f123UDPProcessor.start().then(() => {
+  //   console.log('🏎️ F1 23 UDP Processor started');
+  // }).catch((error) => {
+  //   console.error('❌ Failed to start F1 23 UDP Processor:', error);
+  // });
 } else {
   console.log('📡 UDP Telemetry service disabled (production mode)');
 }

@@ -75,7 +75,10 @@ export class F123UDPProcessor {
 
   constructor(dbService: DatabaseService) {
     this.dbService = dbService;
-    this.f123 = new F123UDP();
+    this.f123 = new F123UDP({
+      port: process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT) : 20777,
+      address: process.env.F1_UDP_ADDR || '127.0.0.1'
+    });
   }
 
   async start(): Promise<void> {

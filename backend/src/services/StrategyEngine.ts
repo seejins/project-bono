@@ -158,7 +158,13 @@ export class StrategyEngine {
   }
 
   private calculateAverageTireWear(tireWear: F123TelemetryData['tireWear']): number {
+    if (!tireWear) {
+      return 0; // Default to 0 if tire wear data is not available
+    }
     const values = Object.values(tireWear);
+    if (values.length === 0) {
+      return 0;
+    }
     return values.reduce((sum, wear) => sum + wear, 0) / values.length;
   }
 
@@ -184,9 +190,11 @@ export class StrategyEngine {
     const issues: string[] = [];
     
     // High tire wear
-    const maxTireWear = Math.max(...Object.values(telemetry.tireWear));
-    if (maxTireWear > 0.7) {
-      issues.push('High tire wear detected');
+    if (telemetry.tireWear) {
+      const maxTireWear = Math.max(...Object.values(telemetry.tireWear));
+      if (maxTireWear > 0.7) {
+        issues.push('High tire wear detected');
+      }
     }
     
     // Engine temperature

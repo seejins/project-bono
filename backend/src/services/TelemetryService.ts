@@ -25,8 +25,9 @@ export interface LapData {
   sector1TimeMinutes: number; // Sector 1 whole minute part
   sector2TimeInMS: number; // Sector 2 time in milliseconds
   sector2TimeMinutes: number; // Sector 2 whole minute part
-  sector3TimeInMS: number; // Sector 3 time in milliseconds
-  sector3TimeMinutes: number; // Sector 3 whole minute part
+  // Remove these - they don't exist in the packet:
+  // sector3TimeInMS: number; 
+  // sector3TimeMinutes: number;
   deltaToCarInFrontInMS: number; // Time delta to car in front in milliseconds
   deltaToRaceLeaderInMS: number; // Time delta to race leader in milliseconds
   lapDistance: number; // Distance vehicle is around current lap in metres
@@ -126,6 +127,7 @@ export interface F123TelemetryData {
   sessionType: number; // 0=unknown, 1=practice1, 2=practice2, 3=practice3, 4=short practice, 5=qualifying1, 6=qualifying2, 7=qualifying3, 8=short qualifying, 9=osq, 10=race, 11=race2, 12=time trial
   sessionTimeLeft: number;
   sessionDuration: number;
+  trackName?: string; // Track name from session data
   
   // Additional session data
   sessionData?: {
@@ -156,6 +158,9 @@ export interface F123TelemetryData {
   sector1Time?: number;
   sector2Time?: number;
   sector3Time?: number;
+  bestLapSector1Time?: number;
+  bestLapSector2Time?: number;
+  bestLapSector3Time?: number;
   lapNumber?: number;
   currentLapTime?: number;
   lastLapTime?: number;
@@ -201,8 +206,13 @@ export class TelemetryService extends EventEmitter {
   private lapDataMap: Map<number, LapData> = new Map();
   private carStatusMap: Map<number, CarStatusData> = new Map();
   private stintHistoryMap: Map<number, TyreStintHistoryData[]> = new Map();
-  private participantsMap: Map<number, { driverName: string; teamName: string; carNumber: number }> = new Map();
+  private participantsMap: Map<number, { driverName: string; teamName: string; carNumber: number; steamId?: string; platform?: number; networkId?: number }> = new Map();
   private bestLapTimesMap: Map<number, number> = new Map(); // Store best lap times from Session History
+  private bestLapSector1Map: Map<number, number> = new Map(); // Store best lap sector 1 times
+  private bestLapSector2Map: Map<number, number> = new Map(); // Store best lap sector 2 times
+  private bestLapSector3Map: Map<number, number> = new Map(); // Store best lap sector 3 times
+  private previousLapNumbers = new Map<number, number>(); // Track lap completion
+  private completedLapS3Map = new Map<number, number>(); // Store S3 times for completed laps
   
   // Store final classification and damage data
   private finalClassificationData: any[] = [];
@@ -237,10 +247,17 @@ export class TelemetryService extends EventEmitter {
   private currentTrackName: string = 'Unknown';
   private currentTrackLength: number = 0;
   private currentTotalLaps: number = 0;
+  private currentSessionUid: number | null = null; // Track current session UID
+  
+  // Session restart detection
+  private previousSessionTimeLeft: number | null = null;
 
   constructor() {
     super();
-    this.f123 = new F123UDP();
+    this.f123 = new F123UDP({
+      port: process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT) : 20777,
+      address: process.env.F1_UDP_ADDR || '127.0.0.1'
+    });
     this.setupF123Handlers();
   }
 
@@ -323,6 +340,23 @@ export class TelemetryService extends EventEmitter {
     if (data.m_lapData && Array.isArray(data.m_lapData)) {
       data.m_lapData.forEach((lapData: any, index: number) => {
         if (lapData && lapData.m_carPosition > 0) {
+          const currentLapNum = lapData.m_currentLapNum || 0;
+          const previousLapNum = this.previousLapNumbers.get(index) || 0;
+          
+          // Detect lap completion: lap number increased
+          if (currentLapNum > previousLapNum && previousLapNum > 0) {
+            // Get the completed lap data BEFORE updating the map
+            const completedLapData = this.lapDataMap.get(index);
+            if (completedLapData && completedLapData.lastLapTimeInMS > 0) {
+              const s3Time = this.calculateS3TimeForCompletedLap(completedLapData);
+              this.completedLapS3Map.set(index, s3Time);
+              console.log(`🏁 Lap ${previousLapNum} completed for car ${index}, S3: ${s3Time.toFixed(3)}s`);
+            }
+          }
+          
+          // Update previous lap number for next comparison
+          this.previousLapNumbers.set(index, currentLapNum);
+          
           this.lapDataMap.set(index, {
             lastLapTimeInMS: lapData.m_lastLapTimeInMS || 0,
             currentLapTimeInMS: lapData.m_currentLapTimeInMS || 0,
@@ -330,8 +364,9 @@ export class TelemetryService extends EventEmitter {
             sector1TimeMinutes: lapData.m_sector1TimeMinutes || 0,
             sector2TimeInMS: lapData.m_sector2TimeInMS || 0,
             sector2TimeMinutes: lapData.m_sector2TimeMinutes || 0,
-            sector3TimeInMS: lapData.m_sector3TimeInMS || 0,
-            sector3TimeMinutes: lapData.m_sector3TimeMinutes || 0,
+            // Remove these - they don't exist in the packet:
+            // sector3TimeInMS: lapData.m_sector3TimeInMS || 0,
+            // sector3TimeMinutes: lapData.m_sector3TimeMinutes || 0,
             deltaToCarInFrontInMS: lapData.m_deltaToCarInFrontInMS || 0,
             deltaToRaceLeaderInMS: lapData.m_deltaToRaceLeaderInMS || 0,
             lapDistance: lapData.m_lapDistance || 0,
@@ -405,6 +440,29 @@ export class TelemetryService extends EventEmitter {
     }
   }
 
+  // Helper function to calculate S3 time for completed laps only
+  private calculateS3TimeForCompletedLap(lapData: LapData): number {
+    // Only calculate S3 when we have a completed lap (lastLapTimeInMS > 0)
+    // and we have valid S1 and S2 times from the completed lap
+    if (lapData.lastLapTimeInMS === 0 || lapData.sector1TimeInMS === 0 || lapData.sector2TimeInMS === 0) {
+      return 0;
+    }
+    
+    // S3 = Last Lap Time - S1 - S2 (from the completed lap)
+    const s1Total = lapData.sector1TimeInMS + (lapData.sector1TimeMinutes * 60000);
+    const s2Total = lapData.sector2TimeInMS + (lapData.sector2TimeMinutes * 60000);
+    const s3Time = lapData.lastLapTimeInMS - s1Total - s2Total;
+    
+    return Math.max(0, s3Time) / 1000; // Convert to seconds, ensure non-negative
+  }
+
+  // Helper function to get S3 time (returns completed lap S3 or 0 for current lap)
+  private calculateS3Time(lapData: LapData, carIndex: number): number {
+    // For current lap, return 0 (S3 only shows after lap completion)
+    // For completed laps, return the stored S3 time
+    return this.completedLapS3Map.get(carIndex) || 0;
+  }
+
   // Process Session History Packet (ID: 11)
   private processSessionHistoryPacket(data: any): void {
     if (data.m_carIdx !== undefined && data.m_tyreStintsHistoryData) {
@@ -419,18 +477,29 @@ export class TelemetryService extends EventEmitter {
       
       this.stintHistoryMap.set(carIndex, stintHistory);
       
-      // Extract best lap time from lap history data
+      // Extract best lap time and sector times from lap history data
       if (data.m_lapHistoryData && Array.isArray(data.m_lapHistoryData)) {
         let bestLapTime = 0;
+        let bestLapSector1 = 0;
+        let bestLapSector2 = 0;
+        let bestLapSector3 = 0;
+        
         for (const lap of data.m_lapHistoryData) {
           if (lap.m_lapTimeInMS && lap.m_lapTimeInMS > 0) {
             if (bestLapTime === 0 || lap.m_lapTimeInMS < bestLapTime) {
               bestLapTime = lap.m_lapTimeInMS;
+              bestLapSector1 = lap.m_sector1TimeInMS || 0;
+              bestLapSector2 = lap.m_sector2TimeInMS || 0;
+              bestLapSector3 = lap.m_sector3TimeInMS || 0;
             }
           }
         }
+        
         if (bestLapTime > 0) {
           this.bestLapTimesMap.set(carIndex, bestLapTime);
+          this.bestLapSector1Map.set(carIndex, bestLapSector1);
+          this.bestLapSector2Map.set(carIndex, bestLapSector2);
+          this.bestLapSector3Map.set(carIndex, bestLapSector3);
         }
       }
       
@@ -485,6 +554,42 @@ export class TelemetryService extends EventEmitter {
 
   // Process Session Packet (ID: 1)
   private processSessionPacket(data: any): void {
+    const newSessionUid = data.m_header?.sessionUid || data.m_sessionUid;
+    const newSessionType = data.m_sessionType;
+    const newSessionTimeLeft = data.m_sessionTimeLeft;
+    
+    // Detect session change (by session UID or session type change)
+    if (this.currentSessionUid !== null && 
+        (this.currentSessionUid !== newSessionUid || 
+         this.sessionData.sessionType !== newSessionType)) {
+      console.log('🔄 New session detected, clearing cached data...');
+      this.clearSessionData();
+      // Emit session change event to frontend
+      this.emit('sessionChanged', {
+        oldSessionType: this.sessionData.sessionType,
+        newSessionType: newSessionType,
+        sessionUid: newSessionUid
+      });
+    }
+    
+    // Detect session restart (same UID and type, but session time suddenly increased)
+    if (this.currentSessionUid === newSessionUid && 
+        this.sessionData.sessionType === newSessionType &&
+        this.previousSessionTimeLeft !== null &&
+        newSessionTimeLeft !== undefined &&
+        newSessionTimeLeft > this.previousSessionTimeLeft + 30) { // 30 second threshold
+      console.log('🔄 Session restart detected (same session, time reset), clearing cached data...');
+      this.clearSessionData();
+      // Emit session restart event to frontend
+      this.emit('sessionRestarted', {
+        sessionType: newSessionType,
+        sessionUid: newSessionUid,
+        reason: 'Session time reset'
+      });
+    }
+    
+    this.currentSessionUid = newSessionUid;
+    
     // Store session information for use in combined data
     this.sessionStartTime = this.sessionStartTime || new Date();
     
@@ -501,6 +606,7 @@ export class TelemetryService extends EventEmitter {
       this.sessionData.sessionType = data.m_sessionType;
     }
     if (data.m_sessionTimeLeft !== undefined) {
+      this.previousSessionTimeLeft = this.sessionData.sessionTimeLeft;
       this.sessionData.sessionTimeLeft = data.m_sessionTimeLeft;
     }
     if (data.m_sessionDuration !== undefined) {
@@ -512,6 +618,23 @@ export class TelemetryService extends EventEmitter {
     this.currentTrackName = this.getTrackName(data.m_trackId || -1);
     this.currentTrackLength = data.m_trackLength || 0;
     this.currentTotalLaps = data.m_totalLaps || 0;
+  }
+
+  // Clear session data when new session starts
+  private clearSessionData(): void {
+    this.lapDataMap.clear();
+    this.carStatusMap.clear();
+    this.participantsMap.clear();
+    this.stintHistoryMap.clear();
+    this.bestLapTimesMap.clear();
+    this.bestLapSector1Map.clear();
+    this.bestLapSector2Map.clear();
+    this.bestLapSector3Map.clear();
+    this.previousLapNumbers.clear();
+    this.completedLapS3Map.clear();
+    this.currentSessionData = [];
+    this.previousSessionTimeLeft = null; // Reset session restart detection
+    console.log('✅ Session data cleared');
   }
 
   // Process Event Packet (ID: 3)
@@ -563,7 +686,6 @@ export class TelemetryService extends EventEmitter {
       // Emit final classification event
       this.emit('finalClassification', finalResults);
 
-      console.log('🏁 Final classification received:', finalResults.length, 'cars');
     }
   }
 
@@ -609,12 +731,12 @@ export class TelemetryService extends EventEmitter {
         timestamp: new Date()
       });
 
-      console.log('🔧 Car damage data received for', data.m_car_damage_data.length, 'cars');
     }
   }
 
   // Emit combined telemetry data for all cars
   private emitCombinedTelemetryData(): void {
+    const startTime = Date.now();
     const allCarsData: F123TelemetryData[] = [];
     
     // Combine data from all maps for each car
@@ -652,6 +774,7 @@ export class TelemetryService extends EventEmitter {
           sessionType: this.sessionData.sessionType,
           sessionTimeLeft: this.sessionData.sessionTimeLeft,
           sessionDuration: this.sessionData.sessionDuration,
+          trackName: this.currentTrackName,
           driverName: participant?.driverName || `Driver ${carIndex + 1}`,
           teamName: participant?.teamName || 'Unknown Team',
           carPosition: lapData.carPosition,
@@ -664,6 +787,30 @@ export class TelemetryService extends EventEmitter {
             totalLaps: this.sessionData.totalLaps,
             trackLength: this.sessionData.trackLength
           },
+          // Populate additional fields expected by frontend
+          lapNumber: lapData.currentLapNum,
+          currentLapTime: lapData.currentLapTimeInMS / 1000, // Convert to seconds
+          lastLapTime: lapData.lastLapTimeInMS / 1000, // Convert to seconds
+          bestLapTime: lapData.bestLapTimeInMS / 1000, // Convert to seconds
+          sector1Time: lapData.sector1TimeInMS / 1000, // Convert to seconds (current lap)
+          sector2Time: lapData.sector2TimeInMS / 1000, // Convert to seconds (current lap)
+          sector3Time: this.calculateS3Time(lapData, carIndex), // Get S3 from completed laps only
+          // Best lap sector times for practice/qualifying tables
+          bestLapSector1Time: (this.bestLapSector1Map.get(carIndex) || 0) / 1000, // Convert to seconds
+          bestLapSector2Time: (this.bestLapSector2Map.get(carIndex) || 0) / 1000, // Convert to seconds
+          bestLapSector3Time: (this.bestLapSector3Map.get(carIndex) || 0) / 1000, // Convert to seconds
+          fuelLevel: carStatus.fuelInTank,
+          fuelCapacity: carStatus.fuelCapacity,
+          energyStore: carStatus.ersStoreEnergy,
+          drsEnabled: carStatus.drsAllowed === 1,
+          ersDeployMode: carStatus.ersDeployMode,
+          fuelMix: carStatus.fuelMix,
+          penalties: lapData.penalties,
+          warnings: lapData.totalWarnings,
+          numUnservedDriveThroughPens: lapData.numUnservedDriveThroughPens,
+          numUnservedStopGoPens: lapData.numUnservedStopGoPens,
+          // Add tire wear data from car damage packet if available
+          tireWear: this.getTireWearData(carIndex),
           timestamp: new Date(),
         };
         
@@ -672,6 +819,10 @@ export class TelemetryService extends EventEmitter {
     }
     
     if (allCarsData.length > 0) {
+      const processingTime = Date.now() - startTime;
+      if (processingTime > 100) { // Log if processing takes more than 100ms
+        console.log(`⚠️ Slow telemetry processing: ${processingTime}ms for ${allCarsData.length} cars`);
+      }
       this.emit('telemetry', allCarsData);
     }
   }
@@ -718,237 +869,22 @@ export class TelemetryService extends EventEmitter {
     return trackNames[trackId] || 'Unknown Track';
   }
 
-  // Convert F1 23 UDP motion data to our format
-  private convertMotionData(data: any): F123TelemetryData {
+  // Get tire wear data from car damage packet
+  private getTireWearData(carIndex: number): { frontLeft: number; frontRight: number; rearLeft: number; rearRight: number } {
+    const damageData = this.carDamageMap.get(carIndex);
+    if (damageData && damageData.tyresWear) {
+      // F1 23 UDP format: [RL, RR, FL, FR] - Rear Left, Rear Right, Front Left, Front Right
     return {
-      sessionType: data.sessionType || 0,
-      sessionTimeLeft: data.sessionTimeLeft || 0,
-      sessionDuration: data.sessionDuration || 0,
-      
-      driverName: data.driverName || 'Unknown',
-      teamName: data.teamName || 'Unknown',
-      carPosition: data.carPosition || 0,
-      numCars: data.numCars || 0,
-      carNumber: data.carNumber || 0,
-      
-      lapTime: data.lapTime || 0,
-      sector1Time: data.sector1Time || 0,
-      sector2Time: data.sector2Time || 0,
-      sector3Time: data.sector3Time || 0,
-      lapNumber: data.lapNumber || 0,
-      currentLapTime: data.currentLapTime || 0,
-      lastLapTime: data.lastLapTime || 0,
-      bestLapTime: data.bestLapTime || 0,
-      
-      speed: data.speed || 0,
-      throttle: data.throttle || 0,
-      brake: data.brake || 0,
-      steering: data.steering || 0,
-      gear: data.gear || 0,
-      engineRPM: data.engineRPM || 0,
-      
-      tireWear: {
-        frontLeft: data.tireWear?.frontLeft || 0,
-        frontRight: data.tireWear?.frontRight || 0,
-        rearLeft: data.tireWear?.rearLeft || 0,
-        rearRight: data.tireWear?.rearRight || 0
-      },
-      tireTemperature: {
-        frontLeft: data.tireTemperature?.frontLeft || 0,
-        frontRight: data.tireTemperature?.frontRight || 0,
-        rearLeft: data.tireTemperature?.rearLeft || 0,
-        rearRight: data.tireTemperature?.rearRight || 0
-      },
-      
-      fuelLevel: data.fuelLevel || 0,
-      fuelCapacity: data.fuelCapacity || 0,
-      energyStore: data.energyStore || 0,
-      
-      airTemperature: data.airTemperature || 0,
-      trackTemperature: data.trackTemperature || 0,
-      rainPercentage: data.rainPercentage || 0,
-      
-      drsEnabled: data.drsEnabled || false,
-      ersDeployMode: data.ersDeployMode || 0,
-      fuelMix: data.fuelMix || 0,
-      
-      penalties: data.penalties || 0,
-      warnings: data.warnings || 0,
-      numUnservedDriveThroughPens: data.numUnservedDriveThroughPens || 0,
-      numUnservedStopGoPens: data.numUnservedStopGoPens || 0,
-      
-      timestamp: new Date()
-    };
+        frontLeft: damageData.tyresWear[3] || 0,   // FL
+        frontRight: damageData.tyresWear[2] || 0,  // FR
+        rearLeft: damageData.tyresWear[0] || 0,    // RL
+        rearRight: damageData.tyresWear[1] || 0    // RR
+      };
+    }
+    // Return default values if no damage data available
+    return { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 };
   }
 
-  // Convert F1 23 UDP session data
-  private convertSessionData(data: any): F123TelemetryData {
-    return {
-      sessionType: data.sessionType || 0,
-      sessionTimeLeft: data.sessionTimeLeft || 0,
-      sessionDuration: data.sessionDuration || 0,
-      
-      driverName: data.driverName || 'Unknown',
-      teamName: data.teamName || 'Unknown',
-      carPosition: data.carPosition || 0,
-      numCars: data.numCars || 0,
-      carNumber: data.carNumber || 0,
-      
-      lapTime: data.lapTime || 0,
-      sector1Time: data.sector1Time || 0,
-      sector2Time: data.sector2Time || 0,
-      sector3Time: data.sector3Time || 0,
-      lapNumber: data.lapNumber || 0,
-      currentLapTime: data.currentLapTime || 0,
-      lastLapTime: data.lastLapTime || 0,
-      bestLapTime: data.bestLapTime || 0,
-      
-      speed: 0, // Not available in session data
-      throttle: 0,
-      brake: 0,
-      steering: 0,
-      gear: 0,
-      engineRPM: 0,
-      
-      tireWear: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-      tireTemperature: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-      
-      fuelLevel: 0,
-      fuelCapacity: 0,
-      energyStore: 0,
-      
-      airTemperature: data.airTemperature || 0,
-      trackTemperature: data.trackTemperature || 0,
-      rainPercentage: data.rainPercentage || 0,
-      
-      drsEnabled: false,
-      ersDeployMode: 0,
-      fuelMix: 0,
-      
-      penalties: data.penalties || 0,
-      warnings: data.warnings || 0,
-      numUnservedDriveThroughPens: data.numUnservedDriveThroughPens || 0,
-      numUnservedStopGoPens: data.numUnservedStopGoPens || 0,
-      
-      timestamp: new Date()
-    };
-  }
-
-  // Convert F1 23 UDP car status data
-  private convertCarStatusData(data: any): F123TelemetryData {
-    return {
-      sessionType: data.sessionType || 0,
-      sessionTimeLeft: data.sessionTimeLeft || 0,
-      sessionDuration: data.sessionDuration || 0,
-      
-      driverName: data.driverName || 'Unknown',
-      teamName: data.teamName || 'Unknown',
-      carPosition: data.carPosition || 0,
-      numCars: data.numCars || 0,
-      carNumber: data.carNumber || 0,
-      
-      lapTime: data.lapTime || 0,
-      sector1Time: data.sector1Time || 0,
-      sector2Time: data.sector2Time || 0,
-      sector3Time: data.sector3Time || 0,
-      lapNumber: data.lapNumber || 0,
-      currentLapTime: data.currentLapTime || 0,
-      lastLapTime: data.lastLapTime || 0,
-      bestLapTime: data.bestLapTime || 0,
-      
-      speed: 0,
-      throttle: 0,
-      brake: 0,
-      steering: 0,
-      gear: 0,
-      engineRPM: 0,
-      
-      tireWear: {
-        frontLeft: data.tireWear?.frontLeft || 0,
-        frontRight: data.tireWear?.frontRight || 0,
-        rearLeft: data.tireWear?.rearLeft || 0,
-        rearRight: data.tireWear?.rearRight || 0
-      },
-      tireTemperature: {
-        frontLeft: data.tireTemperature?.frontLeft || 0,
-        frontRight: data.tireTemperature?.frontRight || 0,
-        rearLeft: data.tireTemperature?.rearLeft || 0,
-        rearRight: data.tireTemperature?.rearRight || 0
-      },
-      
-      fuelLevel: data.fuelLevel || 0,
-      fuelCapacity: data.fuelCapacity || 0,
-      energyStore: data.energyStore || 0,
-      
-      airTemperature: data.airTemperature || 0,
-      trackTemperature: data.trackTemperature || 0,
-      rainPercentage: data.rainPercentage || 0,
-      
-      drsEnabled: data.drsEnabled || false,
-      ersDeployMode: data.ersDeployMode || 0,
-      fuelMix: data.fuelMix || 0,
-      
-      penalties: data.penalties || 0,
-      warnings: data.warnings || 0,
-      numUnservedDriveThroughPens: data.numUnservedDriveThroughPens || 0,
-      numUnservedStopGoPens: data.numUnservedStopGoPens || 0,
-      
-      timestamp: new Date()
-    };
-  }
-
-  // Convert F1 23 UDP lap data
-  private convertLapData(data: any): F123TelemetryData {
-    return {
-      sessionType: data.sessionType || 0,
-      sessionTimeLeft: data.sessionTimeLeft || 0,
-      sessionDuration: data.sessionDuration || 0,
-      
-      driverName: data.driverName || 'Unknown',
-      teamName: data.teamName || 'Unknown',
-      carPosition: data.carPosition || 0,
-      numCars: data.numCars || 0,
-      carNumber: data.carNumber || 0,
-      
-      lapTime: data.lapTime || 0,
-      sector1Time: data.sector1Time || 0,
-      sector2Time: data.sector2Time || 0,
-      sector3Time: data.sector3Time || 0,
-      lapNumber: data.lapNumber || 0,
-      currentLapTime: data.currentLapTime || 0,
-      lastLapTime: data.lastLapTime || 0,
-      bestLapTime: data.bestLapTime || 0,
-      
-      speed: 0,
-      throttle: 0,
-      brake: 0,
-      steering: 0,
-      gear: 0,
-      engineRPM: 0,
-      
-      tireWear: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-      tireTemperature: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
-      
-      fuelLevel: 0,
-      fuelCapacity: 0,
-      energyStore: 0,
-      
-      airTemperature: data.airTemperature || 0,
-      trackTemperature: data.trackTemperature || 0,
-      rainPercentage: data.rainPercentage || 0,
-      
-      drsEnabled: false,
-      ersDeployMode: 0,
-      fuelMix: 0,
-      
-      penalties: data.penalties || 0,
-      warnings: data.warnings || 0,
-      numUnservedDriveThroughPens: data.numUnservedDriveThroughPens || 0,
-      numUnservedStopGoPens: data.numUnservedStopGoPens || 0,
-      
-      timestamp: new Date()
-    };
-  }
 
   // Handle session data changes
   private handleSessionData(data: F123TelemetryData): void {
@@ -1015,7 +951,9 @@ export class TelemetryService extends EventEmitter {
       const poleTime = this.findPoleTime(finalResults);
       if (poleTime) {
         finalResults.forEach(driver => {
+          if (driver.bestLapTime !== undefined) {
           driver.gapToPole = driver.bestLapTime - poleTime;
+          }
         });
       }
       
@@ -1046,18 +984,19 @@ export class TelemetryService extends EventEmitter {
   private findPoleTime(results: F123TelemetryData[]): number | null {
     const validTimes = results
       .map(r => r.bestLapTime)
-      .filter(time => time > 0);
+      .filter((time): time is number => time !== undefined && time > 0);
     
     return validTimes.length > 0 ? Math.min(...validTimes) : null;
   }
 
   private checkCriticalConditions(data: F123TelemetryData): void {
     // Low fuel warning
-    if (data.fuelLevel < 5) {
+    if (data.fuelLevel && data.fuelLevel < 5) {
       this.emit('alert', { type: 'low_fuel', message: 'Low fuel warning!' });
     }
     
     // High tire wear warning
+    if (data.tireWear) {
     const maxTireWear = Math.max(
       data.tireWear.frontLeft,
       data.tireWear.frontRight,
@@ -1067,9 +1006,11 @@ export class TelemetryService extends EventEmitter {
     
     if (maxTireWear > 80) {
       this.emit('alert', { type: 'tire_wear', message: 'High tire wear detected!' });
+      }
     }
     
     // High tire temperature warning
+    if (data.tireTemperature) {
     const maxTireTemp = Math.max(
       data.tireTemperature.frontLeft,
       data.tireTemperature.frontRight,
@@ -1079,10 +1020,11 @@ export class TelemetryService extends EventEmitter {
     
     if (maxTireTemp > 120) {
       this.emit('alert', { type: 'tire_temp', message: 'High tire temperature!' });
+      }
     }
     
     // Penalty warnings
-    if (data.penalties > 0) {
+    if (data.penalties && data.penalties > 0) {
       this.emit('alert', { type: 'penalty', message: `Penalty received: ${data.penalties}` });
     }
   }

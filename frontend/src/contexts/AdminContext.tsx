@@ -33,7 +33,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
 
   const authenticate = (password: string): boolean => {
     // Simple password check - in production, this would be more secure
-    const adminPassword = process.env.REACT_APP_ADMIN_PASSWORD || '1234';
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'benji1234';
     
     if (password === adminPassword) {
       setIsAuthenticated(true);
