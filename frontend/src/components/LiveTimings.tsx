@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
+import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory, formatSectorTime } from '../utils/f123DataMapping';
 
 // Driver data interface for live timings
 interface DriverData {
@@ -27,9 +27,9 @@ interface DriverData {
   sector1Time?: string;
   sector2Time?: string;
   sector3Time?: string;
-  personalBestS1?: string;
-  personalBestS2?: string;
-  personalBestS3?: string;
+  LS1?: string;
+  LS2?: string;
+  LS3?: string;
   microSectors: Array<'purple' | 'green' | 'yellow' | 'grey'>;
   stintHistory: Array<{
     compound: 'S' | 'M' | 'H';
@@ -60,7 +60,7 @@ const SessionTimer = ({ sessionTimeLeft, isRunning }: { sessionTimeLeft: number;
           const seconds = (remaining % 60).toFixed(0).padStart(2, '0');
           displayRef.current.textContent = `${minutes}:${seconds}`;
         }
-      }, 100); // Update every 100ms for smooth countdown
+      }, 1000); // Update every 1 second
     } else {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -119,6 +119,18 @@ const getRetirementStatusColor = (status: string): string => {
     case 'NCL': return 'text-gray-400'; // NOT CLASSIFIED
     case 'OUT': return 'text-orange-500'; // OUT
     default: return 'text-white';
+  }
+};
+
+// Get color for driver status
+const getStatusColor = (status: string): string => {
+  switch (status) {
+    case 'RUNNING': return 'text-green-500';
+    case 'OUT LAP': return 'text-yellow-500';
+    case 'IN LAP': return 'text-yellow-500';
+    case 'PIT': return 'text-red-500';
+    case 'PITTING': return 'text-red-500';
+    default: return '';
   }
 };
 
@@ -233,6 +245,7 @@ export const LiveTimings = () => {
   const prevStatusMap = useRef<Map<number, string>>(new Map());
   const prevPositionMap = useRef<Map<number, number>>(new Map());
   const prevBestLapMap = useRef<Map<number, number>>(new Map());
+  // Backend now handles all persistence of personalBest sector times - no frontend ref needed
 
   useEffect(() => {
     // Initialize socket connection
@@ -240,18 +253,14 @@ export const LiveTimings = () => {
     const newSocket = io(apiUrl);
 
     newSocket.on('connect', () => {
-      console.log('Connected to Live Timings backend');
       setIsConnected(true);
     });
 
-    newSocket.on('disconnect', (reason) => {
-      console.log('[socket] Disconnected:', reason);
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
     });
-    newSocket.on('reconnect_attempt', (attempt) => {
-      console.log('[socket] Reconnect attempt', attempt);
-    });
-    newSocket.on('reconnect', (attempt) => {
-      console.log('[socket] Reconnected on attempt', attempt);
+    newSocket.on('reconnect', () => {
+      setIsConnected(true);
     });
 
     // Listen for telemetry data
@@ -265,14 +274,12 @@ export const LiveTimings = () => {
     });
 
     // Listen for session completion
-    newSocket.on('sessionCompleted', (data: any) => {
-      console.log('Session completed:', data);
+    newSocket.on('sessionCompleted', () => {
       // Handle session completion
     });
 
     // Listen for session changes
     newSocket.on('sessionChanged', (data: any) => {
-      console.log('🔄 Session changed, clearing live timings data...');
       // Clear all state
       setDrivers([]);
       setPreviousDrivers([]);
@@ -283,7 +290,6 @@ export const LiveTimings = () => {
 
     // Listen for session restarts
     newSocket.on('sessionRestarted', (data: any) => {
-      console.log('🔄 Session restarted, clearing live timings data...');
       // Clear all state (same as session change)
       setDrivers([]);
       setPreviousDrivers([]);
@@ -320,7 +326,6 @@ export const LiveTimings = () => {
     // Detect session change (by session UID or session type)
     if ((currentSessionUid !== null && currentSessionUid !== sessionUid) ||
         (currentSessionType !== null && currentSessionType !== sessionType)) {
-      console.log('🔄 New session detected in frontend, clearing state...');
       setDrivers([]);
       setPreviousDrivers([]);
       previousLapNumbers.current.clear();
@@ -331,7 +336,6 @@ export const LiveTimings = () => {
         currentSessionType === sessionType &&
         previousSessionTimeLeft.current !== null &&
         sessionTimeLeft > previousSessionTimeLeft.current + 30) { // 30 second threshold
-      console.log('🔄 Session restart detected in frontend (same session, time reset), clearing state...');
       setDrivers([]);
       setPreviousDrivers([]);
       previousLapNumbers.current.clear();
@@ -416,7 +420,7 @@ export const LiveTimings = () => {
         }
         prevPositionMap.current.set(carNumber, currentPosition);
 
-        // Lap completion
+        // Lap completion - backend now handles all persistence
         const currentLapNum = lapData.currentLapNum || 0;
         const previousLapNum = previousLapNumbers.current.get(carNumber) || 0;
         if (currentLapNum > previousLapNum && previousLapNum > 0) {
@@ -425,7 +429,8 @@ export const LiveTimings = () => {
         }
         previousLapNumbers.current.set(carNumber, currentLapNum);
 
-        // Sector completion (only when driver is RUNNING): S0->1 or 1->2
+        // Sector completion tracking for update detection only
+        // Backend handles persistence and sends persisted values in telemetry
         const currentSector = lapData.sector ?? 0;
         const prevSector = previousSectors.current.get(carNumber) ?? currentSector;
         const driverStatusStr = mapDriverStatus(lapData.driverStatus ?? 0);
@@ -469,7 +474,6 @@ export const LiveTimings = () => {
         if (now - lastUpdateLogRef.current >= 1000 && updateReasons.length > 0) {
           lastUpdateLogRef.current = now;
           const shown = updateReasons.slice(0, 10);
-          console.log('🎯 UPDATE TRIGGERS DETECTED:', shown.join(', '), updateReasons.length > 10 ? `(+${updateReasons.length - 10} more)` : '');
         }
       } else {
         // No meaningful changes detected - skip update (event-based updates only)
@@ -491,8 +495,14 @@ export const LiveTimings = () => {
       }
 
       // Convert all drivers and update state - React will handle change detection
+      // Backend now handles all persistence of personalBest sector times
       const newDrivers: DriverData[] = data
-        .map((d: any) => convertToLiveTimingsFormat(d, leaderBestLapTime))
+        .map((d: any) => {
+          const converted = convertToLiveTimingsFormat(d, leaderBestLapTime);
+          // Backend sends persisted values directly - no frontend persistence needed
+          
+          return converted;
+        })
         .sort((a, b) => a.position - b.position);
 
       // Trim previousDrivers to current session drivers only
@@ -541,7 +551,11 @@ export const LiveTimings = () => {
             <div className="flex items-center space-x-4">
               <span className="text-lg">🏎️ {sessionData.trackName}</span>
               <span className="text-lg">🏁 {sessionData.sessionTypeName || sessionData.sessionType}</span>
-              <span className="text-lg">⏱️ {getSessionDisplay()}</span>
+              <span className="text-lg">⏱️ {
+                sessionData.sessionType === 'RACE' 
+                  ? getSessionDisplay() 
+                  : <SessionTimer sessionTimeLeft={sessionData.timeRemaining || 0} isRunning={isConnected && sessionData.timeRemaining > 0} />
+              }</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -556,7 +570,16 @@ export const LiveTimings = () => {
       {/* Main Content - Constrained Width for 1440p Optimization */}
       <div className="max-w-[2048px] mx-auto px-6 py-6">
         <div className="w-full bg-gray-800 rounded-lg overflow-hidden relative">
-          {sessionData.sessionType === 'RACE' ? (
+          {/* Show loading indicator when session exists but no driver data yet */}
+          {drivers.length === 0 && currentSessionUid !== null && isConnected ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <p className="text-gray-400 text-lg">Session Loading...</p>
+                <p className="text-gray-500 text-sm mt-2">Waiting for telemetry data</p>
+              </div>
+            </div>
+          ) : sessionData.sessionType === 'RACE' ? (
             <RaceTimingTable drivers={drivers} previousDrivers={previousDrivers} />
             ) : (
                 <PracticeQualifyingTimingTable 
@@ -622,7 +645,7 @@ const PracticeQualifyingTimingTable = ({
 
   // Memoize cell class computation for current/personal/purple/green sector coloring
   const getCurrentSectorColor = useMemo(() => (driver: DriverData, sector: 's1' | 's2' | 's3') => {
-    const currentTimeStr = sector === 's1' ? driver.personalBestS1 || '0' : sector === 's2' ? driver.personalBestS2 || '0' : driver.personalBestS3 || '0';
+    const currentTimeStr = sector === 's1' ? driver.LS1 || '0' : sector === 's2' ? driver.LS2 || '0' : driver.LS3 || '0';
     const currentTime = parseSectorTimeString(currentTimeStr);
     if (!currentTime || isDriverRetired(driver.status)) return '';
     const fastest = sector === 's1' ? fastestSectors.fastestS1 : sector === 's2' ? fastestSectors.fastestS2 : fastestSectors.fastestS3;
@@ -695,7 +718,7 @@ const PracticeQualifyingTimingTable = ({
                   className="w-1 h-6 rounded"
                   style={{ backgroundColor: driver.teamColor }}
                 ></div>
-                <span className="font-medium text-sm">{driver.driverAbbreviation}</span>
+                <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
               </div>
             </div>
             
@@ -703,7 +726,7 @@ const PracticeQualifyingTimingTable = ({
             <div className={`px-2 border-r border-gray-500 flex items-center justify-between ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
-              <span className="text-sm font-mono">{driver.fastestLap}</span>
+              <span className="text-base font-mono tabular-nums tracking-tighter">{driver.fastestLap}</span>
               {driver.fastestLapTire && (
                 <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
                   {driver.fastestLapTire}
@@ -712,28 +735,28 @@ const PracticeQualifyingTimingTable = ({
             </div>
             
             {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${getRetirementStatusColor(driver.status)}`}>
               {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* S1 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS1 !== Infinity && Math.abs(parseSectorTimeString(driver.sector1Time || '0') - fastestSectors.fastestS1) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector1Time || '--:--'}
             </div>
             
             {/* S2 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS2 !== Infinity && Math.abs(parseSectorTimeString(driver.sector2Time || '0') - fastestSectors.fastestS2) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector2Time || '--:--'}
             </div>
             
             {/* S3 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS3 !== Infinity && Math.abs(parseSectorTimeString(driver.sector3Time || '0') - fastestSectors.fastestS3) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector3Time || '--:--'}
@@ -744,9 +767,13 @@ const PracticeQualifyingTimingTable = ({
               isDriverRetired(driver.status) ? 'opacity-40' : ''
             }`}>
               <div className="flex justify-center space-x-1 overflow-hidden w-full">
-                {(driver.microSectors || []).map((sector, index) => {
+                {/* Always show 24 micro-sectors (grey squares that color in as boundaries are crossed) */}
+                {(driver.microSectors && driver.microSectors.length === 24 
+                  ? driver.microSectors 
+                  : Array(24).fill('grey')
+                ).map((sector, index) => {
                   // Add spacing between main sectors (every 8 micro-sectors)
-                  const isMainSectorEnd = (index + 1) % 8 === 0 && index < (driver.microSectors || []).length - 1;
+                  const isMainSectorEnd = (index + 1) % 8 === 0 && index < 23;
                   return (
                     <div key={index} className="flex items-center">
                       <div
@@ -765,38 +792,38 @@ const PracticeQualifyingTimingTable = ({
             </div>
             
             {/* Driver Last Name */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-left ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
             {/* Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.status || ''}
             </div>
             
                 {/* S1 (Current) - Color coding: purple = best overall, green = personal best */}
-                <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+                <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
                  isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
                 }`}>
-                 {driver.personalBestS1 || '--:--'}
+                 {driver.LS1 || '--:--'}
                 </div>
             
               {/* S2 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+              <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
                 isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
               }`}>
-                {driver.personalBestS2 || '--:--'}
+                {driver.LS2 || '--:--'}
               </div>
             
               {/* S3 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 text-sm text-center font-mono ${
+              <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
                 isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
               }`}>
-                {driver.personalBestS3 || '--:--'}
+                {driver.LS3 || '--:--'}
               </div>
                 </motion.div>
               );
@@ -823,9 +850,9 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
     const bestMap: Record<string, { s1: number; s2: number; s3: number }> = {};
     drivers.forEach(d => {
       bestMap[d.id] = {
-        s1: sectorParse(d.personalBestS1),
-        s2: sectorParse(d.personalBestS2),
-        s3: sectorParse(d.personalBestS3)
+        s1: sectorParse(d.LS1),
+        s2: sectorParse(d.LS2),
+        s3: sectorParse(d.LS3)
       };
     });
     return { fastestS1, fastestS2, fastestS3, driverBestMap: bestMap };
@@ -833,7 +860,7 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
 
   const getSectorColor = useMemo(() => (driver: DriverData, sector: 's1' | 's2' | 's3') => {
     if (!driver.status || driver.status !== 'RUNNING') return '';
-    const val = sector === 's1' ? driver.personalBestS1 : sector === 's2' ? driver.personalBestS2 : driver.personalBestS3;
+    const val = sector === 's1' ? driver.LS1 : sector === 's2' ? driver.LS2 : driver.LS3;
     const time = val ? parseFloat(val) || Infinity : Infinity;
     const fastest = sector === 's1' ? fastestS1 : sector === 's2' ? fastestS2 : fastestS3;
     const best = driverBestMap[driver.id]?.[sector] ?? Infinity;
@@ -894,7 +921,7 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
                   className="w-1 h-6 rounded"
                   style={{ backgroundColor: driver.teamColor }}
                 ></div>
-                <span className="font-medium text-sm">{driver.driverAbbreviation}</span>
+                <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
               </div>
               <div className="flex items-center space-x-1">
                 {driver.positionChange > 0 ? (
@@ -917,28 +944,28 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
             </div>
             
             {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${getRetirementStatusColor(driver.status)}`}>
               {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* Interval */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.interval}
             </div>
             
             {/* Best Lap */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.bestLap}
             </div>
             
             {/* Last Lap */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.lastLapTime}
@@ -954,16 +981,16 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
             </div>
             
             {/* Driver Last Name */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-left ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
             {/* Sector Times with color coding */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${getSectorColor(driver, 's1')}`}>{driver.personalBestS1 || '--:--'}</div>
-            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${getSectorColor(driver, 's2')}`}>{driver.personalBestS2 || '--:--'}</div>
-            <div className={`px-2 text-sm text-center font-mono ${getSectorColor(driver, 's3')}`}>{driver.personalBestS3 || '--:--'}</div>
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${getSectorColor(driver, 's1')}`}>{driver.LS1 || '--:--'}</div>
+            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${getSectorColor(driver, 's2')}`}>{driver.LS2 || '--:--'}</div>
+            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${getSectorColor(driver, 's3')}`}>{driver.LS3 || '--:--'}</div>
                 </motion.div>
               );
             })}

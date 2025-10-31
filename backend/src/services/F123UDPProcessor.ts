@@ -73,6 +73,7 @@ export class F123UDPProcessor {
   private currentEventId: string | null = null;
   private participantMappings: Map<number, string> = new Map(); // vehicleIndex -> memberId
   private sessionUid: bigint | null = null;
+  private loggedEventWarnings: Set<string> = new Set(); // Track tracks that have been warned about missing events
   
   // Queue data for post-session batch processing (no DB writes in live path)
   private pendingLapHistory: Map<string, Array<{
@@ -205,7 +206,7 @@ export class F123UDPProcessor {
       const participant = participants[i];
       
       if (!participant.name || participant.name.trim() === '') {
-        console.log(`⚠️ Skipping empty participant at index ${i}`);
+        // Silently skip empty participants
         continue; // Skip empty participants
       }
 
@@ -271,9 +272,12 @@ export class F123UDPProcessor {
       const memberId = this.participantMappings.get(i);
       
       if (!memberId) {
-        console.log(`⚠️ No member mapping found for vehicle index ${i} - skipping classification entry`);
+        // Silently skip unmapped participants (expected for AI/empty slots)
         continue;
       }
+
+      // Log when mapping IS found
+      console.log(`✅ Member mapping found for vehicle index ${i} → member ${memberId}`);
 
       try {
         await this.dbService.addUDPSessionResult({
@@ -331,9 +335,12 @@ export class F123UDPProcessor {
 
     const memberId = this.participantMappings.get(carIdx);
     if (!memberId) {
-      console.log(`⚠️ No member mapping found for car index ${carIdx} - skipping session history`);
+      // Silently skip unmapped participants (expected for AI/empty slots)
       return;
     }
+
+    // Log when mapping IS found
+    console.log(`✅ Member mapping found for car index ${carIdx} → member ${memberId}, processing session history`);
 
     // Queue data for post-session batch processing (NO database writes in live path)
     if (!this.pendingLapHistory.has(memberId)) {
@@ -431,26 +438,21 @@ export class F123UDPProcessor {
     const totalLaps = data.m_totalLaps as number;
     const trackLength = data.m_trackLength as number;
 
-    console.log(`🏁 Session packet received - Track ID: ${trackId}, Session Type: ${sessionType}, Total Laps: ${totalLaps}`);
-    console.log(`📊 Session details: Track Length: ${trackLength}m, Session UID: ${header.sessionUid}, Session Time: ${header.sessionTime}`);
-
-    // If we have an active season, we could create or update the current event
-    // For now, we'll just log the session info
+    // If we have an active season, try to find or create an event for this track
     if (this.activeSeasonId) {
-      console.log(`📊 Session info for active season ${this.activeSeasonId}: Track ${trackId}, Type ${sessionType}`);
-      
       // Try to find or create an event for this track
       const trackName = this.getTrackNameFromId(trackId);
       if (trackName) {
-        console.log(`🏁 Track identified as: ${trackName}`);
-        
         // Try to find existing event for this track
         const existingEvent = await this.dbService.findActiveEventByTrack(trackName);
         if (existingEvent) {
           this.currentEventId = existingEvent;
-          console.log(`✅ Found existing event for track ${trackName}: ${existingEvent}`);
         } else {
-          console.log(`⚠️ No existing event found for track ${trackName} - UDP data will be stored but not linked to specific event`);
+          // Only log this warning once per track
+          if (!this.loggedEventWarnings.has(trackName)) {
+            console.log(`⚠️ No existing event found for track ${trackName} - UDP data will be stored but not linked to specific event`);
+            this.loggedEventWarnings.add(trackName);
+          }
         }
       }
     }

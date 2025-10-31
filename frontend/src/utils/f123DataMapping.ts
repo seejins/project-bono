@@ -127,13 +127,15 @@ const getDriverStatusDisplay = (udpData: any): string => {
   const pitStatus = lapData.pitStatus ?? 0;       // 0 none, 1 pitting, 2 in pit area
   const driverStatus = lapData.driverStatus ?? 0; // 0 in garage, 1 flying, 2 in lap, 3 out lap, 4 on track
 
-  // Show all result statuses when present
+  // FINISHED takes priority over everything (including pit status)
+  if (resultStatus === 3) return 'FINISHED';
+
+  // Show all other result statuses when present
   switch (resultStatus) {
     case 5: return 'DSQ';
     case 7: return 'RET';
     case 4: return 'DNF';
     case 6: return 'NCL';
-    case 3: return 'FINISHED';
     case 1: return 'INACTIVE';
     case 0: return 'INVALID';
     // 2 ACTIVE: fall through to live/pit statuses below
@@ -215,25 +217,26 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
     lapNumber: lapData.currentLapNum || 0,
     
     
-    // Micro-sectors for practice/qualifying sessions
-    microSectors: generateMicroSectorsFromSectors(
-      lapData.sector1TimeInMS || 0,
-      lapData.sector2TimeInMS || 0,
-      (udpData.sector3Time || 0) * 1000 // Convert from seconds to milliseconds
-    ),
+    // Micro-sectors - use backend-provided array (progressive coloring as segments complete)
+    microSectors: udpData.microSectors || [],
     
-    // Current lap sector times (for the right side S1, S2, S3 columns)
-    personalBestS1: formatSectorTime(lapData.sector1TimeInMS || 0, lapData.sector1TimeMinutes || 0),
-    personalBestS2: formatSectorTime(lapData.sector2TimeInMS || 0, lapData.sector2TimeMinutes || 0),
-    personalBestS3: (() => {
-      // Only show S3 time if we have a completed lap S3 time
-      if (udpData.sector3Time && udpData.sector3Time > 0) {
-        return formatSectorTime(
-          udpData.sector3Time * 1000, // Convert back to ms for formatting
-          0 // No minutes for calculated S3
-        );
-      }
-      return '--:--'; // Show placeholder during current lap
+    // Last completed sector times (right-side columns) - updated on sector completion by backend
+    LS1: (() => {
+      // Backend sends LS1 in milliseconds, with separate minutes field
+      const s1Ms = udpData.LS1 || 0;
+      const s1Min = udpData.LS1Minutes || 0;
+      return s1Ms > 0 ? formatSectorTime(s1Ms, s1Min) : '--.---';
+    })(),
+    LS2: (() => {
+      // Backend sends LS2 in milliseconds, with separate minutes field
+      const s2Ms = udpData.LS2 || 0;
+      const s2Min = udpData.LS2Minutes || 0;
+      return s2Ms > 0 ? formatSectorTime(s2Ms, s2Min) : '--.---';
+    })(),
+    LS3: (() => {
+      // Backend sends LS3 in seconds (already calculated)
+      const s3Seconds = udpData.LS3 || 0;
+      return s3Seconds > 0 ? formatSectorTime(s3Seconds * 1000, 0) : '--.---';
     })(),
     
     // Stint history

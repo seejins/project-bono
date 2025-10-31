@@ -137,6 +137,12 @@ export interface F123TelemetryData {
   bestLapSector1Time?: number;
   bestLapSector2Time?: number;
   bestLapSector3Time?: number;
+  // Last completed sector times (right-side columns) - updated on sector completion
+  LS1?: number; // In milliseconds
+  LS1Minutes?: number;
+  LS2?: number; // In milliseconds
+  LS2Minutes?: number;
+  LS3?: number; // In seconds
   lapNumber?: number;
   currentLapTime?: number;
   lastLapTime?: number;
@@ -203,7 +209,35 @@ export class TelemetryService extends EventEmitter {
   private bestLapSector2Map: Map<number, number> = new Map(); // Store best lap sector 2 times
   private bestLapSector3Map: Map<number, number> = new Map(); // Store best lap sector 3 times
   private previousLapNumbers = new Map<number, number>(); // Track lap completion
-  private completedLapS3Map = new Map<number, number>(); // Store S3 times for completed laps
+  private completedLapSectors: Map<number, {s1: number, s1Minutes: number, s2: number, s2Minutes: number}> = new Map(); // Store S1/S2 when entering sector 3
+  
+  // Last completed sector times (right-side columns) - updated on sector completion
+  private persistedLS1 = new Map<number, {time: number, minutes: number}>(); // Updated when entering sector 2
+  private persistedLS2 = new Map<number, {time: number, minutes: number}>(); // Updated when entering sector 3
+  private persistedLS3 = new Map<number, number>(); // Updated on sector 3 completion
+  
+  // Micro-sector tracking for all session types (optimized)
+  private readonly MICRO_SECTORS_PER_SECTOR = 8;
+  private readonly TOTAL_MICRO_SECTORS = 24;
+  
+  // Cached calculations (computed once per session, not per car)
+  private cachedSectorLength: number = 0; // trackLength / 3
+  private cachedMicroSectorLength: number = 0; // sectorLength / 8
+  
+  // Fastest lap time per micro-sector (across all drivers) - for purple comparison
+  private fastestMicroSectorLapTimes: Map<number, number> = new Map(); // microSectorIndex(0-23) -> fastest currentLapTimeInMS
+  
+  // Personal best lap time per driver per micro-sector - for green comparison
+  private personalBestMicroSectorLapTimes: Map<number, Map<number, number>> = new Map(); // carIndex -> Map<microSectorIndex, personalBest currentLapTimeInMS>
+  
+  // Store colors directly (no recalculation needed)
+  private microSectorColors: Map<number, Map<number, 'purple' | 'green' | 'yellow' | 'grey'>> = new Map(); // carIndex -> Map<microSectorIndex, color>
+  
+  // Simplified tracking (no entryTimeInMS needed)
+  private microSectorTracking: Map<number, {
+    currentMicroSectorIndex: number; // 0-23
+    entryDistance: number;
+  }> = new Map();
   
   // Track previous state for event-based emission (only emit on meaningful changes)
   private previousCarStates: Map<number, {
@@ -345,6 +379,7 @@ export class TelemetryService extends EventEmitter {
           const currentLapNum = lapData.m_currentLapNum || 0;
           const previousLapNum = this.previousLapNumbers.get(index) || 0;
           
+          
           // Get previous state for this car
           const prevState = this.previousCarStates.get(index) || {
             position: 0,
@@ -364,15 +399,181 @@ export class TelemetryService extends EventEmitter {
           const currentResultStatus = lapData.m_resultStatus || 0;
           const currentPitStatus = lapData.m_pitStatus || 0;
           
+          // Get previous sector early (needed for micro-sector tracking)
+          const prevSector = prevState.sector ?? 0;
+          
+          // Extract values once for micro-sector tracking (avoid redundant extraction)
+          const currentLapDistance = lapData.m_lapDistance || 0;
+          const currentLapTimeInMS = lapData.m_currentLapTimeInMS || 0;
+          const trackLength = this.sessionData.trackLength || 0;
+          
+          // Clean up inactive cars (memory leak prevention)
+          if (currentPosition === 0) {
+            this.microSectorTracking.delete(index);
+            this.microSectorColors.delete(index);
+            // Keep personalBestMicroSectorLapTimes and fastestMicroSectorLapTimes (session-level stats)
+          }
+          
+          // Micro-sector tracking for ALL session types (qualifying, practice, race)
+          // Visualization handled by frontend (only shown in practice/qualifying tables)
+          if (trackLength > 0 && currentLapDistance >= 0 && currentLapDistance < trackLength && currentLapTimeInMS > 0) {
+            // Initialize or get tracking (lazy initialization - only for active cars)
+            let tracking = this.microSectorTracking.get(index);
+            if (!tracking) {
+              tracking = {
+                currentMicroSectorIndex: 0,
+                entryDistance: 0
+              };
+              this.microSectorTracking.set(index, tracking);
+            }
+            
+            // Calculate distance within current major sector (using cached values - no redundant calculation)
+            const sectorStartDistance = currentSector * this.cachedSectorLength;
+            const distanceInSector = currentLapDistance - sectorStartDistance;
+            
+            // Calculate micro-sector index (use cached microSectorLength - no redundant division)
+            const microSectorInMajor = Math.floor(distanceInSector / this.cachedMicroSectorLength);
+            const clampedMicroSector = Math.min(microSectorInMajor, this.MICRO_SECTORS_PER_SECTOR - 1);
+            const globalMicroSectorIndex = (currentSector * this.MICRO_SECTORS_PER_SECTOR) + clampedMicroSector;
+            
+            // Detect boundary crossing (sector change OR micro-sector change)
+            const sectorChanged = currentSector !== prevSector;
+            const microSectorChanged = globalMicroSectorIndex !== tracking.currentMicroSectorIndex;
+            
+            if (sectorChanged || microSectorChanged) {
+              hasMeaningfulChange = true;
+              
+              // Store color for completed micro-sector (compare currentLapTimeInMS directly)
+              if (tracking.currentMicroSectorIndex >= 0) {
+                const previousMicroSectorIndex = tracking.currentMicroSectorIndex;
+                
+                // Initialize maps if needed (optimized Map.has() pattern)
+                if (!this.microSectorColors.has(index)) {
+                  this.microSectorColors.set(index, new Map());
+                }
+                if (!this.personalBestMicroSectorLapTimes.has(index)) {
+                  this.personalBestMicroSectorLapTimes.set(index, new Map());
+                }
+                
+                const driverColors = this.microSectorColors.get(index)!;
+                const driverBestMap = this.personalBestMicroSectorLapTimes.get(index)!;
+                
+                // Compare currentLapTimeInMS directly (lower time = faster)
+                const fastestLapTime = this.fastestMicroSectorLapTimes.get(previousMicroSectorIndex) ?? Infinity;
+                const personalBestLapTime = driverBestMap.get(previousMicroSectorIndex) ?? Infinity;
+                
+                // Determine color immediately based on comparison (only if valid lap time)
+                if (currentLapTimeInMS > 0) {
+                  if (currentLapTimeInMS < fastestLapTime) {
+                    driverColors.set(previousMicroSectorIndex, 'purple'); // Fastest overall
+                    this.fastestMicroSectorLapTimes.set(previousMicroSectorIndex, currentLapTimeInMS);
+                  } else if (currentLapTimeInMS < personalBestLapTime) {
+                    driverColors.set(previousMicroSectorIndex, 'green'); // Personal best
+                    driverBestMap.set(previousMicroSectorIndex, currentLapTimeInMS);
+                  } else {
+                    driverColors.set(previousMicroSectorIndex, 'yellow'); // Slower than personal best
+                    if (personalBestLapTime === Infinity) {
+                      driverBestMap.set(previousMicroSectorIndex, currentLapTimeInMS); // First attempt becomes personal best
+                    }
+                  }
+                }
+              }
+              
+              // Update tracking state (no entryTimeInMS needed)
+              tracking.currentMicroSectorIndex = globalMicroSectorIndex;
+              tracking.entryDistance = currentLapDistance;
+            }
+            
+            // Detect lap reset (use existing detection)
+            if (currentLapNum > previousLapNum && previousLapNum > 0) {
+              // Clear current colors for new lap (keep fastest/personal best lap times)
+              const driverColors = this.microSectorColors.get(index);
+              if (driverColors) {
+                driverColors.clear();
+              }
+              // Reset tracking
+              tracking.currentMicroSectorIndex = 0;
+              tracking.entryDistance = 0;
+            }
+          }
+          
           // Detect lap completion: lap number increased
           if (currentLapNum > previousLapNum && previousLapNum > 0) {
             hasMeaningfulChange = true;
-            // Get the completed lap data BEFORE updating the map
+            // S3 is now stored on sector completion (sector 2 → 0), not here
+            // Just detect lap completion for meaningful change detection
+          }
+          
+          // Capture S1 when entering sector 2 (sector 1 completed)
+          if (currentSector === 1 && prevSector === 0 && currentDriverStatus === 1) {
+            const s1Time = lapData.m_sector1TimeInMS || 0;
+            const s1Minutes = lapData.m_sector1TimeMinutes || 0;
+            if (s1Time > 0) {
+              // Store S1 for right-side persistence
+              this.persistedLS1.set(index, { time: s1Time, minutes: s1Minutes });
+              // Clear S2 and S3 from right-side persistence when S1 completes (new lap started)
+              this.persistedLS2.delete(index);
+              this.persistedLS3.delete(index);
+            }
+          }
+          
+          // Capture S2 when entering sector 3 (sector 2 completed)
+          // Also store S1/S2 for S3 calculation on sector completion
+          if (currentSector === 2 && prevSector === 1 && currentDriverStatus === 1) {
+            // Capture S2 for persistence (right-side column)
+            const s2Time = lapData.m_sector2TimeInMS || 0;
+            const s2Minutes = lapData.m_sector2TimeMinutes || 0;
+            if (s2Time > 0) {
+              this.persistedLS2.set(index, { time: s2Time, minutes: s2Minutes });
+            }
+            
+            // Also store S1/S2 for S3 calculation on sector completion (when entering sector 1 of next lap)
+            const s1Time = lapData.m_sector1TimeInMS || 0;
+            const s1Minutes = lapData.m_sector1TimeMinutes || 0;
+            if (s1Time > 0 && s2Time > 0) {
+              this.completedLapSectors.set(index, {
+                s1: s1Time,
+                s1Minutes: s1Minutes,
+                s2: s2Time,
+                s2Minutes: s2Minutes
+              });
+            }
+          }
+          
+          // Capture S3 when entering sector 1 of next lap (sector 3 completed: sector 2 → 0)
+          if (currentSector === 0 && prevSector === 2 && currentDriverStatus === 1) {
+            // Use lastLapTimeInMS directly from current packet (most accurate timing)
+            const lastLapTimeInMS = lapData.m_lastLapTimeInMS || 0;
+            if (lastLapTimeInMS > 0) {
+              // Use stored S1/S2 from when driver entered sector 3
+              const storedSectors = this.completedLapSectors.get(index);
+              if (storedSectors) {
+                // Calculate S3 using stored S1/S2 from completed lap
+                const s3Time = calculateS3TimeForCompletedLap(
+                  lastLapTimeInMS, // Use from current packet, not map (more accurate timing)
+                  storedSectors.s1,
+                  storedSectors.s1Minutes,
+                  storedSectors.s2,
+                  storedSectors.s2Minutes
+                );
+                // Store S3 for persistence (right-side column) - updated on sector completion, not lap completion
+                this.persistedLS3.set(index, s3Time);
+                // Clear stored sectors after use
+                this.completedLapSectors.delete(index);
+              } else {
+                // Fallback: get lap data from map for S1/S2, but use current packet for lastLapTime
             const completedLapData = this.lapDataMap.get(index);
-            if (completedLapData && completedLapData.lastLapTimeInMS > 0) {
-              const s3Time = this.calculateS3TimeForCompletedLap(completedLapData);
-              this.completedLapS3Map.set(index, s3Time);
-              console.log(`🏁 Lap ${previousLapNum} completed for car ${index}, S3: ${s3Time.toFixed(3)}s`);
+                if (completedLapData) {
+                  const s3Time = calculateS3TimeForCompletedLap(
+                    lastLapTimeInMS, // Use from current packet
+                    completedLapData.sector1TimeInMS,
+                    completedLapData.sector1TimeMinutes,
+                    completedLapData.sector2TimeInMS,
+                    completedLapData.sector2TimeMinutes
+                  );
+                  this.persistedLS3.set(index, s3Time);
+                }
+              }
             }
           }
           
@@ -387,6 +588,13 @@ export class TelemetryService extends EventEmitter {
             currentPitStatus !== prevState.pitStatus                                    // Pit entry/exit
           ) {
             hasMeaningfulChange = true;
+          }
+          
+          // Clear right-side sector times when entering out lap (driverStatus = 3)
+          if (currentDriverStatus === 3 && prevState.driverStatus !== 3) {
+            this.persistedLS1.delete(index);
+            this.persistedLS2.delete(index);
+            this.persistedLS3.delete(index);
           }
           
           // Update previous lap number for next comparison
@@ -441,7 +649,7 @@ export class TelemetryService extends EventEmitter {
       
       // Only emit if something meaningful changed (not on every 60Hz packet)
       if (hasMeaningfulChange) {
-        this.emitCombinedTelemetryData();
+      this.emitCombinedTelemetryData();
       }
     }
   }
@@ -486,23 +694,7 @@ export class TelemetryService extends EventEmitter {
     }
   }
 
-  // Helper function to calculate S3 time for completed laps only (uses shared helper)
-  private calculateS3TimeForCompletedLap(lapData: LapData): number {
-    return calculateS3TimeForCompletedLap(
-      lapData.lastLapTimeInMS,
-      lapData.sector1TimeInMS,
-      lapData.sector1TimeMinutes,
-      lapData.sector2TimeInMS,
-      lapData.sector2TimeMinutes
-    );
-  }
 
-  // Helper function to get S3 time (returns completed lap S3 or 0 for current lap)
-  private calculateS3Time(lapData: LapData, carIndex: number): number {
-    // For current lap, return 0 (S3 only shows after lap completion)
-    // For completed laps, return the stored S3 time
-    return this.completedLapS3Map.get(carIndex) || 0;
-  }
 
   // Process Session History Packet (ID: 11)
   private processSessionHistoryPacket(data: any): void {
@@ -605,7 +797,6 @@ export class TelemetryService extends EventEmitter {
     if (this.currentSessionUid !== null && 
         (this.currentSessionUid !== newSessionUid || 
          this.sessionData.sessionType !== newSessionType)) {
-      console.log('🔄 New session detected, clearing cached data...');
       this.clearSessionData();
       this.clearPreviousStates(); // Clear state tracking for new session
       // Emit session change event to frontend (convert bigint to number for JSON)
@@ -622,7 +813,6 @@ export class TelemetryService extends EventEmitter {
         this.previousSessionTimeLeft !== null &&
         newSessionTimeLeft !== undefined &&
         newSessionTimeLeft > this.previousSessionTimeLeft + 30) { // 30 second threshold
-      console.log('🔄 Session restart detected (same session, time reset), clearing cached data...');
       this.clearSessionData();
       this.clearPreviousStates(); // Clear state tracking for session restart
       // Emit session restart event to frontend (convert bigint to number for JSON)
@@ -641,8 +831,9 @@ export class TelemetryService extends EventEmitter {
     }
     if (data.m_trackLength !== undefined) {
       this.sessionData.trackLength = data.m_trackLength;
-      // Micro-sector tracker disabled - track length stored in sessionData only
-      // this.microSectorTracker.trackLength = data.m_trackLength;
+      // Calculate ONCE per session (not per car) - cached for performance
+      this.cachedSectorLength = this.sessionData.trackLength / 3;
+      this.cachedMicroSectorLength = this.cachedSectorLength / this.MICRO_SECTORS_PER_SECTOR;
     }
     if (data.m_sessionType !== undefined) {
       this.sessionData.sessionType = data.m_sessionType;
@@ -673,10 +864,20 @@ export class TelemetryService extends EventEmitter {
     this.bestLapSector2Map.clear();
     this.bestLapSector3Map.clear();
     this.previousLapNumbers.clear();
-    this.completedLapS3Map.clear();
+    this.completedLapSectors.clear();
+    this.persistedLS1.clear(); // Clear persisted sector times
+    this.persistedLS2.clear();
+    this.persistedLS3.clear();
+    // Clear micro-sector tracking maps
+    this.microSectorTracking.clear();
+    this.microSectorColors.clear();
+    // Option: Clear fastest/personal best if you want fresh stats per session:
+    // this.fastestMicroSectorLapTimes.clear();
+    // this.personalBestMicroSectorLapTimes.clear();
+    this.cachedSectorLength = 0;
+    this.cachedMicroSectorLength = 0;
     this.currentSessionData = [];
     this.previousSessionTimeLeft = null; // Reset session restart detection
-    console.log('✅ Session data cleared');
   }
 
   // Process Event Packet (ID: 3)
@@ -721,7 +922,7 @@ export class TelemetryService extends EventEmitter {
           sessionUID: BigInt(data.m_header?.m_sessionUid || 0)
         };
       });
-
+      
       // Emit final classification event
       this.emit('finalClassification', finalResults);
 
@@ -775,7 +976,6 @@ export class TelemetryService extends EventEmitter {
 
   // Emit combined telemetry data for all cars
   private emitCombinedTelemetryData(): void {
-    const startTime = Date.now();
     const allCarsData: F123TelemetryData[] = [];
     
     // Iterate over Map keys (only cars that have data) instead of fixed 22-car loop
@@ -821,8 +1021,11 @@ export class TelemetryService extends EventEmitter {
           lapData,
           carStatus,
           stintHistory,
-          microSectors: [], // Micro-sector tracking disabled for performance
-          // microSectors: this.getMicroSectorColors(carIndex, participant?.driverName || `Driver ${carIndex + 1}`),
+          // Generate micro-sectors for all session types (tracking always active)
+          // Frontend handles visualization (only shown in practice/qualifying tables)
+          microSectors: (this.sessionData.trackLength > 0 && lapData.lapDistance > 0) 
+            ? this.getMicroSectorColors(carIndex, lapData.sector, lapData.lapDistance)
+            : [],
           sessionData: {
             totalLaps: this.sessionData.totalLaps,
             trackLength: this.sessionData.trackLength
@@ -836,7 +1039,13 @@ export class TelemetryService extends EventEmitter {
           bestLapTime: lapData.bestLapTimeInMS / 1000, // Convert to seconds
           sector1Time: lapData.sector1TimeInMS / 1000, // Convert to seconds (current lap)
           sector2Time: lapData.sector2TimeInMS / 1000, // Convert to seconds (current lap)
-          sector3Time: this.calculateS3Time(lapData, carIndex), // Get S3 from completed laps only
+          sector3Time: 0, // Micro-sectors will have its own logic - placeholder for now
+          // Last completed sector times (right-side columns) - updated on sector completion
+          LS1: this.persistedLS1.get(carIndex)?.time || 0, // In milliseconds
+          LS1Minutes: this.persistedLS1.get(carIndex)?.minutes || 0,
+          LS2: this.persistedLS2.get(carIndex)?.time || 0, // In milliseconds
+          LS2Minutes: this.persistedLS2.get(carIndex)?.minutes || 0,
+          LS3: this.persistedLS3.get(carIndex) || 0, // In seconds (already calculated)
           // Best lap sector times for practice/qualifying tables
           bestLapSector1Time: (this.bestLapSector1Map.get(carIndex) || 0) / 1000, // Convert to seconds
           bestLapSector2Time: (this.bestLapSector2Map.get(carIndex) || 0) / 1000, // Convert to seconds
@@ -861,16 +1070,44 @@ export class TelemetryService extends EventEmitter {
     }
     
     if (allCarsData.length > 0) {
-      const processingTime = Date.now() - startTime;
-      if (processingTime > 100) { // Log if processing takes more than 100ms
-        console.log(`⚠️ Slow telemetry processing: ${processingTime}ms for ${allCarsData.length} cars`);
-      }
       
       // Update data buffers for getter methods
       this.updateDataBuffers(allCarsData);
       
       this.emit('telemetry', allCarsData);
     }
+  }
+
+  // Simplified micro-sector color generation (read stored colors directly)
+  private getMicroSectorColors(carIndex: number, currentSector: number, lapDistance: number): Array<'purple' | 'green' | 'yellow' | 'grey'> {
+    const tracking = this.microSectorTracking.get(carIndex);
+    if (!tracking) {
+      // Return all grey if no tracking data (always show 24 squares)
+      return new Array(this.TOTAL_MICRO_SECTORS).fill('grey');
+    }
+    
+    const driverColors = this.microSectorColors.get(carIndex);
+    
+    // Always return 24-element array (grey for uncompleted, stored colors for completed)
+    const colors: Array<'purple' | 'green' | 'yellow' | 'grey'> = new Array(this.TOTAL_MICRO_SECTORS);
+    
+    // Calculate current position once (using cached values - no redundant division)
+    const sectorStartDistance = currentSector * this.cachedSectorLength;
+    const lapDistanceInSector = Math.max(0, lapDistance - sectorStartDistance);
+    const microSectorInMajor = Math.floor(lapDistanceInSector / this.cachedMicroSectorLength);
+    const clampedMicroSector = Math.min(microSectorInMajor, this.MICRO_SECTORS_PER_SECTOR - 1);
+    const currentGlobalIndex = (currentSector * this.MICRO_SECTORS_PER_SECTOR) + clampedMicroSector;
+    
+    // Fill colors (read stored colors for completed segments, grey for uncompleted)
+    for (let i = 0; i < this.TOTAL_MICRO_SECTORS; i++) {
+      if (i < currentGlobalIndex && driverColors && driverColors.has(i)) {
+        colors[i] = driverColors.get(i)!; // Read stored color (no recalculation)
+      } else {
+        colors[i] = 'grey'; // Not completed yet (always show grey squares)
+      }
+    }
+    
+    return colors;
   }
 
   // Helper method to get team name from team ID (uses shared constant)
@@ -916,12 +1153,15 @@ export class TelemetryService extends EventEmitter {
       // Add to buffer (keep last 1000 entries)
       allCarsData.forEach(data => {
         this.dataBuffer.push(data);
-        this.currentSessionData.push(data);
+    this.currentSessionData.push(data);
       });
       
-      // Trim buffer if it exceeds 1000 entries
+      // Trim buffers if they exceed 1000 entries
       if (this.dataBuffer.length > 1000) {
-        this.dataBuffer.shift();
+      this.dataBuffer.shift();
+    }
+      if (this.currentSessionData.length > 1000) {
+        this.currentSessionData.shift();
       }
     }
   }
