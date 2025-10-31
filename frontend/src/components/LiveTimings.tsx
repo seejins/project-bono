@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { convertToLiveTimingsFormat } from '../utils/f123DataMapping';
+import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
 
 // Driver data interface for live timings
 interface DriverData {
@@ -12,11 +12,12 @@ interface DriverData {
   driverAbbreviation: string;
   teamColor: string;
   fastestLap: string;
-  fastestLapTire: 'S' | 'M' | 'H';
+  fastestLapTire?: 'S' | 'M' | 'H' | 'I' | 'W'; // Only set when there's a valid lap time
   gap: string;
   currentLapTime: string;
   lastLapTime: string;
   bestLap: string;
+  bestLapTire?: 'S' | 'M' | 'H' | 'I' | 'W';
   interval: string;
   status: 'RUNNING' | 'OUT_LAP' | 'IN_LAP' | 'PITTING' | 'PIT' | 'OUT' | 'DNF' | 'DSQ' | 'RET' | 'NCL' | 'FINISHED';
   driverStatus: 'RUNNING' | 'OUT_LAP' | 'IN_LAP' | 'IN_GARAGE';
@@ -39,8 +40,6 @@ interface DriverData {
   totalRaceLaps: number;
 }
 
-// Interface for persisted sector times
-
 // Session Timer Component - Pure JavaScript animation (no React re-renders)
 const SessionTimer = ({ sessionTimeLeft, isRunning }: { sessionTimeLeft: number; isRunning: boolean }) => {
   const displayRef = useRef<HTMLSpanElement>(null);
@@ -50,7 +49,6 @@ const SessionTimer = ({ sessionTimeLeft, isRunning }: { sessionTimeLeft: number;
   
   useEffect(() => {
     if (isRunning && displayRef.current) {
-      console.log(`⏰ SessionTimer started: ${sessionTimeLeft}s remaining`);
       startTimeRef.current = Date.now();
       initialTimeRef.current = sessionTimeLeft;
       
@@ -61,16 +59,10 @@ const SessionTimer = ({ sessionTimeLeft, isRunning }: { sessionTimeLeft: number;
           const minutes = Math.floor(remaining / 60);
           const seconds = (remaining % 60).toFixed(0).padStart(2, '0');
           displayRef.current.textContent = `${minutes}:${seconds}`;
-          
-          // Log timer updates every 5 seconds to track frequency
-          if (Math.floor(elapsed) % 5 === 0 && Math.floor(elapsed) > 0) {
-            console.log(`⏰ Timer update: ${minutes}:${seconds} remaining (elapsed: ${elapsed.toFixed(1)}s)`);
-          }
         }
       }, 100); // Update every 100ms for smooth countdown
     } else {
       if (timerRef.current) {
-        console.log(`⏰ SessionTimer stopped`);
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
@@ -230,10 +222,6 @@ export const LiveTimings = () => {
   const [previousDrivers, setPreviousDrivers] = useState<any[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [renderCount, setRenderCount] = useState(0);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [updateDelta, setUpdateDelta] = useState<number | null>(null);
-  const previousS1Times = useRef<Map<string, number>>(new Map());
   const previousLapNumbers = useRef<Map<string, number>>(new Map());
   const [currentSessionUid, setCurrentSessionUid] = useState<number | null>(null);
   const [currentSessionType, setCurrentSessionType] = useState<number | null>(null);
@@ -244,6 +232,7 @@ export const LiveTimings = () => {
   const lastDriversUpdateRef = useRef<number>(0);
   const prevStatusMap = useRef<Map<number, string>>(new Map());
   const prevPositionMap = useRef<Map<number, number>>(new Map());
+  const prevBestLapMap = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     // Initialize socket connection
@@ -267,9 +256,6 @@ export const LiveTimings = () => {
 
     // Listen for telemetry data
     newSocket.on('telemetry', (data: any) => {
-      const now = new Date();
-      setUpdateDelta(lastUpdate ? now.getTime() - lastUpdate.getTime() : null);
-      setLastUpdate(now);
       processSessionData(data);
     });
 
@@ -290,7 +276,6 @@ export const LiveTimings = () => {
       // Clear all state
       setDrivers([]);
       setPreviousDrivers([]);
-      previousS1Times.current.clear();
       previousLapNumbers.current.clear();
       setCurrentSessionUid(data.sessionUid);
       setCurrentSessionType(data.newSessionType);
@@ -302,7 +287,6 @@ export const LiveTimings = () => {
       // Clear all state (same as session change)
       setDrivers([]);
       setPreviousDrivers([]);
-      previousS1Times.current.clear();
       previousLapNumbers.current.clear();
       setCurrentSessionUid(data.sessionUid);
       setCurrentSessionType(data.sessionType);
@@ -325,18 +309,12 @@ export const LiveTimings = () => {
   }, []); // Only run once on mount/unmount
 
   const processSessionData = (data: any) => {
-    // Create mapping of previous drivers by carNumber
-    const prevDriversMap = new Map();
-    previousDrivers.forEach((driver: any) => {
-      prevDriversMap.set(String(driver.carNumber), driver);
-    });
-
     // Process F1 23 UDP data and update session/driver states
     // If data is an array, extract session info from first driver
     const firstDriver = Array.isArray(data) && data.length > 0 ? data[0] : data;
     
     const sessionType = firstDriver.sessionType || firstDriver.lapData?.sessionType || 10;
-    const sessionUid = firstDriver.header?.sessionUid || firstDriver.sessionUid || 0;
+    const sessionUid = firstDriver.sessionUid || firstDriver.header?.sessionUid || 0; // sessionUid now included in telemetry data
     const sessionTimeLeft = firstDriver.sessionTimeLeft || 0;
     
     // Detect session change (by session UID or session type)
@@ -345,7 +323,6 @@ export const LiveTimings = () => {
       console.log('🔄 New session detected in frontend, clearing state...');
       setDrivers([]);
       setPreviousDrivers([]);
-      previousS1Times.current.clear();
       previousLapNumbers.current.clear();
     }
     
@@ -357,7 +334,6 @@ export const LiveTimings = () => {
       console.log('🔄 Session restart detected in frontend (same session, time reset), clearing state...');
       setDrivers([]);
       setPreviousDrivers([]);
-      previousS1Times.current.clear();
       previousLapNumbers.current.clear();
     }
     
@@ -365,31 +341,7 @@ export const LiveTimings = () => {
     setCurrentSessionType(sessionType);
     previousSessionTimeLeft.current = sessionTimeLeft;
     
-    const getSessionTypeName = (sessionTypeNum: number): string => {
-      const sessionTypes = [
-        'Unknown', 'Practice 1', 'Practice 2', 'Practice 3',
-        'Short Practice', 'Q1', 'Q2', 'Q3', 'Short Qualifying',
-        'One Shot Qualifying', 'Race', 'Race 2', 'Time Trial'
-      ];
-      return sessionTypes[sessionTypeNum] || 'Unknown';
-    };
-
-    const getSessionCategory = (sessionTypeNum: number): 'PRACTICE' | 'QUALIFYING' | 'RACE' => {
-      // Practice sessions (1-4)
-      if (sessionTypeNum >= 1 && sessionTypeNum <= 4) {
-        return 'PRACTICE';
-      }
-      // Qualifying sessions (5-9)
-      if (sessionTypeNum >= 5 && sessionTypeNum <= 9) {
-        return 'QUALIFYING';
-      }
-      // Race sessions (10-11)
-      if (sessionTypeNum >= 10 && sessionTypeNum <= 11) {
-        return 'RACE';
-      }
-      // Default to PRACTICE for unknown/other types
-      return 'PRACTICE';
-    };
+    // Use shared utilities for session type helpers
     const sessionTypeName = getSessionTypeName(sessionType);
     const sessionCategory = getSessionCategory(sessionType);
     
@@ -453,7 +405,6 @@ export const LiveTimings = () => {
         if (!lapData) return;
 
         const carNumber = driver.carNumber;
-        const prevUI = prevDriversMap.get(String(carNumber));
 
         // Position changes via ref map (no render-lag dependency)
         const currentPosition = lapData.carPosition || 0;
@@ -477,19 +428,22 @@ export const LiveTimings = () => {
         // Sector completion (only when driver is RUNNING): S0->1 or 1->2
         const currentSector = lapData.sector ?? 0;
         const prevSector = previousSectors.current.get(carNumber) ?? currentSector;
-        if (prevUI && prevUI.driverStatus === 'RUNNING' && currentSector > prevSector) {
+        const driverStatusStr = mapDriverStatus(lapData.driverStatus ?? 0);
+        if (driverStatusStr === 'RUNNING' && currentSector > prevSector) {
           hasUpdates = true;
           updateReasons.push(`Car ${carIndex}: Sector ${prevSector} → ${currentSector}`);
         }
         previousSectors.current.set(carNumber, currentSector);
 
-        // Best lap time changes
+        // Best lap time changes (compare milliseconds directly)
         const currentBestLap = lapData.bestLapTimeInMS || 0;
-        const previousBestLapStr = prevUI?.bestLap || '0';
-        const previousBestLap = parseFloat(previousBestLapStr.replace(':', '.')) || 0;
-        if (prevUI && currentBestLap > 0 && currentBestLap !== previousBestLap) {
+        const previousBestLap = prevBestLapMap.current.get(carNumber) ?? 0;
+        if (currentBestLap > 0 && currentBestLap !== previousBestLap) {
           hasUpdates = true;
           updateReasons.push(`Car ${carIndex}: New best lap ${(currentBestLap / 1000).toFixed(3)}s`);
+        }
+        if (currentBestLap > 0) {
+          prevBestLapMap.current.set(carNumber, currentBestLap);
         }
 
         // Driver status changes via ref map (no render-lag dependency)
@@ -518,22 +472,21 @@ export const LiveTimings = () => {
           console.log('🎯 UPDATE TRIGGERS DETECTED:', shown.join(', '), updateReasons.length > 10 ? `(+${updateReasons.length - 10} more)` : '');
         }
       } else {
-        // Heartbeat fallback: refresh at least every 33ms to avoid stale UI (was 400ms; now ~30Hz for smooth F1 UDP live data)
-        const now = Date.now();
-        if (now - (lastDriversUpdateRef.current || 0) < 33) {
-          return; // Skip if recently refreshed and no triggers
-        }
-        // console.log('[heartbeat-refresh] Forcing refresh due to inactivity');
+        // No meaningful changes detected - skip update (event-based updates only)
+        return;
       }
       
-      // Prepare hash map for previous drivers for O(1) lookup
-      // const prevDriversMap = new Map(previousDrivers.map(d => [d.id, d])); // This line is now redundant
-      // Prepare pruned map for lap numbers
+      // Prepare pruned map for lap numbers and best lap times
       const newDriverIds = new Set(data.map((d: any) => String(d.carNumber)));
-      // Prune previousLapNumbers to only include current drivers
+      // Prune maps to only include current drivers
       for (const key of previousLapNumbers.current.keys()) {
         if (!newDriverIds.has(key)) {
           previousLapNumbers.current.delete(key);
+        }
+      }
+      for (const key of prevBestLapMap.current.keys()) {
+        if (!newDriverIds.has(String(key))) {
+          prevBestLapMap.current.delete(key);
         }
       }
 
@@ -543,53 +496,13 @@ export const LiveTimings = () => {
         .sort((a, b) => a.position - b.position);
 
       // Trim previousDrivers to current session drivers only
-      const nextDriverIdsSet = new Set(newDrivers.map(d => d.id));
-      const trimmedPreviousDrivers = previousDrivers.filter(d => nextDriverIdsSet.has(d.id));
+      const newDriverIdsByStringId = new Set(newDrivers.map(d => d.id));
+      const trimmedPreviousDrivers = previousDrivers.filter(d => newDriverIdsByStringId.has(d.id));
       setPreviousDrivers(trimmedPreviousDrivers);
 
       setDrivers(newDrivers);
       lastDriversUpdateRef.current = Date.now();
-      setRenderCount(prev => prev + 1);
-      // (removed processStartTime/processTime log block)
     }
-    // (removed left-over console logs)
-  };
-
-  const formatLapTime = (timeInSeconds: number): string => {
-    const minutes = Math.floor(timeInSeconds / 60);
-    const seconds = (timeInSeconds % 60).toFixed(3);
-    return `${minutes}:${seconds}`;
-  };
-
-  const generateMicroSectorsFromData = (driver: any): Array<'purple' | 'green' | 'yellow' | 'grey'> => {
-    // Generate micro-sectors based on F1 23 data
-    const microSectors: Array<'purple' | 'green' | 'yellow' | 'grey'> = [];
-    
-    for (let i = 0; i < 24; i++) {
-      const rand = Math.random();
-      if (rand < 0.1) {
-        microSectors.push('purple');
-      } else if (rand < 0.3) {
-        microSectors.push('green');
-      } else if (rand < 0.8) {
-        microSectors.push('yellow');
-      } else {
-        microSectors.push('grey');
-      }
-    }
-    
-    return microSectors;
-  };
-
-  const switchSessionType = (sessionType: 'PRACTICE' | 'QUALIFYING' | 'RACE') => {
-    console.log('Switching session type to:', sessionType);
-    // TODO: Implement actual session type switching
-  };
-
-  const formatTime = (timeInMs: number): string => {
-    const minutes = Math.floor(timeInMs / 60000);
-    const seconds = Math.floor((timeInMs % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const getSessionDisplay = () => {
@@ -604,29 +517,6 @@ export const LiveTimings = () => {
       return `${minutes}:${seconds}`;
     }
   };
-
-  const getTireColor = (tire: 'S' | 'M' | 'H'): string => {
-    switch (tire) {
-      case 'S': return 'text-red-500';
-      case 'M': return 'text-yellow-500';
-      case 'H': return 'text-white';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'RUNNING': return 'text-green-500';
-      case 'OUT_LAP': return 'text-blue-500';
-      case 'IN_LAP': return 'text-orange-500';
-      case 'PITTING': return 'text-yellow-500';
-      case 'PIT': return 'text-yellow-500';
-      case 'OUT': return 'text-red-500';
-      case 'DNF': return 'text-red-500';
-      default: return 'text-gray-400';
-    }
-  };
-
 
   if (!sessionData) {
     return (
@@ -655,39 +545,6 @@ export const LiveTimings = () => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            {/* Session Type Switcher */}
-            <div className="flex space-x-2">
-              <button
-                onClick={() => switchSessionType('PRACTICE')}
-                className={`px-3 py-1 rounded text-sm ${
-                  sessionData.sessionType === 'PRACTICE' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Practice
-              </button>
-              <button
-                onClick={() => switchSessionType('QUALIFYING')}
-                className={`px-3 py-1 rounded text-sm ${
-                  sessionData.sessionType === 'QUALIFYING' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Qualifying
-              </button>
-              <button
-                onClick={() => switchSessionType('RACE')}
-                className={`px-3 py-1 rounded text-sm ${
-                  sessionData.sessionType === 'RACE' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Race
-              </button>
-            </div>
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm">📡 {isConnected ? 'Connected' : 'Disconnected'}</span>
@@ -802,9 +659,6 @@ const PracticeQualifyingTimingTable = ({
         <AnimatePresence mode="popLayout">
           {drivers
             .map((driver, index) => {
-              const previousIndex = previousDrivers.findIndex(d => d.id === driver.id);
-              const isMoving = previousIndex !== -1 && previousIndex !== index;
-              
               return (
                 <motion.div
                   key={driver.id}
@@ -849,35 +703,37 @@ const PracticeQualifyingTimingTable = ({
             <div className={`px-2 border-r border-gray-500 flex items-center justify-between ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
-              <span className="text-sm">{driver.fastestLap}</span>
-              <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
-                {driver.fastestLapTire}
-              </span>
+              <span className="text-sm font-mono">{driver.fastestLap}</span>
+              {driver.fastestLapTire && (
+                <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
+                  {driver.fastestLapTire}
+                </span>
+              )}
             </div>
             
             {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${getRetirementStatusColor(driver.status)}`}>
               {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* S1 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS1 !== Infinity && Math.abs(parseSectorTimeString(driver.sector1Time || '0') - fastestSectors.fastestS1) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector1Time || '--:--'}
             </div>
             
             {/* S2 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS2 !== Infinity && Math.abs(parseSectorTimeString(driver.sector2Time || '0') - fastestSectors.fastestS2) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector2Time || '--:--'}
             </div>
             
             {/* S3 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${fastestSectors.fastestS3 !== Infinity && Math.abs(parseSectorTimeString(driver.sector3Time || '0') - fastestSectors.fastestS3) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.sector3Time || '--:--'}
@@ -923,21 +779,21 @@ const PracticeQualifyingTimingTable = ({
             </div>
             
                 {/* S1 (Current) - Color coding: purple = best overall, green = personal best */}
-                <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+                <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
                  isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
                 }`}>
                  {driver.personalBestS1 || '--:--'}
                 </div>
             
               {/* S2 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+              <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
                 isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
               }`}>
                 {driver.personalBestS2 || '--:--'}
               </div>
             
               {/* S3 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 text-sm text-center ${
+              <div className={`px-2 text-sm text-center font-mono ${
                 isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
               }`}>
                 {driver.personalBestS3 || '--:--'}
@@ -1004,9 +860,6 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
         
         <AnimatePresence mode="popLayout">
           {drivers.map((driver, index) => {
-              const previousIndex = previousDrivers.findIndex(d => d.id === driver.id);
-              const isMoving = previousIndex !== -1 && previousIndex !== index;
-              
               return (
                 <motion.div
                   key={driver.id}
@@ -1064,37 +917,29 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
             </div>
             
             {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             } ${getRetirementStatusColor(driver.status)}`}>
               {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* Interval */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
             }`}>
               {driver.interval}
             </div>
             
             {/* Best Lap */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${
-              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
-                driver.bestLap === '1:27.146' ? 'text-purple-400' : ''
-              )
             }`}>
               {driver.bestLap}
             </div>
             
             {/* Last Lap */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${
-              driver.status !== 'RUNNING' ? 'opacity-25 text-gray-400' : (
-                driver.lastLapTime === '1:27.146' ? 'text-purple-400' : ''
-              )
             }`}>
               {driver.lastLapTime}
             </div>
@@ -1116,9 +961,9 @@ const RaceTimingTable = ({ drivers, previousDrivers }: { drivers: DriverData[], 
             </div>
             
             {/* Sector Times with color coding */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${getSectorColor(driver, 's1')}`}>{driver.personalBestS1 || '--:--'}</div>
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${getSectorColor(driver, 's2')}`}>{driver.personalBestS2 || '--:--'}</div>
-            <div className={`px-2 text-sm text-center ${getSectorColor(driver, 's3')}`}>{driver.personalBestS3 || '--:--'}</div>
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${getSectorColor(driver, 's1')}`}>{driver.personalBestS1 || '--:--'}</div>
+            <div className={`px-2 border-r border-gray-500 text-sm text-center font-mono ${getSectorColor(driver, 's2')}`}>{driver.personalBestS2 || '--:--'}</div>
+            <div className={`px-2 text-sm text-center font-mono ${getSectorColor(driver, 's3')}`}>{driver.personalBestS3 || '--:--'}</div>
                 </motion.div>
               );
             })}

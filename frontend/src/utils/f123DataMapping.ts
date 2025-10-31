@@ -42,45 +42,49 @@ export const getTireCompound = (compound: number): 'S' | 'M' | 'H' | 'I' | 'W' =
   }
 };
 
-// Gap Formatting
+// Gap Formatting - Add + prefix
 export const formatGap = (gapMs: number): string => {
   if (gapMs === 0) return '0.000'; // Show 0.000 instead of LEADER for consistency
   const seconds = gapMs / 1000;
   if (seconds < 60) {
-    return seconds.toFixed(3);
+    return `+${seconds.toFixed(3)}`;
   } else {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = (seconds % 60).toFixed(3);
-    return `${minutes}:${remainingSeconds}`;
+    return `+${minutes}:${remainingSeconds}`;
   }
 };
 
-// Lap Time Formatting
+// Lap Time Formatting - Fixed width (9 chars: MM:SS.mmm)
 export const formatLapTime = (timeInMs: number): string => {
-  if (timeInMs === 0) return '--:--.---';
+  if (timeInMs === 0) return '--:--.---'; // 9 chars: --:--.---
   const totalSeconds = timeInMs / 1000;
   const minutes = Math.floor(totalSeconds / 60);
-  const seconds = (totalSeconds % 60).toFixed(3);
+  const seconds = (totalSeconds % 60);
   
-  // Only show minutes if time is >= 60 seconds
-  if (minutes > 0) {
-    return `${minutes}:${seconds}`;
-  } else {
-    return seconds;
-  }
+  // Always format as MM:SS.mmm for fixed width (9 chars)
+  const minutesStr = minutes.toString().padStart(2, '0');
+  const secondsStr = seconds.toFixed(3);
+  const secondsParts = secondsStr.split('.');
+  const secondsFormatted = `${secondsParts[0].padStart(2, '0')}.${secondsParts[1]}`;
+  return `${minutesStr}:${secondsFormatted}`;
 };
 
-// Sector Time Formatting
+// Sector Time Formatting - Fixed width (6 chars: SS.mmm, or M:SS.mmm if minutes)
 export const formatSectorTime = (timeInMs: number, minutes: number = 0): string => {
-  if (timeInMs === 0) return '--.---';
+  if (timeInMs === 0) return '--.---'; // 6 chars: --.---
   const totalSeconds = timeInMs / 1000;
   const totalMinutes = minutes + Math.floor(totalSeconds / 60);
-  const remainingSeconds = (totalSeconds % 60).toFixed(3);
+  const remainingSeconds = (totalSeconds % 60);
   
   if (totalMinutes > 0) {
-    return `${totalMinutes}:${remainingSeconds}`;
+    // Format as M:SS.mmm for fixed width
+    const minutesStr = totalMinutes.toString().padStart(1, '0');
+    const secondsStr = remainingSeconds.toFixed(3).padStart(6, '0');
+    return `${minutesStr}:${secondsStr}`;
   } else {
-    return remainingSeconds;
+    // Format as SS.mmm for fixed width (6 chars)
+    return remainingSeconds.toFixed(3).padStart(6, '0');
   }
 };
 
@@ -163,9 +167,13 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
     
     // Timing data
     fastestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),
+    fastestLapTire: (lapData.bestLapTimeInMS || lapData.lastLapTimeInMS) > 0 
+      ? getTireCompound(carStatus.actualTyreCompound || 0) 
+      : undefined, // Only set if there's a valid lap time
     status: getDriverStatusDisplay(udpData),
     lastLapTime: formatLapTime(lapData.lastLapTimeInMS || 0),
     bestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),
+    bestLapTire: getTireCompound(carStatus.actualTyreCompound || 0), // Use current tire as approximation
     
     // Gap and interval - show terminal status when applicable, else gap to leader best
     gap: (() => {
@@ -183,7 +191,7 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
       const gapToLeaderBest = driverBestLap - leaderBestLapTime;
       return formatGap(gapToLeaderBest);
     })(),
-    interval: lapData.deltaToCarInFrontInMS ? `+${formatGap(lapData.deltaToCarInFrontInMS)}` : '',
+    interval: lapData.deltaToCarInFrontInMS ? formatGap(lapData.deltaToCarInFrontInMS) : '',
     
     // Position changes
     positionChange: calculatePositionChange(lapData.gridPosition || 0, lapData.carPosition || 0),
@@ -272,4 +280,32 @@ const getMicroSectorColor = (timeMs: number): 'purple' | 'green' | 'yellow' | 'g
   if (timeMs < 20000) return 'green';  // Fast
   if (timeMs < 25000) return 'yellow'; // Average
   return 'grey'; // Slow
+};
+
+// Session Type Name Helper
+export const getSessionTypeName = (sessionType: number): string => {
+  const sessionTypes = [
+    'Unknown', 'Practice 1', 'Practice 2', 'Practice 3',
+    'Short Practice', 'Q1', 'Q2', 'Q3', 'Short Qualifying',
+    'One Shot Qualifying', 'Race', 'Race 2', 'Time Trial'
+  ];
+  return sessionTypes[sessionType] || 'Unknown';
+};
+
+// Session Category Helper
+export const getSessionCategory = (sessionType: number): 'PRACTICE' | 'QUALIFYING' | 'RACE' => {
+  // Practice sessions (1-4)
+  if (sessionType >= 1 && sessionType <= 4) {
+    return 'PRACTICE';
+  }
+  // Qualifying sessions (5-9)
+  if (sessionType >= 5 && sessionType <= 9) {
+    return 'QUALIFYING';
+  }
+  // Race sessions (10-11)
+  if (sessionType >= 10 && sessionType <= 11) {
+    return 'RACE';
+  }
+  // Default to PRACTICE for unknown/other types
+  return 'PRACTICE';
 };

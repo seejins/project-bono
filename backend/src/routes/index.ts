@@ -1,6 +1,5 @@
 import { Express } from 'express';
 import { TelemetryService } from '../services/TelemetryService';
-import { StrategyEngine } from '../services/StrategyEngine';
 import { DatabaseService } from '../services/DatabaseService';
 import { F123UDPProcessor } from '../services/F123UDPProcessor';
 import { PostSessionProcessor } from '../services/PostSessionProcessor';
@@ -16,7 +15,6 @@ export function setupRoutes(
   app: Express,
   services: {
     telemetryService: TelemetryService;
-    strategyEngine: StrategyEngine;
     databaseService: DatabaseService;
     f123UDPProcessor: F123UDPProcessor;
     postSessionProcessor: PostSessionProcessor;
@@ -49,28 +47,6 @@ export function setupRoutes(
     res.json(buffer);
   });
 
-  // Get current strategy
-  app.get('/api/strategy', (req, res) => {
-    const strategy = services.strategyEngine.getCurrentStrategy();
-    if (strategy) {
-      res.json(strategy);
-    } else {
-      res.status(404).json({ error: 'No strategy available' });
-    }
-  });
-
-  // Get lap history
-  app.get('/api/laps', (req, res) => {
-    const laps = services.strategyEngine.getLapHistory();
-    res.json(laps);
-  });
-
-  // Reset strategy engine
-  app.post('/api/strategy/reset', (req, res) => {
-    services.strategyEngine.reset();
-    res.json({ message: 'Strategy engine reset' });
-  });
-
   // F1 23 UDP Processor status and control
   app.get('/api/f123-udp/status', (req, res) => {
     res.json({
@@ -82,16 +58,16 @@ export function setupRoutes(
 
   app.post('/api/f123-udp/start', async (req, res) => {
     try {
-      await services.f123UDPProcessor.start();
-      res.json({ message: 'F1 23 UDP Processor started successfully' });
+      await services.f123UDPProcessor.initialize();
+      res.json({ message: 'F1 23 UDP Processor initialized successfully' });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to start F1 23 UDP Processor' });
+      res.status(500).json({ error: 'Failed to initialize F1 23 UDP Processor' });
     }
   });
 
   app.post('/api/f123-udp/stop', async (req, res) => {
     try {
-      await services.f123UDPProcessor.stop();
+      services.f123UDPProcessor.stop();
       res.json({ message: 'F1 23 UDP Processor stopped successfully' });
     } catch (error) {
       res.status(500).json({ error: 'Failed to stop F1 23 UDP Processor' });

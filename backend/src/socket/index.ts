@@ -1,23 +1,21 @@
 import { Server } from 'socket.io';
 import { TelemetryService, F123TelemetryData } from '../services/TelemetryService';
-import { StrategyEngine } from '../services/StrategyEngine';
 import { SessionExportService } from '../services/SessionExportService';
 
 export function setupSocketHandlers(
   io: Server,
   services: {
     telemetryService: TelemetryService;
-    strategyEngine: StrategyEngine;
     sessionExportService: SessionExportService;
   }
 ) {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    // Send current telemetry data to new client
+    // Send current telemetry data to new client (serialize BigInt values)
     const currentData = services.telemetryService.getLastData();
     if (currentData) {
-      socket.emit('telemetry', currentData);
+      socket.emit('telemetry', serializeBigInt(currentData));
     }
 
     // Handle voice commands
@@ -29,52 +27,31 @@ export function setupSocketHandlers(
       socket.emit('voice_response', response);
     });
 
-    // Handle strategy requests
-    socket.on('request_strategy', () => {
-      const currentData = services.telemetryService.getLastData();
-      if (currentData) {
-        const strategy = services.strategyEngine.generateStrategy(
-          currentData,
-          50, // Default race length
-          {
-            airTemperature: currentData.airTemperature,
-            trackTemperature: currentData.trackTemperature,
-            rainPercentage: currentData.rainPercentage,
-            humidity: 50, // Default values
-            windSpeed: 0,
-            windDirection: 0
-          }
-        );
-        socket.emit('strategy', strategy);
-      }
-    });
-
     // Handle disconnection
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
     });
   });
 
-  // Set up telemetry data broadcasting
-  services.telemetryService.on('telemetry', (data) => {
-    io.emit('telemetry', data);
-    
-    // Analyze lap and generate strategy
-    const analysis = services.strategyEngine.analyzeLap(data);
-    const strategy = services.strategyEngine.generateStrategy(
-      data,
-      50, // Default race length
-      {
-        airTemperature: data.airTemperature,
-        trackTemperature: data.trackTemperature,
-        rainPercentage: data.rainPercentage,
-        humidity: 50,
-        windSpeed: 0,
-        windDirection: 0
+  // Helper function to convert BigInt to number for JSON serialization
+  const serializeBigInt = (obj: any): any => {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj === 'bigint') return Number(obj);
+    if (Array.isArray(obj)) return obj.map(serializeBigInt);
+    if (typeof obj === 'object') {
+      const result: any = {};
+      for (const key in obj) {
+        result[key] = serializeBigInt(obj[key]);
       }
-    );
-    
-    io.emit('strategy', strategy);
+      return result;
+    }
+    return obj;
+  };
+
+  // Set up telemetry data broadcasting (serialize BigInt values for JSON)
+  services.telemetryService.on('telemetry', (data) => {
+    const serializedData = serializeBigInt(data);
+    io.emit('telemetry', serializedData);
   });
 
   // Set up alert broadcasting
@@ -109,6 +86,15 @@ export function setupSocketHandlers(
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
+  });
+
+  // Set up session change/restart forwarding to clients
+  services.telemetryService.on('sessionChanged', (data) => {
+    io.emit('sessionChanged', data);
+  });
+
+  services.telemetryService.on('sessionRestarted', (data) => {
+    io.emit('sessionRestarted', data);
   });
 }
 

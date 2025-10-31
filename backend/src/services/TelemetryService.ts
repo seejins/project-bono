@@ -1,5 +1,7 @@
 import { F123UDP } from 'f1-23-udp';
 import { EventEmitter } from 'events';
+import { getTrackName, getTeamName, getSessionTypeName } from '../utils/f123Constants';
+import { calculateS3TimeForCompletedLap } from '../utils/f123Helpers';
 
 // F1 23 UDP Packet Types
 export interface PacketHeader {
@@ -9,7 +11,7 @@ export interface PacketHeader {
   gameMinorVersion: number; // Game minor version - "1.XX"
   packetVersion: number; // Version of this packet type, all start from 1
   packetId: number; // Identifier for the packet type
-  sessionUid: number; // Unique identifier for the session
+  sessionUid: bigint; // Unique identifier for the session
   sessionTime: number; // Session timestamp
   frameIdentifier: number; // Identifier for the frame the data was retrieved on
   overallFrameIdentifier: number; // Overall identifier for the frame the data was retrieved on
@@ -90,33 +92,7 @@ export interface TyreStintHistoryData {
   tyreVisualCompound: number; // Visual tyres used by this driver
 }
 
-// Micro-Sector Tracking Interfaces
-export interface MicroSectorData {
-  time: number; // Time in milliseconds
-  driverId: string; // Driver who set this time
-}
-
-export interface DriverLapProgress {
-  lapNumber: number;
-  completedMicroSectors: Map<number, number>; // micro-sector index -> time
-}
-
-export interface MicroSectorTracker {
-  // Global fastest times (only one driver per micro-sector)
-  fastestOverall: Map<number, MicroSectorData>;
-  
-  // Personal bests per driver
-  personalBest: Map<string, Map<number, number>>;
-  
-  // Current lap progress per driver
-  currentLapProgress: Map<string, DriverLapProgress>;
-  
-  // Track length for micro-sector calculation
-  trackLength: number;
-  
-  // Number of micro-sectors per lap
-  microSectorsPerLap: number;
-}
+// Micro-sector tracking interfaces removed (feature disabled for performance)
 
 // Combined telemetry data interface
 export interface F123TelemetryData {
@@ -190,6 +166,7 @@ export interface F123TelemetryData {
   
   // Additional calculated fields
   gapToPole?: number; // calculated gap in milliseconds
+  sessionUid?: number; // Session UID as number for frontend compatibility (converted from bigint)
   timestamp: Date;
 }
 
@@ -198,9 +175,23 @@ export class TelemetryService extends EventEmitter {
   public isRunning: boolean = false;
   private lastData: F123TelemetryData | null = null;
   private dataBuffer: F123TelemetryData[] = [];
-  private readonly BUFFER_SIZE = 1000; // Keep last 1000 data points
-  private sessionStartTime: Date | null = null;
   private currentSessionData: F123TelemetryData[] = [];
+  
+  // Cached header object to avoid recreating on every emission
+  private readonly DEFAULT_HEADER: PacketHeader = {
+    packetFormat: 2023,
+    gameYear: 23,
+    gameMajorVersion: 1,
+    gameMinorVersion: 0,
+    packetVersion: 1,
+    packetId: 2,
+    sessionUid: 0n,
+    sessionTime: 0,
+    frameIdentifier: 0,
+    overallFrameIdentifier: 0,
+    playerCarIndex: 0,
+    secondaryPlayerCarIndex: 255,
+  };
   
   // Store data for all cars
   private lapDataMap: Map<number, LapData> = new Map();
@@ -214,18 +205,19 @@ export class TelemetryService extends EventEmitter {
   private previousLapNumbers = new Map<number, number>(); // Track lap completion
   private completedLapS3Map = new Map<number, number>(); // Store S3 times for completed laps
   
-  // Store final classification and damage data
-  private finalClassificationData: any[] = [];
-  private carDamageMap: Map<number, any> = new Map();
+  // Track previous state for event-based emission (only emit on meaningful changes)
+  private previousCarStates: Map<number, {
+    position: number;
+    bestLapTime: number;
+    sector: number;
+    lapNumber: number;
+    driverStatus: number;
+    resultStatus: number;
+    pitStatus: number;
+  }> = new Map();
   
-  // Micro-sector tracking
-  private microSectorTracker: MicroSectorTracker = {
-    fastestOverall: new Map(),
-    personalBest: new Map(),
-    currentLapProgress: new Map(),
-    trackLength: 5000, // Default track length in meters
-    microSectorsPerLap: 24 // 24 micro-sectors per lap
-  };
+  // Store damage data
+  private carDamageMap: Map<number, any> = new Map();
   
   // Session data
   private sessionData: { 
@@ -247,7 +239,7 @@ export class TelemetryService extends EventEmitter {
   private currentTrackName: string = 'Unknown';
   private currentTrackLength: number = 0;
   private currentTotalLaps: number = 0;
-  private currentSessionUid: number | null = null; // Track current session UID
+  private currentSessionUid: bigint | null = null; // Track current session UID
   
   // Session restart detection
   private previousSessionTimeLeft: number | null = null;
@@ -284,6 +276,8 @@ export class TelemetryService extends EventEmitter {
     this.f123.on('sessionHistory', (data) => {
       try {
         this.processSessionHistoryPacket(data);
+        // Emit raw packet for F123UDPProcessor consumption
+        this.emit('raw_packet:sessionHistory', data);
       } catch (error) {
         console.error('Error processing session history packet:', error);
       }
@@ -293,6 +287,8 @@ export class TelemetryService extends EventEmitter {
     this.f123.on('participants', (data) => {
       try {
         this.processParticipantsPacket(data);
+        // Emit raw packet for F123UDPProcessor consumption
+        this.emit('raw_packet:participants', data);
       } catch (error) {
         console.error('Error processing participants packet:', error);
       }
@@ -302,6 +298,8 @@ export class TelemetryService extends EventEmitter {
     this.f123.on('session', (data) => {
       try {
         this.processSessionPacket(data);
+        // Emit raw packet for F123UDPProcessor consumption
+        this.emit('raw_packet:session', data);
       } catch (error) {
         console.error('Error processing session packet:', error);
       }
@@ -320,6 +318,8 @@ export class TelemetryService extends EventEmitter {
     this.f123.on('finalClassification', (data) => {
       try {
         this.processFinalClassificationPacket(data);
+        // Emit raw packet for F123UDPProcessor consumption
+        this.emit('raw_packet:finalClassification', data);
       } catch (error) {
         console.error('Error processing final classification packet:', error);
       }
@@ -338,13 +338,35 @@ export class TelemetryService extends EventEmitter {
   // Process Lap Data Packet (ID: 2)
   private processLapDataPacket(data: any): void {
     if (data.m_lapData && Array.isArray(data.m_lapData)) {
+      let hasMeaningfulChange = false;
+      
       data.m_lapData.forEach((lapData: any, index: number) => {
         if (lapData && lapData.m_carPosition > 0) {
           const currentLapNum = lapData.m_currentLapNum || 0;
           const previousLapNum = this.previousLapNumbers.get(index) || 0;
           
+          // Get previous state for this car
+          const prevState = this.previousCarStates.get(index) || {
+            position: 0,
+            bestLapTime: 0,
+            sector: 0,
+            lapNumber: 0,
+            driverStatus: 0,
+            resultStatus: 0,
+            pitStatus: 0
+          };
+          
+          // Current state values
+          const currentPosition = lapData.m_carPosition || 0;
+          const currentBestLapTime = lapData.m_bestLapTimeInMS || lapData.m_lastLapTimeInMS || 0;
+          const currentSector = lapData.m_sector || 0;
+          const currentDriverStatus = lapData.m_driverStatus || 0;
+          const currentResultStatus = lapData.m_resultStatus || 0;
+          const currentPitStatus = lapData.m_pitStatus || 0;
+          
           // Detect lap completion: lap number increased
           if (currentLapNum > previousLapNum && previousLapNum > 0) {
+            hasMeaningfulChange = true;
             // Get the completed lap data BEFORE updating the map
             const completedLapData = this.lapDataMap.get(index);
             if (completedLapData && completedLapData.lastLapTimeInMS > 0) {
@@ -354,9 +376,23 @@ export class TelemetryService extends EventEmitter {
             }
           }
           
+          // Check for meaningful changes (only emit on these events)
+          if (
+            currentPosition !== prevState.position ||                                    // Position change
+            (currentLapNum > prevState.lapNumber && prevState.lapNumber > 0) ||         // New lap started
+            (currentSector > prevState.sector && prevState.driverStatus === 1) ||        // Sector completion (only when RUNNING)
+            (currentBestLapTime > 0 && currentBestLapTime < prevState.bestLapTime && prevState.bestLapTime > 0) || // New best lap
+            currentDriverStatus !== prevState.driverStatus ||                           // Status change (IN_GARAGE, PITTING, etc.)
+            currentResultStatus !== prevState.resultStatus ||                           // DNF/DSQ/Retired
+            currentPitStatus !== prevState.pitStatus                                    // Pit entry/exit
+          ) {
+            hasMeaningfulChange = true;
+          }
+          
           // Update previous lap number for next comparison
           this.previousLapNumbers.set(index, currentLapNum);
           
+          // Always update the maps (store latest data)
           this.lapDataMap.set(index, {
             lastLapTimeInMS: lapData.m_lastLapTimeInMS || 0,
             currentLapTimeInMS: lapData.m_currentLapTimeInMS || 0,
@@ -364,19 +400,16 @@ export class TelemetryService extends EventEmitter {
             sector1TimeMinutes: lapData.m_sector1TimeMinutes || 0,
             sector2TimeInMS: lapData.m_sector2TimeInMS || 0,
             sector2TimeMinutes: lapData.m_sector2TimeMinutes || 0,
-            // Remove these - they don't exist in the packet:
-            // sector3TimeInMS: lapData.m_sector3TimeInMS || 0,
-            // sector3TimeMinutes: lapData.m_sector3TimeMinutes || 0,
             deltaToCarInFrontInMS: lapData.m_deltaToCarInFrontInMS || 0,
             deltaToRaceLeaderInMS: lapData.m_deltaToRaceLeaderInMS || 0,
             lapDistance: lapData.m_lapDistance || 0,
             totalDistance: lapData.m_totalDistance || 0,
             safetyCarDelta: lapData.m_safetyCarDelta || 0,
-            carPosition: lapData.m_carPosition || 0,
-            currentLapNum: lapData.m_currentLapNum || 0,
-            pitStatus: lapData.m_pitStatus || 0,
+            carPosition: currentPosition,
+            currentLapNum: currentLapNum,
+            pitStatus: currentPitStatus,
             numPitStops: lapData.m_numPitStops || 0,
-            sector: lapData.m_sector || 0,
+            sector: currentSector,
             currentLapInvalid: lapData.m_currentLapInvalid || 0,
             penalties: lapData.m_penalties || 0,
             totalWarnings: lapData.m_totalWarnings || 0,
@@ -384,19 +417,32 @@ export class TelemetryService extends EventEmitter {
             numUnservedDriveThroughPens: lapData.m_numUnservedDriveThroughPens || 0,
             numUnservedStopGoPens: lapData.m_numUnservedStopGoPens || 0,
             gridPosition: lapData.m_gridPosition || 0,
-            driverStatus: lapData.m_driverStatus || 0,
-            resultStatus: lapData.m_resultStatus || 0,
+            driverStatus: currentDriverStatus,
+            resultStatus: currentResultStatus,
             pitLaneTimerActive: lapData.m_pitLaneTimerActive || 0,
             pitLaneTimeInLaneInMS: lapData.m_pitLaneTimeInLaneInMS || 0,
             pitStopTimerInMS: lapData.m_pitStopTimerInMS || 0,
             pitStopShouldServePen: lapData.m_pitStopShouldServePen || 0,
-            bestLapTimeInMS: lapData.m_bestLapTimeInMS || lapData.m_lastLapTimeInMS || 0,
+            bestLapTimeInMS: currentBestLapTime,
+          });
+          
+          // Update previous state
+          this.previousCarStates.set(index, {
+            position: currentPosition,
+            bestLapTime: currentBestLapTime,
+            sector: currentSector,
+            lapNumber: currentLapNum,
+            driverStatus: currentDriverStatus,
+            resultStatus: currentResultStatus,
+            pitStatus: currentPitStatus
           });
         }
       });
       
-      // Emit combined telemetry data
-      this.emitCombinedTelemetryData();
+      // Only emit if something meaningful changed (not on every 60Hz packet)
+      if (hasMeaningfulChange) {
+        this.emitCombinedTelemetryData();
+      }
     }
   }
 
@@ -435,25 +481,20 @@ export class TelemetryService extends EventEmitter {
         }
       });
       
-      // Emit combined telemetry data
-      this.emitCombinedTelemetryData();
+      // Don't emit here - carStatus packets are frequent and don't need separate emission
+      // Emission will happen from lapData packet when meaningful changes occur
     }
   }
 
-  // Helper function to calculate S3 time for completed laps only
+  // Helper function to calculate S3 time for completed laps only (uses shared helper)
   private calculateS3TimeForCompletedLap(lapData: LapData): number {
-    // Only calculate S3 when we have a completed lap (lastLapTimeInMS > 0)
-    // and we have valid S1 and S2 times from the completed lap
-    if (lapData.lastLapTimeInMS === 0 || lapData.sector1TimeInMS === 0 || lapData.sector2TimeInMS === 0) {
-      return 0;
-    }
-    
-    // S3 = Last Lap Time - S1 - S2 (from the completed lap)
-    const s1Total = lapData.sector1TimeInMS + (lapData.sector1TimeMinutes * 60000);
-    const s2Total = lapData.sector2TimeInMS + (lapData.sector2TimeMinutes * 60000);
-    const s3Time = lapData.lastLapTimeInMS - s1Total - s2Total;
-    
-    return Math.max(0, s3Time) / 1000; // Convert to seconds, ensure non-negative
+    return calculateS3TimeForCompletedLap(
+      lapData.lastLapTimeInMS,
+      lapData.sector1TimeInMS,
+      lapData.sector1TimeMinutes,
+      lapData.sector2TimeInMS,
+      lapData.sector2TimeMinutes
+    );
   }
 
   // Helper function to get S3 time (returns completed lap S3 or 0 for current lap)
@@ -503,8 +544,8 @@ export class TelemetryService extends EventEmitter {
         }
       }
       
-      // Emit combined telemetry data
-      this.emitCombinedTelemetryData();
+      // Don't emit here - sessionHistory packets are infrequent but emission happens from lapData
+      // when meaningful changes occur
     }
   }
 
@@ -513,8 +554,10 @@ export class TelemetryService extends EventEmitter {
     if (data.m_participants && Array.isArray(data.m_participants)) {
       const participants = data.m_participants.map((participant: any, index: number) => {
         if (participant && participant.m_name) {
-          const driverName = Buffer.from(participant.m_name).toString('utf8').replace(/\0/g, '');
-          const steamId = this.extractSteamId(participant.m_name);
+          // Extract name and steamId in one pass (fixes duplicate Buffer.from conversion)
+          const nameBuffer = participant.m_name;
+          const driverName = Buffer.from(nameBuffer).toString('utf8').replace(/\0/g, '');
+          const steamId = this.extractSteamIdFromName(driverName); // Pass already-converted string
           
           return {
             carIndex: index,
@@ -545,7 +588,7 @@ export class TelemetryService extends EventEmitter {
 
       // Emit participants event with enhanced data
       this.emit('participants', {
-        sessionUid: data.m_header?.m_sessionUid,
+        sessionUid: BigInt(data.m_header?.m_sessionUid || 0),
         participants: participants,
         timestamp: new Date()
       });
@@ -554,7 +597,7 @@ export class TelemetryService extends EventEmitter {
 
   // Process Session Packet (ID: 1)
   private processSessionPacket(data: any): void {
-    const newSessionUid = data.m_header?.sessionUid || data.m_sessionUid;
+    const newSessionUid = BigInt(data.m_header?.m_sessionUid || data.m_sessionUid || 0);
     const newSessionType = data.m_sessionType;
     const newSessionTimeLeft = data.m_sessionTimeLeft;
     
@@ -564,11 +607,12 @@ export class TelemetryService extends EventEmitter {
          this.sessionData.sessionType !== newSessionType)) {
       console.log('🔄 New session detected, clearing cached data...');
       this.clearSessionData();
-      // Emit session change event to frontend
+      this.clearPreviousStates(); // Clear state tracking for new session
+      // Emit session change event to frontend (convert bigint to number for JSON)
       this.emit('sessionChanged', {
         oldSessionType: this.sessionData.sessionType,
         newSessionType: newSessionType,
-        sessionUid: newSessionUid
+        sessionUid: Number(newSessionUid)
       });
     }
     
@@ -580,18 +624,16 @@ export class TelemetryService extends EventEmitter {
         newSessionTimeLeft > this.previousSessionTimeLeft + 30) { // 30 second threshold
       console.log('🔄 Session restart detected (same session, time reset), clearing cached data...');
       this.clearSessionData();
-      // Emit session restart event to frontend
+      this.clearPreviousStates(); // Clear state tracking for session restart
+      // Emit session restart event to frontend (convert bigint to number for JSON)
       this.emit('sessionRestarted', {
         sessionType: newSessionType,
-        sessionUid: newSessionUid,
+        sessionUid: Number(newSessionUid),
         reason: 'Session time reset'
       });
     }
     
     this.currentSessionUid = newSessionUid;
-    
-    // Store session information for use in combined data
-    this.sessionStartTime = this.sessionStartTime || new Date();
     
     // Extract session data from UDP
     if (data.m_totalLaps !== undefined) {
@@ -599,8 +641,8 @@ export class TelemetryService extends EventEmitter {
     }
     if (data.m_trackLength !== undefined) {
       this.sessionData.trackLength = data.m_trackLength;
-      // Update micro-sector tracker with actual track length
-      this.microSectorTracker.trackLength = data.m_trackLength;
+      // Micro-sector tracker disabled - track length stored in sessionData only
+      // this.microSectorTracker.trackLength = data.m_trackLength;
     }
     if (data.m_sessionType !== undefined) {
       this.sessionData.sessionType = data.m_sessionType;
@@ -615,7 +657,7 @@ export class TelemetryService extends EventEmitter {
 
     // Store current session metadata for post-session processing
     this.currentSessionType = data.m_sessionType || 10;
-    this.currentTrackName = this.getTrackName(data.m_trackId || -1);
+    this.currentTrackName = getTrackName(data.m_trackId || -1);
     this.currentTrackLength = data.m_trackLength || 0;
     this.currentTotalLaps = data.m_totalLaps || 0;
   }
@@ -676,13 +718,10 @@ export class TelemetryService extends EventEmitter {
           trackName: this.currentTrackName,
           trackLength: this.currentTrackLength,
           totalLaps: this.currentTotalLaps,
-          sessionUID: data.m_header?.m_sessionUid
+          sessionUID: BigInt(data.m_header?.m_sessionUid || 0)
         };
       });
 
-      // Store final classification data
-      this.finalClassificationData = finalResults;
-      
       // Emit final classification event
       this.emit('finalClassification', finalResults);
 
@@ -724,10 +763,10 @@ export class TelemetryService extends EventEmitter {
         }
       });
 
-      // Emit car damage event
+      // Emit car damage event (spread Map values directly instead of Array.from)
       this.emit('carDamage', {
-        sessionUid: data.m_header?.m_sessionUid,
-        damageData: Array.from(this.carDamageMap.values()),
+        sessionUid: BigInt(data.m_header?.m_sessionUid || 0),
+        damageData: [...this.carDamageMap.values()], // Spread is slightly more efficient
         timestamp: new Date()
       });
 
@@ -739,8 +778,14 @@ export class TelemetryService extends EventEmitter {
     const startTime = Date.now();
     const allCarsData: F123TelemetryData[] = [];
     
-    // Combine data from all maps for each car
-    for (let carIndex = 0; carIndex < 22; carIndex++) {
+    // Iterate over Map keys (only cars that have data) instead of fixed 22-car loop
+    const carIndices = new Set([
+      ...this.lapDataMap.keys(),
+      ...this.carStatusMap.keys(),
+      ...this.participantsMap.keys()
+    ]);
+    
+    for (const carIndex of carIndices) {
       const lapData = this.lapDataMap.get(carIndex);
       const carStatus = this.carStatusMap.get(carIndex);
       const stintHistory = this.stintHistoryMap.get(carIndex) || [];
@@ -753,24 +798,18 @@ export class TelemetryService extends EventEmitter {
           lapData.bestLapTimeInMS = bestLapTime;
         }
         
-        // Update micro-sector progress for this driver
-        this.updateMicroSectorProgress(carIndex, lapData, participant?.driverName || `Driver ${carIndex + 1}`);
+        // Micro-sector tracking disabled for performance (can re-enable when needed)
+        // this.updateMicroSectorProgress(carIndex, lapData, participant?.driverName || `Driver ${carIndex + 1}`);
+        
+        // Create header with sessionUid (use 0n since we have top-level sessionUid for frontend)
+        // The top-level sessionUid field (number) is what the frontend uses, header.sessionUid is kept as bigint for type compatibility
+        const header: PacketHeader = {
+          ...this.DEFAULT_HEADER,
+          sessionUid: this.currentSessionUid || 0n
+        };
         
         const combinedData: F123TelemetryData = {
-          header: {
-            packetFormat: 2023,
-            gameYear: 23,
-            gameMajorVersion: 1,
-            gameMinorVersion: 0,
-            packetVersion: 1,
-            packetId: 2,
-            sessionUid: 0,
-            sessionTime: 0,
-            frameIdentifier: 0,
-            overallFrameIdentifier: 0,
-            playerCarIndex: 0,
-            secondaryPlayerCarIndex: 255,
-          },
+          header: header,
           sessionType: this.sessionData.sessionType,
           sessionTimeLeft: this.sessionData.sessionTimeLeft,
           sessionDuration: this.sessionData.sessionDuration,
@@ -782,11 +821,14 @@ export class TelemetryService extends EventEmitter {
           lapData,
           carStatus,
           stintHistory,
-          microSectors: this.getMicroSectorColors(carIndex, participant?.driverName || `Driver ${carIndex + 1}`),
+          microSectors: [], // Micro-sector tracking disabled for performance
+          // microSectors: this.getMicroSectorColors(carIndex, participant?.driverName || `Driver ${carIndex + 1}`),
           sessionData: {
             totalLaps: this.sessionData.totalLaps,
             trackLength: this.sessionData.trackLength
           },
+          // Add sessionUid as number for frontend compatibility
+          sessionUid: this.currentSessionUid ? Number(this.currentSessionUid) : 0,
           // Populate additional fields expected by frontend
           lapNumber: lapData.currentLapNum,
           currentLapTime: lapData.currentLapTimeInMS / 1000, // Convert to seconds
@@ -823,50 +865,24 @@ export class TelemetryService extends EventEmitter {
       if (processingTime > 100) { // Log if processing takes more than 100ms
         console.log(`⚠️ Slow telemetry processing: ${processingTime}ms for ${allCarsData.length} cars`);
       }
+      
+      // Update data buffers for getter methods
+      this.updateDataBuffers(allCarsData);
+      
       this.emit('telemetry', allCarsData);
     }
   }
 
-  // Helper method to get team name from team ID
+  // Helper method to get team name from team ID (uses shared constant)
   private getTeamName(teamId: number): string {
-    const teamNames: { [key: number]: string } = {
-      0: 'Mercedes',
-      1: 'Ferrari',
-      2: 'Red Bull Racing',
-      3: 'Williams',
-      4: 'Aston Martin',
-      5: 'Alpine',
-      6: 'Alpha Tauri',
-      7: 'Haas',
-      8: 'McLaren',
-      9: 'Alfa Romeo',
-    };
-    return teamNames[teamId] || 'Unknown Team';
+    return getTeamName(teamId);
   }
 
-  // Extract Steam ID from participant name buffer
-  private extractSteamId(nameBuffer: Uint8Array): string | null {
-    const name = Buffer.from(nameBuffer).toString('utf8').replace(/\0/g, '');
+  // Extract Steam ID from already-converted name string
+  private extractSteamIdFromName(name: string): string | null {
     // Steam ID format: "STEAM_0:0:12345678" or similar
-    // Extract from the name field
     const steamIdMatch = name.match(/STEAM_\d+:\d+:\d+/);
     return steamIdMatch ? steamIdMatch[0] : null;
-  }
-
-  // Get track name from track ID
-  private getTrackName(trackId: number): string {
-    const trackNames: { [key: number]: string } = {
-      0: 'Melbourne', [1]: 'Paul Ricard', [2]: 'Shanghai', [3]: 'Sakhir (Bahrain)',
-      4: 'Catalunya', [5]: 'Monaco', [6]: 'Montreal', [7]: 'Silverstone',
-      8: 'Hockenheim', [9]: 'Hungaroring', [10]: 'Spa', [11]: 'Monza',
-      12: 'Singapore', [13]: 'Suzuka', [14]: 'Abu Dhabi', [15]: 'Texas',
-      16: 'Brazil', [17]: 'Austria', [18]: 'Sochi', [19]: 'Mexico',
-      20: 'Baku (Azerbaijan)', [21]: 'Sakhir Short', [22]: 'Silverstone Short',
-      23: 'Texas Short', [24]: 'Suzuka Short', [25]: 'Hanoi', [26]: 'Zandvoort',
-      27: 'Imola', [28]: 'Portimão', [29]: 'Jeddah', [30]: 'Miami',
-      31: 'Las Vegas', [32]: 'Losail'
-    };
-    return trackNames[trackId] || 'Unknown Track';
   }
 
   // Get tire wear data from car damage packet
@@ -886,146 +902,27 @@ export class TelemetryService extends EventEmitter {
   }
 
 
-  // Handle session data changes
-  private handleSessionData(data: F123TelemetryData): void {
-    // Detect session start
-    if (data.sessionTimeLeft === data.sessionDuration) {
-      this.sessionStartTime = new Date();
-      this.currentSessionData = [];
-      console.log('Session started:', this.getSessionTypeName(data.sessionType));
-    }
-    
-    // Detect session end
-    if (data.sessionTimeLeft === 0 && this.currentSessionData.length > 0) {
-      this.autoExportSessionData();
-    }
-    
-    // Emit session data
-    this.emit('session', data);
+  // Clear previous states on session change/restart
+  private clearPreviousStates(): void {
+    this.previousCarStates.clear();
   }
 
-  private processTelemetryData(data: F123TelemetryData): void {
-    this.lastData = data;
-    this.addToBuffer(data);
-    this.currentSessionData.push(data);
-    
-    // Emit events for different data types
-    this.emit('telemetry', data);
-    this.emit('speed', data.speed);
-    this.emit('tireWear', data.tireWear);
-    this.emit('fuel', data.fuelLevel);
-    this.emit('lap', data.lapNumber);
-    
-    // Emit alerts for critical conditions
-    this.checkCriticalConditions(data);
-  }
-
-  private addToBuffer(data: F123TelemetryData): void {
-    this.dataBuffer.push(data);
-    if (this.dataBuffer.length > this.BUFFER_SIZE) {
-      this.dataBuffer.shift();
-    }
-  }
-
-  // Get session type name
-  private getSessionTypeName(sessionType: number): string {
-    const sessionTypes = [
-      'Unknown', 'Practice 1', 'Practice 2', 'Practice 3',
-      'Short Practice', 'Q1', 'Q2', 'Q3', 'Short Qualifying',
-      'One Shot Qualifying', 'Race', 'Race 2', 'Time Trial'
-    ];
-    return sessionTypes[sessionType] || 'Unknown';
-  }
-
-  // Auto-export session data when session ends
-  private async autoExportSessionData(): Promise<void> {
-    if (this.currentSessionData.length === 0) return;
-    
-    try {
-      console.log('Session ended, exporting data...');
+  // Update data buffers when telemetry is emitted (used by getters)
+  private updateDataBuffers(allCarsData: F123TelemetryData[]): void {
+    // Update lastData with first car (or could be latest/last car)
+    if (allCarsData.length > 0) {
+      this.lastData = allCarsData[0];
       
-      // Extract final results from session data
-      const finalResults = this.extractFinalResults(this.currentSessionData);
-      
-      // Calculate gaps to pole
-      const poleTime = this.findPoleTime(finalResults);
-      if (poleTime) {
-        finalResults.forEach(driver => {
-          if (driver.bestLapTime !== undefined) {
-          driver.gapToPole = driver.bestLapTime - poleTime;
-          }
-        });
-      }
-      
-      // Emit session completed event
-      this.emit('sessionCompleted', {
-        sessionType: this.currentSessionData[0].sessionType,
-        sessionTypeName: this.getSessionTypeName(this.currentSessionData[0].sessionType),
-        sessionStartTime: this.sessionStartTime,
-        sessionEndTime: new Date(),
-        drivers: finalResults
+      // Add to buffer (keep last 1000 entries)
+      allCarsData.forEach(data => {
+        this.dataBuffer.push(data);
+        this.currentSessionData.push(data);
       });
       
-      console.log('Session data exported successfully');
-    } catch (error) {
-      console.error('Error exporting session data:', error);
-    }
-  }
-
-  // Extract final results from session data
-  private extractFinalResults(sessionData: F123TelemetryData[]): F123TelemetryData[] {
-    // Get the latest data point for each driver (in this case, just the host)
-    const latestData = sessionData[sessionData.length - 1];
-    
-    return [latestData];
-  }
-
-  // Find pole position time
-  private findPoleTime(results: F123TelemetryData[]): number | null {
-    const validTimes = results
-      .map(r => r.bestLapTime)
-      .filter((time): time is number => time !== undefined && time > 0);
-    
-    return validTimes.length > 0 ? Math.min(...validTimes) : null;
-  }
-
-  private checkCriticalConditions(data: F123TelemetryData): void {
-    // Low fuel warning
-    if (data.fuelLevel && data.fuelLevel < 5) {
-      this.emit('alert', { type: 'low_fuel', message: 'Low fuel warning!' });
-    }
-    
-    // High tire wear warning
-    if (data.tireWear) {
-    const maxTireWear = Math.max(
-      data.tireWear.frontLeft,
-      data.tireWear.frontRight,
-      data.tireWear.rearLeft,
-      data.tireWear.rearRight
-    );
-    
-    if (maxTireWear > 80) {
-      this.emit('alert', { type: 'tire_wear', message: 'High tire wear detected!' });
+      // Trim buffer if it exceeds 1000 entries
+      if (this.dataBuffer.length > 1000) {
+        this.dataBuffer.shift();
       }
-    }
-    
-    // High tire temperature warning
-    if (data.tireTemperature) {
-    const maxTireTemp = Math.max(
-      data.tireTemperature.frontLeft,
-      data.tireTemperature.frontRight,
-      data.tireTemperature.rearLeft,
-      data.tireTemperature.rearRight
-    );
-    
-    if (maxTireTemp > 120) {
-      this.emit('alert', { type: 'tire_temp', message: 'High tire temperature!' });
-      }
-    }
-    
-    // Penalty warnings
-    if (data.penalties && data.penalties > 0) {
-      this.emit('alert', { type: 'penalty', message: `Penalty received: ${data.penalties}` });
     }
   }
 
@@ -1070,101 +967,6 @@ export class TelemetryService extends EventEmitter {
 
   public getCurrentSessionData(): F123TelemetryData[] {
     return [...this.currentSessionData];
-  }
-
-  // Micro-sector tracking methods
-  private updateMicroSectorProgress(carIndex: number, lapData: LapData, driverName: string): void {
-    const driverId = driverName;
-    const currentLap = lapData.currentLapNum;
-    const lapDistance = lapData.lapDistance;
-    
-    // Check if new lap started
-    const driverProgress = this.microSectorTracker.currentLapProgress.get(driverId);
-    if (!driverProgress || driverProgress.lapNumber !== currentLap) {
-      // Reset current lap progress for new lap
-      this.microSectorTracker.currentLapProgress.set(driverId, {
-        lapNumber: currentLap,
-        completedMicroSectors: new Map()
-      });
-    }
-    
-    // Calculate which micro-sectors are completed based on lap distance
-    const microSectorLength = this.microSectorTracker.trackLength / this.microSectorTracker.microSectorsPerLap;
-    const completedMicroSectors = Math.floor(lapDistance / microSectorLength);
-    
-    // Update completed micro-sectors with current lap time
-    const currentLapTime = lapData.currentLapTimeInMS;
-    const driverProgressData = this.microSectorTracker.currentLapProgress.get(driverId);
-    
-    if (driverProgressData) {
-      for (let i = 0; i < completedMicroSectors && i < this.microSectorTracker.microSectorsPerLap; i++) {
-        if (!driverProgressData.completedMicroSectors.has(i)) {
-          // Calculate micro-sector time (simplified - using current lap time divided by completed sectors)
-          const microSectorTime = completedMicroSectors > 0 ? currentLapTime / completedMicroSectors : currentLapTime;
-          driverProgressData.completedMicroSectors.set(i, microSectorTime);
-          
-          // Check against fastest overall
-          this.updateFastestMicroSector(i, microSectorTime, driverId);
-          
-          // Update personal best
-          this.updatePersonalBest(driverId, i, microSectorTime);
-        }
-      }
-    }
-  }
-  
-  private updateFastestMicroSector(microSectorIndex: number, time: number, driverId: string): void {
-    const currentFastest = this.microSectorTracker.fastestOverall.get(microSectorIndex);
-    
-    if (!currentFastest || time < currentFastest.time) {
-      // New fastest micro-sector
-      this.microSectorTracker.fastestOverall.set(microSectorIndex, {
-        time,
-        driverId
-      });
-    }
-  }
-  
-  private updatePersonalBest(driverId: string, microSectorIndex: number, time: number): void {
-    if (!this.microSectorTracker.personalBest.has(driverId)) {
-      this.microSectorTracker.personalBest.set(driverId, new Map());
-    }
-    
-    const driverPersonalBest = this.microSectorTracker.personalBest.get(driverId)!;
-    const currentPersonalBest = driverPersonalBest.get(microSectorIndex);
-    
-    if (!currentPersonalBest || time < currentPersonalBest) {
-      driverPersonalBest.set(microSectorIndex, time);
-    }
-  }
-  
-  private getMicroSectorColors(carIndex: number, driverName: string): Array<'purple' | 'green' | 'yellow' | 'grey'> {
-    const driverId = driverName;
-    const microSectors: Array<'purple' | 'green' | 'yellow' | 'grey'> = [];
-    
-    const driverProgress = this.microSectorTracker.currentLapProgress.get(driverId);
-    
-    for (let i = 0; i < this.microSectorTracker.microSectorsPerLap; i++) {
-      // If micro-sector not completed in current lap, return grey
-      if (!driverProgress || !driverProgress.completedMicroSectors.has(i)) {
-        microSectors.push('grey');
-        continue;
-      }
-      
-      const time = driverProgress.completedMicroSectors.get(i)!;
-      const fastest = this.microSectorTracker.fastestOverall.get(i);
-      const personalBest = this.microSectorTracker.personalBest.get(driverId)?.get(i);
-      
-      if (fastest && time === fastest.time && fastest.driverId === driverId) {
-        microSectors.push('purple'); // Fastest overall
-      } else if (personalBest && time === personalBest) {
-        microSectors.push('green'); // Personal best
-      } else {
-        microSectors.push('yellow'); // Slower than personal best
-      }
-    }
-    
-    return microSectors;
   }
 
 }

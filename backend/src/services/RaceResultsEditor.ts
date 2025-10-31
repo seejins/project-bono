@@ -256,9 +256,9 @@ export class RaceResultsEditor {
     }
   }
 
-  // Helper method to access dbService.query (since it's private)
+  // Use DatabaseService public query method
   private async query(sql: string, params: any[] = []): Promise<any> {
-    return await this.dbService['db'].query(sql, params);
+    return await this.dbService.query(sql, params);
   }
 }
 

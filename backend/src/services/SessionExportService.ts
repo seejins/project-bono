@@ -1,5 +1,6 @@
 import { F123TelemetryData } from './TelemetryService';
 import { DatabaseService } from './DatabaseService';
+import { findPoleTime } from '../utils/f123Helpers';
 
 export interface SessionExportData {
   sessionType: number;
@@ -31,8 +32,9 @@ export interface SessionResult {
 export class SessionExportService {
   private dbService: DatabaseService;
 
-  constructor() {
-    this.dbService = new DatabaseService();
+  constructor(dbService?: DatabaseService) {
+    // Use dependency injection if provided, otherwise create new instance (for backward compatibility)
+    this.dbService = dbService || new DatabaseService();
   }
 
   /**
@@ -135,14 +137,10 @@ export class SessionExportService {
   }
 
   /**
-   * Find pole position time
+   * Find pole position time (uses shared helper)
    */
   private findPoleTime(results: SessionResult[]): number | null {
-    const validTimes = results
-      .map(r => r.bestLapTime)
-      .filter(time => time > 0);
-    
-    return validTimes.length > 0 ? Math.min(...validTimes) : null;
+    return findPoleTime(results);
   }
 
   /**
@@ -268,6 +266,7 @@ export class SessionExportService {
 
   /**
    * Parse CSV file content
+   * Note: Uses generic CSV parsing. For F1 23-specific CSV parsing, use F123Parser.parseSessionFile()
    */
   private parseCSV(content: string): any {
     const lines = content.split('\n');
@@ -316,24 +315,74 @@ export class SessionExportService {
   }
 
   /**
-   * Process imported data
+   * Process imported data (currently handled by importRaceResults in DatabaseService)
+   * This method is kept for future extensibility but data is processed via dbService.importRaceResults
    */
   private async processImportedData(raceId: string, data: any): Promise<void> {
-    // TODO: Implement data processing logic
-    console.log(`Processing imported data for race ${raceId}:`, data);
+    // Data processing is handled by importRaceResults call in importSessionFromFile
+    // This method can be extended in the future for additional processing steps
+    console.log(`Data for race ${raceId} processed via importRaceResults`);
   }
 
   /**
-   * Get session statistics
+   * Get session statistics for a race
    */
   async getSessionStatistics(raceId: string): Promise<any> {
-    // TODO: Implement session statistics
-    return {
-      totalDrivers: 0,
-      averageLapTime: 0,
-      fastestLap: 0,
-      slowestLap: 0,
-      totalPenalties: 0
-    };
+    try {
+      // Get statistics from driver_session_results for all race sessions in this race
+      const statsResult = await this.dbService.query(`
+        SELECT 
+          COUNT(DISTINCT dsr.member_id) as total_drivers,
+          COUNT(DISTINCT dsr.id) as total_results,
+          AVG(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as average_lap_time,
+          MIN(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as fastest_lap,
+          MAX(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as slowest_lap,
+          SUM(dsr.penalties)::INTEGER as total_penalties,
+          SUM(dsr.warnings)::INTEGER as total_warnings,
+          SUM(CASE WHEN dsr.position = 1 THEN 1 ELSE 0 END)::INTEGER as winners,
+          SUM(CASE WHEN dsr.position <= 3 THEN 1 ELSE 0 END)::INTEGER as podiums,
+          SUM(CASE WHEN dsr.fastest_lap = true THEN 1 ELSE 0 END)::INTEGER as fastest_laps_awarded,
+          SUM(CASE WHEN dsr.pole_position = true THEN 1 ELSE 0 END)::INTEGER as pole_positions,
+          COUNT(DISTINCT CASE WHEN dsr.result_status IN (3, 4, 5, 7) THEN dsr.id ELSE NULL END) as dnf_count
+        FROM driver_session_results dsr
+        JOIN session_results sr ON sr.id = dsr.session_result_id
+        WHERE sr.race_id = $1
+          AND sr.session_type = 10
+      `, [raceId]);
+
+      const stats = statsResult.rows[0] || {};
+
+      return {
+        totalDrivers: parseInt(stats.total_drivers) || 0,
+        totalResults: parseInt(stats.total_results) || 0,
+        averageLapTime: stats.average_lap_time || 0,
+        fastestLap: stats.fastest_lap || 0,
+        slowestLap: stats.slowest_lap || 0,
+        totalPenalties: stats.total_penalties || 0,
+        totalWarnings: stats.total_warnings || 0,
+        winners: parseInt(stats.winners) || 0,
+        podiums: parseInt(stats.podiums) || 0,
+        fastestLapsAwarded: parseInt(stats.fastest_laps_awarded) || 0,
+        polePositions: parseInt(stats.pole_positions) || 0,
+        dnfCount: parseInt(stats.dnf_count) || 0
+      };
+    } catch (error) {
+      console.error('Error getting session statistics:', error);
+      // Return default structure on error
+      return {
+        totalDrivers: 0,
+        totalResults: 0,
+        averageLapTime: 0,
+        fastestLap: 0,
+        slowestLap: 0,
+        totalPenalties: 0,
+        totalWarnings: 0,
+        winners: 0,
+        podiums: 0,
+        fastestLapsAwarded: 0,
+        polePositions: 0,
+        dnfCount: 0
+      };
+    }
   }
 }

@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import { getSessionTypeAbbreviation } from '../utils/f123Constants';
 
 // Type definitions
 export interface Member {
@@ -682,6 +683,15 @@ export class DatabaseService {
     await this.db.query(query, params);
   }
 
+  /**
+   * Public method to execute SQL queries
+   * Use this instead of accessing private db property
+   */
+  public async query(sql: string, params: any[] = []): Promise<any> {
+    await this.ensureInitialized();
+    return await this.db.query(sql, params);
+  }
+
   // Member CRUD operations
   async createMember(data: MemberData): Promise<string> {
     const id = uuidv4();
@@ -1266,6 +1276,44 @@ export class DatabaseService {
     );
   }
 
+  /**
+   * Batch insert lap history data (much more efficient than individual inserts)
+   */
+  async batchAddUDPLapHistory(lapHistoryArray: any[]): Promise<void> {
+    if (lapHistoryArray.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let paramIndex = 1;
+
+    for (const data of lapHistoryArray) {
+      placeholders.push(
+        `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, ` +
+        `$${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, ` +
+        `$${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`
+      );
+      values.push(
+        uuidv4(), data.memberId, data.lapNumber, data.lapTimeMs,
+        data.sector1TimeMs, data.sector1TimeMinutes, data.sector2TimeMs,
+        data.sector2TimeMinutes, data.sector3TimeMs, data.sector3TimeMinutes,
+        data.lapValidBitFlags, data.sessionUid, data.sessionTime,
+        data.frameIdentifier, now
+      );
+    }
+
+    await this.db.query(
+      `INSERT INTO f123_udp_lap_history (
+        id, member_id, lap_number, lap_time_ms, sector1_time_ms, sector1_time_minutes,
+        sector2_time_ms, sector2_time_minutes, sector3_time_ms, sector3_time_minutes,
+        lap_valid_bit_flags, session_uid, session_time, frame_identifier, created_at
+      ) VALUES ${placeholders.join(', ')}`,
+      values
+    );
+  }
+
   async getUDPSessionResults(): Promise<any[]> {
     const result = await this.db.query(`
       SELECT usr.*, m.name as member_name, s.name as season_name
@@ -1739,26 +1787,9 @@ export class DatabaseService {
     return result.rows[0].season_id;
   }
 
-  // Map session type number to readable name
+  // Map session type number to readable name (uses shared constant)
   getSessionTypeName(sessionType: number): string {
-    const sessionTypeNames: { [key: number]: string } = {
-      0: 'Unknown',
-      1: 'P1',
-      2: 'P2', 
-      3: 'P3',
-      4: 'Short P',
-      5: 'Q1',
-      6: 'Q2',
-      7: 'Q3',
-      8: 'Short Q',
-      9: 'OSQ',
-      10: 'Race',
-      11: 'R2',
-      12: 'R3',
-      13: 'Time Trial'
-    };
-    
-    return sessionTypeNames[sessionType] || 'Unknown';
+    return getSessionTypeAbbreviation(sessionType);
   }
 
   // Race results editing methods
@@ -2116,16 +2147,139 @@ export class DatabaseService {
 
   // Get member race history with optional season filtering
   async getMemberRaceHistory(memberId: string, seasonId?: string): Promise<any[]> {
-    // For now, return empty array since race_results table doesn't exist yet
-    // TODO: Update when race results are implemented
-    return [];
+    try {
+      let query = `
+        SELECT 
+          r.id as race_id,
+          r.track_name,
+          r.race_date,
+          sr.id as session_result_id,
+          sr.session_type,
+          sr.session_name,
+          dsr.position,
+          dsr.grid_position,
+          dsr.points,
+          dsr.num_laps,
+          dsr.best_lap_time_ms,
+          dsr.total_race_time_ms,
+          dsr.penalties,
+          dsr.warnings,
+          dsr.fastest_lap,
+          dsr.pole_position,
+          dsr.result_status,
+          dsr.dnf_reason,
+          r.status as race_status
+        FROM driver_session_results dsr
+        JOIN session_results sr ON sr.id = dsr.session_result_id
+        JOIN races r ON r.id = sr.race_id
+        WHERE dsr.member_id = $1
+          AND sr.session_type = 10
+      `;
+      
+      const params: any[] = [memberId];
+      
+      if (seasonId) {
+        query += ` AND r.season_id = $2`;
+        params.push(seasonId);
+      }
+      
+      query += ` ORDER BY r.race_date DESC, r.created_at DESC`;
+      
+      const result = await this.db.query(query, params);
+      
+      return result.rows.map(row => ({
+        raceId: row.race_id,
+        trackName: row.track_name,
+        raceDate: row.race_date,
+        sessionResultId: row.session_result_id,
+        sessionType: row.session_type,
+        sessionName: row.session_name,
+        position: row.position,
+        gridPosition: row.grid_position,
+        points: row.points,
+        numLaps: row.num_laps,
+        bestLapTimeMs: row.best_lap_time_ms,
+        totalRaceTimeMs: row.total_race_time_ms,
+        penalties: row.penalties,
+        warnings: row.warnings,
+        fastestLap: row.fastest_lap,
+        polePosition: row.pole_position,
+        resultStatus: row.result_status,
+        dnfReason: row.dnf_reason,
+        raceStatus: row.race_status
+      }));
+    } catch (error) {
+      console.error('Error getting member race history:', error);
+      return [];
+    }
   }
 
   // Get most recent completed race results for a season
   async getPreviousRaceResults(seasonId: string): Promise<any> {
-    // For now, return null since race_results table doesn't exist yet
-    // TODO: Update when race results are implemented
-    return null;
+    try {
+      // Get the most recent completed race for this season
+      const raceResult = await this.db.query(`
+        SELECT r.id, r.track_name, r.race_date, r.status
+        FROM races r
+        JOIN session_results sr ON sr.race_id = r.id
+        WHERE r.season_id = $1
+          AND r.status = 'completed'
+          AND sr.session_type = 10
+        ORDER BY r.race_date DESC, r.created_at DESC
+        LIMIT 1
+      `, [seasonId]);
+      
+      if (raceResult.rows.length === 0) {
+        return null;
+      }
+      
+      const race = raceResult.rows[0];
+      
+      // Get all results for this race
+      const resultsQuery = await this.db.query(`
+        SELECT 
+          dsr.position,
+          dsr.grid_position,
+          dsr.points,
+          dsr.num_laps,
+          dsr.best_lap_time_ms,
+          dsr.fastest_lap,
+          dsr.pole_position,
+          dsr.result_status,
+          dsr.dnf_reason,
+          m.name as member_name,
+          m.id as member_id
+        FROM driver_session_results dsr
+        JOIN session_results sr ON sr.id = dsr.session_result_id
+        LEFT JOIN members m ON m.id = dsr.member_id
+        WHERE sr.race_id = $1
+          AND sr.session_type = 10
+        ORDER BY dsr.position ASC
+      `, [race.id]);
+      
+      return {
+        raceId: race.id,
+        trackName: race.track_name,
+        raceDate: race.race_date,
+        status: race.status,
+        results: resultsQuery.rows.map(row => ({
+          position: row.position,
+          gridPosition: row.grid_position,
+          points: row.points,
+          numLaps: row.num_laps,
+          bestLapTimeMs: row.best_lap_time_ms,
+          fastestLap: row.fastest_lap,
+          polePosition: row.pole_position,
+          resultStatus: row.result_status,
+          dnfReason: row.dnf_reason,
+          memberName: row.member_name,
+          memberId: row.member_id
+        }))
+      };
+    } catch (error) {
+      console.error('Error getting previous race results:', error);
+      return null;
+    }
   }
 
   // Close database connection

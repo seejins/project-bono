@@ -1,5 +1,6 @@
-import { F123UDP } from "f1-23-udp";
 import { DatabaseService } from './DatabaseService';
+import { getTrackName } from '../utils/f123Constants';
+import { TelemetryService } from './TelemetryService';
 
 export interface UDPPacketHeader {
   packetFormat: number;
@@ -65,70 +66,57 @@ export interface UDPTyreStintHistoryData {
 }
 
 export class F123UDPProcessor {
-  private f123: F123UDP;
+  private telemetryService: TelemetryService;
   private dbService: DatabaseService;
-  private isRunning: boolean = false;
+  private isInitialized: boolean = false;
   private activeSeasonId: string | null = null;
   private currentEventId: string | null = null;
   private participantMappings: Map<number, string> = new Map(); // vehicleIndex -> memberId
   private sessionUid: bigint | null = null;
+  
+  // Queue data for post-session batch processing (no DB writes in live path)
+  private pendingLapHistory: Map<string, Array<{
+    lapHistory: UDPLapHistoryData[];
+    sessionUid: bigint;
+    sessionTime: number;
+    frameIdentifier: number;
+  }>> = new Map();
 
-  constructor(dbService: DatabaseService) {
+  constructor(dbService: DatabaseService, telemetryService: TelemetryService) {
     this.dbService = dbService;
-    this.f123 = new F123UDP({
-      port: process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT) : 20777,
-      address: process.env.F1_UDP_ADDR || '127.0.0.1'
-    });
+    this.telemetryService = telemetryService;
+    this.setupEventListeners();
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) {
-      console.log('F123UDPProcessor is already running');
+  /**
+   * Initialize the processor (loads active season, sets up event listeners)
+   * Note: No longer manages UDP connection - that's handled by TelemetryService
+   */
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
       return;
     }
 
     try {
       await this.dbService.ensureInitialized();
       await this.loadActiveSeason();
+      this.isInitialized = true;
       
-      this.f123.start();
-      this.setupEventListeners();
-      this.isRunning = true;
-      
-      console.log('🏎️ F123UDPProcessor started successfully');
+      console.log('✅ F123UDPProcessor initialized (listening to TelemetryService events)');
     } catch (error: any) {
-      console.error('❌ Failed to start F123UDPProcessor:', error);
-      
-      // Handle specific UDP port conflicts
-      if (error.code === 'EADDRINUSE' && error.syscall === 'bind') {
-        console.log('⚠️ UDP port 20777 is already in use. This is normal if another F1 23 UDP instance is running.');
-        console.log('💡 You can safely ignore this error - the processor will work with the existing UDP listener.');
-        this.isRunning = false; // Don't mark as running if port is in use
-        return; // Don't throw error for port conflicts
-      }
-      
-      // For other errors, log but don't crash the entire process
-      console.error('❌ F123UDPProcessor error (non-critical):', error.message);
-      this.isRunning = false;
-      return;
+      console.error('❌ Failed to initialize F123UDPProcessor:', error);
+      throw error;
     }
   }
 
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    try {
-      this.f123.stop();
-      this.isRunning = false;
-      this.participantMappings.clear();
-      this.sessionUid = null;
-      
-      console.log('🛑 F123UDPProcessor stopped');
-    } catch (error) {
-      console.error('❌ Error stopping F123UDPProcessor:', error);
-    }
+  /**
+   * Stop processing (clears state but doesn't stop UDP - that's handled by TelemetryService)
+   */
+  stop(): void {
+    this.isInitialized = false;
+    this.participantMappings.clear();
+    this.sessionUid = null;
+    console.log('🛑 F123UDPProcessor stopped');
   }
 
   private async loadActiveSeason(): Promise<void> {
@@ -155,8 +143,10 @@ export class F123UDPProcessor {
   }
 
   private setupEventListeners(): void {
+    // Listen to raw packet events from TelemetryService instead of creating own UDP listener
+    
     // Participants packet (ID: 4) - Maps Steam IDs to members
-    this.f123.on('participants', async (data: any) => {
+    this.telemetryService.on('raw_packet:participants', async (data: any) => {
       try {
         await this.handleParticipantsPacket(data);
       } catch (error) {
@@ -165,7 +155,7 @@ export class F123UDPProcessor {
     });
 
     // Final Classification packet (ID: 8) - Session results
-    this.f123.on('finalClassification', async (data: any) => {
+    this.telemetryService.on('raw_packet:finalClassification', async (data: any) => {
       try {
         await this.handleFinalClassificationPacket(data);
       } catch (error) {
@@ -174,7 +164,7 @@ export class F123UDPProcessor {
     });
 
     // Session History packet (ID: 11) - Lap-by-lap data
-    this.f123.on('sessionHistory', async (data: any) => {
+    this.telemetryService.on('raw_packet:sessionHistory', async (data: any) => {
       try {
         await this.handleSessionHistoryPacket(data);
       } catch (error) {
@@ -183,7 +173,7 @@ export class F123UDPProcessor {
     });
 
     // Session packet (ID: 1) - Track and session info
-    this.f123.on('session', async (data: any) => {
+    this.telemetryService.on('raw_packet:session', async (data: any) => {
       try {
         await this.handleSessionPacket(data);
       } catch (error) {
@@ -207,6 +197,10 @@ export class F123UDPProcessor {
     const participants = data.m_participants as UDPParticipantData[];
     console.log(`👥 Found ${participants.length} participants in packet`);
     
+    // Cache all members once before loop (avoids redundant DB calls)
+    const allMembers = await this.dbService.getAllMembers();
+    const membersBySteamId = new Map(allMembers.map(m => [m.steam_id, m]));
+
     for (let i = 0; i < participants.length; i++) {
       const participant = participants[i];
       
@@ -216,8 +210,8 @@ export class F123UDPProcessor {
       }
 
       try {
-        // Try to find member by Steam ID (name field contains Steam ID for network players)
-        const member = await this.dbService.getMemberBySteamId(participant.name.trim());
+        // Try to find member by Steam ID using cached map
+        const member = membersBySteamId.get(participant.name.trim());
         
         if (member) {
           this.participantMappings.set(i, member.id);
@@ -247,7 +241,10 @@ export class F123UDPProcessor {
           console.log(`📊 Participant details: Team ID: ${participant.teamId}, Race Number: ${participant.raceNumber}, Platform: ${participant.platform}`);
         } else {
           console.log(`⚠️ No member found for Steam ID: ${participant.name}`);
-          console.log(`📊 Available members:`, await this.dbService.getAllMembers().then(members => members.map(m => ({ name: m.name, steam_id: m.steam_id }))));
+          // Only log available members once (not per participant)
+          if (i === 0) {
+            console.log(`📊 Available members:`, allMembers.map(m => ({ name: m.name, steam_id: m.steam_id })));
+          }
         }
       } catch (error) {
         console.error(`❌ Error processing participant ${i}:`, error);
@@ -338,40 +335,90 @@ export class F123UDPProcessor {
       return;
     }
 
-    console.log(`📊 Processing session history packet for car ${carIdx} (member ${memberId})`);
-    console.log(`📊 Found ${lapHistoryData.length} lap history entries`);
+    // Queue data for post-session batch processing (NO database writes in live path)
+    if (!this.pendingLapHistory.has(memberId)) {
+      this.pendingLapHistory.set(memberId, []);
+    }
+
+    // Store in memory only - will be written to DB on session end
+    this.pendingLapHistory.get(memberId)!.push({
+      lapHistory: lapHistoryData,
+      sessionUid: header.sessionUid,
+      sessionTime: header.sessionTime,
+      frameIdentifier: header.frameIdentifier
+    });
+
+    // Count valid laps for logging (no DB write)
+    const validLaps = lapHistoryData.filter(lap => lap.lapTimeInMS > 0).length;
+    console.log(`📊 Queued session history for car ${carIdx} (member ${memberId}) - ${validLaps} valid laps (will write to DB on session end)`);
+  }
+
+  /**
+   * Flush pending lap history data to database (called post-session only)
+   * Uses batch insert for much better performance
+   */
+  public async flushPendingLapHistory(): Promise<void> {
+    if (this.pendingLapHistory.size === 0) {
+      return;
+    }
+
+    console.log(`💾 Flushing ${this.pendingLapHistory.size} pending lap history entries to database...`);
 
     try {
-      let validLaps = 0;
-      for (let lapIndex = 0; lapIndex < lapHistoryData.length; lapIndex++) {
-        const lapData = lapHistoryData[lapIndex];
-        
-        if (lapData.lapTimeInMS === 0) {
-          continue; // Skip empty lap data
-        }
+      // Collect all valid lap history entries for batch insert
+      const allLapHistoryEntries: any[] = [];
+      const memberLapCounts: Map<string, number> = new Map();
 
-        await this.dbService.addUDPLapHistory({
-          memberId: memberId,
-          lapNumber: lapIndex + 1,
-          lapTimeMs: lapData.lapTimeInMS,
-          sector1TimeMs: lapData.sector1TimeInMS,
-          sector1TimeMinutes: lapData.sector1TimeMinutes,
-          sector2TimeMs: lapData.sector2TimeInMS,
-          sector2TimeMinutes: lapData.sector2TimeMinutes,
-          sector3TimeMs: lapData.sector3TimeInMS,
-          sector3TimeMinutes: lapData.sector3TimeMinutes,
-          lapValidBitFlags: lapData.lapValidBitFlags,
-          sessionUid: header.sessionUid,
-          sessionTime: header.sessionTime,
-          frameIdentifier: header.frameIdentifier
-        });
+      for (const [memberId, historyBatches] of this.pendingLapHistory.entries()) {
+        let validLaps = 0;
         
-        validLaps++;
+        for (const batch of historyBatches) {
+          for (let lapIndex = 0; lapIndex < batch.lapHistory.length; lapIndex++) {
+            const lapData = batch.lapHistory[lapIndex];
+            
+            if (lapData.lapTimeInMS === 0) {
+              continue; // Skip empty lap data
+            }
+
+            allLapHistoryEntries.push({
+              memberId: memberId,
+              lapNumber: lapIndex + 1,
+              lapTimeMs: lapData.lapTimeInMS,
+              sector1TimeMs: lapData.sector1TimeInMS,
+              sector1TimeMinutes: lapData.sector1TimeMinutes,
+              sector2TimeMs: lapData.sector2TimeInMS,
+              sector2TimeMinutes: lapData.sector2TimeMinutes,
+              sector3TimeMs: lapData.sector3TimeInMS,
+              sector3TimeMinutes: lapData.sector3TimeMinutes,
+              lapValidBitFlags: lapData.lapValidBitFlags,
+              sessionUid: batch.sessionUid,
+              sessionTime: batch.sessionTime,
+              frameIdentifier: batch.frameIdentifier
+            });
+            
+            validLaps++;
+          }
+        }
+        
+        memberLapCounts.set(memberId, validLaps);
       }
 
-      console.log(`✅ Stored ${validLaps} valid laps for member ${memberId} (${lapHistoryData.length - validLaps} empty laps skipped)`);
+      // Batch insert all lap history in one query
+      if (allLapHistoryEntries.length > 0) {
+        await this.dbService.batchAddUDPLapHistory(allLapHistoryEntries);
+        
+        // Log results per member
+        for (const [memberId, count] of memberLapCounts.entries()) {
+          console.log(`✅ Stored ${count} valid laps for member ${memberId}`);
+        }
+      }
+
+      // Clear pending data after flush
+      this.pendingLapHistory.clear();
+      console.log(`✅ All pending lap history flushed to database (${allLapHistoryEntries.length} total laps)`);
     } catch (error) {
-      console.error(`❌ Error storing session history for car ${carIdx}:`, error);
+      console.error('❌ Error flushing pending lap history:', error);
+      throw error;
     }
   }
 
@@ -410,41 +457,9 @@ export class F123UDPProcessor {
   }
 
   private getTrackNameFromId(trackId: number): string | null {
-    // F1 23 Track ID mapping (simplified - you might want to expand this)
-    const trackMap: { [key: number]: string } = {
-      0: 'Melbourne',
-      1: 'Paul Ricard',
-      2: 'Shanghai',
-      3: 'Sakhir (Bahrain)',
-      4: 'Catalunya',
-      5: 'Monaco',
-      6: 'Montreal',
-      7: 'Silverstone',
-      8: 'Hockenheim',
-      9: 'Hungaroring',
-      10: 'Spa',
-      11: 'Monza',
-      12: 'Singapore',
-      13: 'Suzuka',
-      14: 'Abu Dhabi',
-      15: 'Texas',
-      16: 'Brazil',
-      17: 'Austria',
-      18: 'Sochi',
-      19: 'Mexico',
-      20: 'Baku (Azerbaijan)',
-      21: 'Sakhir Short',
-      22: 'Silverstone Short',
-      23: 'Texas Short',
-      24: 'Suzuka Short',
-      25: 'Miami',
-      26: 'Imola',
-      27: 'Zandvoort',
-      28: 'Las Vegas',
-      29: 'Losail'
-    };
-    
-    return trackMap[trackId] || null;
+    // Uses shared constant from f123Constants
+    const trackName = getTrackName(trackId);
+    return trackName !== 'Unknown Track' ? trackName : null;
   }
 
   // Public methods for external control
@@ -463,7 +478,7 @@ export class F123UDPProcessor {
   }
 
   public isProcessorRunning(): boolean {
-    return this.isRunning;
+    return this.isInitialized;
   }
 
   public getSessionUid(): bigint | null {

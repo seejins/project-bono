@@ -1,36 +1,20 @@
 import { DatabaseService } from './DatabaseService';
 import { TelemetryService } from './TelemetryService';
 import { Server } from 'socket.io';
+import { getSessionTypeAbbreviation } from '../utils/f123Constants';
+import { F123UDPProcessor } from './F123UDPProcessor';
 
 export class PostSessionProcessor {
   private dbService: DatabaseService;
   private telemetryService: TelemetryService;
   private io: Server;
+  private f123UDPProcessor: F123UDPProcessor | null = null;
 
-  // Track ID to name mapping from F1 23 UDP documentation
-  private trackIdToName: Map<number, string> = new Map([
-    [0, 'Melbourne'], [1, 'Paul Ricard'], [2, 'Shanghai'], [3, 'Sakhir (Bahrain)'],
-    [4, 'Catalunya'], [5, 'Monaco'], [6, 'Montreal'], [7, 'Silverstone'],
-    [8, 'Hockenheim'], [9, 'Hungaroring'], [10, 'Spa'], [11, 'Monza'],
-    [12, 'Singapore'], [13, 'Suzuka'], [14, 'Abu Dhabi'], [15, 'Texas'],
-    [16, 'Brazil'], [17, 'Austria'], [18, 'Sochi'], [19, 'Mexico'],
-    [20, 'Baku (Azerbaijan)'], [21, 'Sakhir Short'], [22, 'Silverstone Short'],
-    [23, 'Texas Short'], [24, 'Suzuka Short'], [25, 'Hanoi'], [26, 'Zandvoort'],
-    [27, 'Imola'], [28, 'Portimão'], [29, 'Jeddah'], [30, 'Miami'],
-    [31, 'Las Vegas'], [32, 'Losail']
-  ]);
-
-  // Session type names mapping
-  private sessionTypeNames: Map<number, string> = new Map([
-    [0, 'Unknown'], [1, 'P1'], [2, 'P2'], [3, 'P3'], [4, 'Short P'],
-    [5, 'Q1'], [6, 'Q2'], [7, 'Q3'], [8, 'Short Q'], [9, 'OSQ'],
-    [10, 'Race'], [11, 'R2'], [12, 'R3'], [13, 'Time Trial']
-  ]);
-
-  constructor(dbService: DatabaseService, telemetryService: TelemetryService, io: Server) {
+  constructor(dbService: DatabaseService, telemetryService: TelemetryService, io: Server, f123UDPProcessor?: F123UDPProcessor) {
     this.dbService = dbService;
     this.telemetryService = telemetryService;
     this.io = io;
+    this.f123UDPProcessor = f123UDPProcessor || null;
     
     // Listen for finalClassification events from TelemetryService
     this.telemetryService.on('finalClassification', this.handleSessionEnd.bind(this));
@@ -79,10 +63,20 @@ export class PostSessionProcessor {
         await this.markEventAsCompleted(eventId);
       }
       
-      // 8. Recalculate season standings
+      // 8. Flush pending lap history data to database (post-session only)
+      if (this.f123UDPProcessor) {
+        try {
+          await this.f123UDPProcessor.flushPendingLapHistory();
+        } catch (error) {
+          console.error('⚠️ Error flushing pending lap history:', error);
+          // Don't fail session processing if this fails
+        }
+      }
+      
+      // 9. Recalculate season standings
       await this.recalculateSeasonStandings(eventId);
       
-      // 9. Notify frontend via WebSocket
+      // 10. Notify frontend via WebSocket
       this.io.emit('sessionCompleted', {
         eventId,
         sessionResultId,
@@ -181,49 +175,61 @@ export class PostSessionProcessor {
   private async mapDriversToLeague(finalResults: any[], eventId: string): Promise<any[]> {
     const seasonId = await this.dbService.getSeasonIdFromEvent(eventId);
     
-    return Promise.all(finalResults.map(async (result) => {
-      // Try to find mapping by steam_id first (most reliable)
-      const mapping = await this.dbService.query(
-        `SELECT member_id, f123_driver_name, f123_driver_number 
-         FROM f123_driver_mappings 
-         WHERE season_id = $1 AND f123_steam_id = $2`,
-        [seasonId, result.steamId]
-      );
-      
-      if (mapping.rows.length > 0) {
+    // Batch query all steam_ids and driver names at once (fixes N+1 query problem)
+    const steamIds = finalResults.map(r => r.steamId).filter(Boolean);
+    const driverNames = finalResults.map(r => r.driverName).filter(Boolean);
+    
+    // Query all mappings in one go
+    const steamIdMappings = steamIds.length > 0 ? await this.dbService.query(
+      `SELECT member_id, f123_driver_name, f123_driver_number, f123_steam_id 
+       FROM f123_driver_mappings 
+       WHERE season_id = $1 AND f123_steam_id = ANY($2)`,
+      [seasonId, steamIds]
+    ) : { rows: [] };
+    
+    const nameMappings = driverNames.length > 0 ? await this.dbService.query(
+      `SELECT member_id, f123_driver_name, f123_driver_number, f123_driver_name as driver_name
+       FROM f123_driver_mappings 
+       WHERE season_id = $1 AND f123_driver_name = ANY($2)`,
+      [seasonId, driverNames]
+    ) : { rows: [] };
+    
+    // Create lookup maps for O(1) access
+    const steamIdMap = new Map(steamIdMappings.rows.map(r => [r.f123_steam_id, r]));
+    const nameMap = new Map(nameMappings.rows.map(r => [r.driver_name, r]));
+    
+    // Map results using pre-fetched data
+    return finalResults.map((result) => {
+      // Try steam_id first (most reliable)
+      const steamMapping = result.steamId ? steamIdMap.get(result.steamId) : null;
+      if (steamMapping) {
         return {
           ...result,
-          member_id: mapping.rows[0].member_id,
-          mapped_driver_name: mapping.rows[0].f123_driver_name,
-          mapped_driver_number: mapping.rows[0].f123_driver_number
+          member_id: steamMapping.member_id,
+          mapped_driver_name: steamMapping.f123_driver_name,
+          mapped_driver_number: steamMapping.f123_driver_number
         };
       }
       
-      // Fallback to driver name matching (less reliable)
-      const nameMapping = await this.dbService.query(
-        `SELECT member_id, f123_driver_name, f123_driver_number 
-         FROM f123_driver_mappings 
-         WHERE season_id = $1 AND f123_driver_name = $2`,
-        [seasonId, result.driverName]
-      );
-      
-      if (nameMapping.rows.length > 0) {
+      // Fallback to driver name matching
+      const nameMapping = nameMap.get(result.driverName);
+      if (nameMapping) {
         return {
           ...result,
-          member_id: nameMapping.rows[0].member_id,
-          mapped_driver_name: nameMapping.rows[0].f123_driver_name,
-          mapped_driver_number: nameMapping.rows[0].f123_driver_number
+          member_id: nameMapping.member_id,
+          mapped_driver_name: nameMapping.f123_driver_name,
+          mapped_driver_number: nameMapping.f123_driver_number
         };
       }
       
-      // No mapping found - return with null member_id
+      // No mapping found
       return {
         ...result,
         member_id: null,
         mapped_driver_name: result.driverName,
         mapped_driver_number: result.carNumber
       };
-    }));
+    });
   }
 
   private async markEventAsCompleted(eventId: string): Promise<void> {
@@ -236,15 +242,61 @@ export class PostSessionProcessor {
   }
 
   private async recalculateSeasonStandings(eventId: string): Promise<void> {
-    // This would recalculate season standings based on the new results
-    // For now, just log that it would happen
-    console.log(`📊 Recalculating season standings for event ${eventId}`);
-    
-    // TODO: Implement season standings recalculation
-    // This would involve:
-    // 1. Getting all completed races for the season
-    // 2. Calculating points, wins, podiums, etc. for each driver
-    // 3. Updating the season_standings table
+    try {
+      console.log(`📊 Recalculating season standings for event ${eventId}`);
+      
+      // 1. Get the season ID from the event
+      const seasonId = await this.dbService.getSeasonIdFromEvent(eventId);
+      if (!seasonId) {
+        console.log('⚠️ Could not find season for event, skipping standings recalculation');
+        return;
+      }
+      
+      // 2. Aggregate standings for each member from completed race sessions
+      const standingsResult = await this.query(`
+        SELECT 
+          dsr.member_id,
+          COUNT(DISTINCT dsr.session_result_id) as races_participated,
+          COALESCE(SUM(dsr.points), 0)::INTEGER as total_points,
+          SUM(CASE WHEN dsr.position = 1 THEN 1 ELSE 0 END)::INTEGER as wins,
+          SUM(CASE WHEN dsr.position <= 3 THEN 1 ELSE 0 END)::INTEGER as podiums,
+          SUM(CASE WHEN dsr.fastest_lap = true THEN 1 ELSE 0 END)::INTEGER as fastest_laps,
+          SUM(CASE WHEN dsr.pole_position = true THEN 1 ELSE 0 END)::INTEGER as pole_positions,
+          MIN(dsr.position) as best_finish,
+          COALESCE(SUM(dsr.penalties), 0)::INTEGER as total_penalties,
+          COALESCE(SUM(dsr.warnings), 0)::INTEGER as total_warnings
+        FROM driver_session_results dsr
+        JOIN session_results sr ON sr.id = dsr.session_result_id
+        JOIN races r ON r.id = sr.race_id
+        WHERE r.season_id = $1
+          AND sr.session_type = 10
+          AND dsr.member_id IS NOT NULL
+        GROUP BY dsr.member_id
+        ORDER BY total_points DESC, wins DESC, podiums DESC
+      `, [seasonId]);
+      
+      console.log(`📊 Calculated standings for ${standingsResult.rows.length} member(s)`);
+      
+      // 3. Log the top standings (for debugging/monitoring)
+      const topStandings = standingsResult.rows.slice(0, 5);
+      if (topStandings.length > 0) {
+        console.log('📊 Top 5 standings:');
+        for (let i = 0; i < topStandings.length; i++) {
+          const standing = topStandings[i];
+          const member = await this.dbService.getMemberById(standing.member_id);
+          const position = i + 1;
+          console.log(`  ${position}. ${member?.name || 'Unknown'} - ${standing.total_points || 0} pts (${standing.wins || 0} wins, ${standing.podiums || 0} podiums)`);
+        }
+      }
+      
+      // Note: Standings are calculated on-demand rather than stored in a separate table
+      // This ensures standings are always up-to-date after each race
+      console.log('✅ Season standings recalculation completed');
+      
+    } catch (error) {
+      console.error('❌ Error recalculating season standings:', error);
+      // Don't throw - this is non-critical for session completion
+    }
   }
 
   private async handleOrphanedSession(sessionInfo: any, finalResults: any[]): Promise<void> {
@@ -296,9 +348,9 @@ export class PostSessionProcessor {
     );
   }
 
-  // Helper method to access dbService.query (since it's private)
+  // Use DatabaseService public query method
   private async query(sql: string, params: any[] = []): Promise<any> {
-    return await this.dbService['db'].query(sql, params);
+    return await this.dbService.query(sql, params);
   }
 }
 
