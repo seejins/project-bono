@@ -109,6 +109,9 @@ export interface F123TelemetryData {
   sessionData?: {
     totalLaps: number;
     trackLength: number;
+    safetyCarStatus?: number; // 0=none, 1=SC, 2=VSC, 3=formation
+    isRedFlag?: boolean;
+    isChequeredFlag?: boolean;
   };
   
   // Driver Data
@@ -116,6 +119,7 @@ export interface F123TelemetryData {
   teamName: string;
   carPosition: number;
   carNumber: number;
+  carIndex: number; // Unique identifier for React keys (always unique, unlike carNumber)
   
   // Lap Data (from Lap Data Packet)
   lapData: LapData;
@@ -169,6 +173,10 @@ export interface F123TelemetryData {
   numUnservedDriveThroughPens?: number;
   numUnservedStopGoPens?: number;
   numCars?: number;
+  
+  // Event-driven flags (isolated - do not affect sector color coding)
+  isFastestLap?: boolean; // True if this driver has the fastest lap (Best Lap column only)
+  hasPenalty?: boolean; // True if driver has active penalty (table indicator only)
   
   // Additional calculated fields
   gapToPole?: number; // calculated gap in milliseconds
@@ -373,7 +381,29 @@ export class TelemetryService extends EventEmitter {
   private processLapDataPacket(data: any): void {
     if (data.m_lapData && Array.isArray(data.m_lapData)) {
       let hasMeaningfulChange = false;
+      let isNewSession = false;
       
+      // Extract session UID from packet header (check multiple possible paths)
+      const packetSessionUid = BigInt(
+        data.m_header?.m_sessionUid || 
+        data.m_header?.sessionUid || 
+        data.m_sessionUid || 
+        0
+      );
+      
+      // Check for new session (will process data first, then emit)
+      if (packetSessionUid > 0n) {
+        if (this.currentSessionUid === null || this.currentSessionUid !== packetSessionUid) {
+          isNewSession = true;
+          hasMeaningfulChange = true;
+          // Update current session UID if it changed
+          if (this.currentSessionUid !== packetSessionUid) {
+            this.currentSessionUid = packetSessionUid;
+          }
+        }
+      }
+      
+      // Process lap data first to populate maps before emission
       data.m_lapData.forEach((lapData: any, index: number) => {
         if (lapData && lapData.m_carPosition > 0) {
           const currentLapNum = lapData.m_currentLapNum || 0;
@@ -647,9 +677,10 @@ export class TelemetryService extends EventEmitter {
         }
       });
       
-      // Only emit if something meaningful changed (not on every 60Hz packet)
-      if (hasMeaningfulChange) {
-      this.emitCombinedTelemetryData();
+      // Emit if meaningful change detected OR if it's a new session (force initial load)
+      // Process data first so maps are populated before emission
+      if (hasMeaningfulChange || isNewSession) {
+        this.emitCombinedTelemetryData();
       }
     }
   }
@@ -845,6 +876,23 @@ export class TelemetryService extends EventEmitter {
     if (data.m_sessionDuration !== undefined) {
       this.sessionData.sessionDuration = data.m_sessionDuration;
     }
+    
+    // Capture Safety Car / VSC status from Session Packet
+    if (data.m_safetyCarStatus !== undefined) {
+      this.previousSafetyCarStatus = this.safetyCarStatus;
+      this.safetyCarStatus = data.m_safetyCarStatus;
+      
+      // Emit if status changed
+      if (this.previousSafetyCarStatus !== null && 
+          this.previousSafetyCarStatus !== this.safetyCarStatus) {
+        this.emit('safetyCarStatusChanged', {
+          status: this.safetyCarStatus, // 0=none, 1=SC, 2=VSC, 3=formation
+          isVSC: this.safetyCarStatus === 2,
+          isSC: this.safetyCarStatus === 1,
+          timestamp: new Date()
+        });
+      }
+    }
 
     // Store current session metadata for post-session processing
     this.currentSessionType = data.m_sessionType || 10;
@@ -855,6 +903,18 @@ export class TelemetryService extends EventEmitter {
 
   // Clear session data when new session starts
   private clearSessionData(): void {
+    // Clear event state
+    this.isRedFlag = false;
+    this.isChequeredFlag = false;
+    this.safetyCarStatus = 0;
+    this.previousSafetyCarStatus = null;
+    
+    // Clear fastest lap tracking
+    this.fastestLapCarIndex = null;
+    this.fastestLapTime = null;
+    
+    // Clear penalty flags
+    this.penaltyMap.clear();
     this.lapDataMap.clear();
     this.carStatusMap.clear();
     this.participantsMap.clear();
@@ -880,10 +940,195 @@ export class TelemetryService extends EventEmitter {
     this.previousSessionTimeLeft = null; // Reset session restart detection
   }
 
+  // Event Packet state management
+  private isRedFlag: boolean = false;
+  private isChequeredFlag: boolean = false;
+  private safetyCarStatus: number = 0; // 0=none, 1=full SC, 2=VSC, 3=formation
+  private previousSafetyCarStatus: number | null = null;
+  
+  // Fastest lap tracking (isolated - ONLY for Best Lap column color coding)
+  private fastestLapCarIndex: number | null = null;
+  private fastestLapTime: number | null = null;
+  
+  // Penalty tracking (for table indicators)
+  private penaltyMap: Map<number, boolean> = new Map(); // carIndex → hasPenalty
+  
   // Process Event Packet (ID: 3)
   private processEventPacket(data: any): void {
-    // Handle race events like penalties, retirements, etc.
-    this.emit('event', data);
+    if (!data.m_eventStringCode || !Array.isArray(data.m_eventStringCode)) {
+      return;
+    }
+    
+    // Parse event string code (4-byte array → string)
+    const eventCode = String.fromCharCode(...data.m_eventStringCode)
+      .replace(/\0/g, '')
+      .trim();
+    
+    const eventDetails = data.m_eventDetails || {};
+    const header = data.m_header || {};
+    
+    switch (eventCode) {
+      case 'SSTA': // Session Started
+        this.emit('event:sessionStarted', {
+          sessionUid: Number(header.m_sessionUid || header.sessionUid || 0),
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'SEND': // Session Ended
+        this.emit('event:sessionEnded', {
+          sessionUid: Number(header.m_sessionUid || header.sessionUid || 0),
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'FTLP': // Fastest Lap
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          const lapTime = eventDetails.lapTime; // in seconds
+          
+          if (carIndex !== undefined && lapTime !== null && lapTime > 0) {
+            const lapTimeMs = lapTime * 1000; // Convert to milliseconds
+            
+            // Update isolated fastest lap tracking (ONLY for Best Lap column)
+            this.fastestLapCarIndex = carIndex;
+            this.fastestLapTime = lapTimeMs;
+            
+            // Emit notification
+            const participant = this.participantsMap.get(carIndex);
+            this.emit('event:fastestLap', {
+              carIndex,
+              driverName: participant?.driverName || `Driver ${carIndex + 1}`,
+              lapTime: lapTimeMs,
+              timestamp: new Date()
+            });
+          }
+        }
+        break;
+        
+      case 'RTMT': // Retirement
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          if (carIndex !== undefined) {
+            // Update result status in lapDataMap
+            const lapData = this.lapDataMap.get(carIndex);
+            if (lapData) {
+              lapData.resultStatus = 7; // Retired
+              this.lapDataMap.set(carIndex, lapData);
+            }
+            
+            // Emit notification
+            const participant = this.participantsMap.get(carIndex);
+            this.emit('event:retirement', {
+              carIndex,
+              driverName: participant?.driverName || `Driver ${carIndex + 1}`,
+              timestamp: new Date()
+            });
+          }
+        }
+        break;
+        
+      case 'PENA': // Penalty Issued
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          if (carIndex !== undefined) {
+            // Set penalty flag
+            this.penaltyMap.set(carIndex, true);
+            
+            // Emit notification
+            const participant = this.participantsMap.get(carIndex);
+            this.emit('event:penaltyIssued', {
+              carIndex,
+              driverName: participant?.driverName || `Driver ${carIndex + 1}`,
+              penaltyType: eventDetails.penaltyType || 0,
+              infringementType: eventDetails.infringementType || 0,
+              time: eventDetails.time || 0,
+              timestamp: new Date()
+            });
+          }
+        }
+        break;
+        
+      case 'DRSE': // DRS Enabled
+        this.emit('event:drsEnabled', {
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'DRSD': // DRS Disabled
+        this.emit('event:drsDisabled', {
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'RCWN': // Race Winner
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          if (carIndex !== undefined) {
+            const participant = this.participantsMap.get(carIndex);
+            this.emit('event:raceWinner', {
+              carIndex,
+              driverName: participant?.driverName || `Driver ${carIndex + 1}`,
+              timestamp: new Date()
+            });
+          }
+        }
+        break;
+        
+      case 'CHQF': // Chequered Flag
+        this.isChequeredFlag = true;
+        this.emit('event:chequeredFlag', {
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'RDFL': // Red Flag
+        this.isRedFlag = true;
+        this.emit('event:redFlag', {
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'STLG': // Start Lights
+        {
+          const numLights = eventDetails.numLights || 5;
+          this.emit('event:startLights', {
+            numLights,
+            timestamp: new Date()
+          });
+        }
+        break;
+        
+      case 'LGOT': // Lights Out
+        this.emit('event:lightsOut', {
+          timestamp: new Date()
+        });
+        break;
+        
+      case 'DTSV': // Drive Through Penalty Served
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          if (carIndex !== undefined) {
+            // Clear penalty flag when served
+            this.penaltyMap.set(carIndex, false);
+          }
+        }
+        break;
+        
+      case 'SGSV': // Stop Go Penalty Served
+        {
+          const carIndex = eventDetails.vehicleIdx;
+          if (carIndex !== undefined) {
+            // Clear penalty flag when served
+            this.penaltyMap.set(carIndex, false);
+          }
+        }
+        break;
+        
+      default:
+        // Unknown event code - ignore silently
+        break;
+    }
   }
 
   // Process Final Classification Packet (ID: 8) - Post-session results
@@ -991,7 +1236,37 @@ export class TelemetryService extends EventEmitter {
       const stintHistory = this.stintHistoryMap.get(carIndex) || [];
       const participant = this.participantsMap.get(carIndex);
       
-      if (lapData && carStatus) {
+      // Allow emission with just lapData for new sessions (carStatus might arrive later)
+      // This ensures initial data loads immediately when session starts
+      if (lapData) {
+        // Create minimal carStatus if missing (for new sessions)
+        const effectiveCarStatus = carStatus || {
+          tractionControl: 0,
+          antiLockBrakes: 0,
+          fuelMix: 0,
+          frontBrakeBias: 0,
+          pitLimiterStatus: 0,
+          fuelInTank: 0,
+          fuelCapacity: 0,
+          fuelRemainingLaps: 0,
+          maxRpm: 0,
+          idleRpm: 0,
+          maxGears: 0,
+          drsAllowed: 0,
+          drsActivationDistance: 0,
+          actualTyreCompound: 0,
+          visualTyreCompound: 0,
+          tyresAgeLaps: 0,
+          vehicleFiaFlags: 0,
+          enginePowerIce: 0,
+          enginePowerMguk: 0,
+          ersStoreEnergy: 0,
+          ersDeployMode: 0,
+          ersHarvestedThisLapMguk: 0,
+          ersHarvestedThisLapMguh: 0,
+          ersDeployedThisLap: 0,
+          networkPaused: 0
+        };
         // Update lap data with best lap time from Session History
         const bestLapTime = this.bestLapTimesMap.get(carIndex);
         if (bestLapTime && bestLapTime > 0) {
@@ -1017,9 +1292,10 @@ export class TelemetryService extends EventEmitter {
           driverName: participant?.driverName || `Driver ${carIndex + 1}`,
           teamName: participant?.teamName || 'Unknown Team',
           carPosition: lapData.carPosition,
-          carNumber: participant?.carNumber || carIndex + 1,
+          carNumber: participant?.carNumber ?? carIndex + 1, // Use ?? instead of || to handle carNumber: 0 correctly
+          carIndex: carIndex, // Include carIndex for unique identification
           lapData,
-          carStatus,
+          carStatus: effectiveCarStatus,
           stintHistory,
           // Generate micro-sectors for all session types (tracking always active)
           // Frontend handles visualization (only shown in practice/qualifying tables)
@@ -1028,10 +1304,20 @@ export class TelemetryService extends EventEmitter {
             : [],
           sessionData: {
             totalLaps: this.sessionData.totalLaps,
-            trackLength: this.sessionData.trackLength
+            trackLength: this.sessionData.trackLength,
+            safetyCarStatus: this.safetyCarStatus, // Include SC/VSC status
+            isRedFlag: this.isRedFlag,
+            isChequeredFlag: this.isChequeredFlag
           },
           // Add sessionUid as number for frontend compatibility
           sessionUid: this.currentSessionUid ? Number(this.currentSessionUid) : 0,
+          
+          // Event-driven flags
+          isFastestLap: (this.fastestLapTime !== null && 
+                        this.fastestLapCarIndex === carIndex && 
+                        lapData.bestLapTimeInMS === this.fastestLapTime),
+          hasPenalty: this.penaltyMap.get(carIndex) || false,
+          
           // Populate additional fields expected by frontend
           lapNumber: lapData.currentLapNum,
           currentLapTime: lapData.currentLapTimeInMS / 1000, // Convert to seconds
@@ -1050,12 +1336,12 @@ export class TelemetryService extends EventEmitter {
           bestLapSector1Time: (this.bestLapSector1Map.get(carIndex) || 0) / 1000, // Convert to seconds
           bestLapSector2Time: (this.bestLapSector2Map.get(carIndex) || 0) / 1000, // Convert to seconds
           bestLapSector3Time: (this.bestLapSector3Map.get(carIndex) || 0) / 1000, // Convert to seconds
-          fuelLevel: carStatus.fuelInTank,
-          fuelCapacity: carStatus.fuelCapacity,
-          energyStore: carStatus.ersStoreEnergy,
-          drsEnabled: carStatus.drsAllowed === 1,
-          ersDeployMode: carStatus.ersDeployMode,
-          fuelMix: carStatus.fuelMix,
+          fuelLevel: effectiveCarStatus.fuelInTank,
+          fuelCapacity: effectiveCarStatus.fuelCapacity,
+          energyStore: effectiveCarStatus.ersStoreEnergy,
+          drsEnabled: effectiveCarStatus.drsAllowed === 1,
+          ersDeployMode: effectiveCarStatus.ersDeployMode,
+          fuelMix: effectiveCarStatus.fuelMix,
           penalties: lapData.penalties,
           warnings: lapData.totalWarnings,
           numUnservedDriveThroughPens: lapData.numUnservedDriveThroughPens,

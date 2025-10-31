@@ -12,24 +12,35 @@ export function setupSocketHandlers(
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    // Send current telemetry data to new client (serialize BigInt values)
-    const currentData = services.telemetryService.getLastData();
-    if (currentData) {
-      socket.emit('telemetry', serializeBigInt(currentData));
-    }
+    // Handle explicit initial data request
+    const handleRequestInitialData = () => {
+      // Get all current session data (array of all cars' telemetry)
+      const currentData = services.telemetryService.getCurrentSessionData();
+      if (currentData && Array.isArray(currentData) && currentData.length > 0) {
+        socket.emit('initialData', serializeBigInt(currentData));
+      } else {
+        // Send empty array to acknowledge request but no data available
+        socket.emit('initialData', []);
+      }
+    };
+    socket.on('requestInitialData', handleRequestInitialData);
 
     // Handle voice commands
-    socket.on('voice_command', (command) => {
+    const handleVoiceCommand = (command: any) => {
       console.log('Voice command received:', command);
       
       // Process voice command and generate response
       const response = processVoiceCommand(command);
       socket.emit('voice_response', response);
-    });
+    };
+    socket.on('voice_command', handleVoiceCommand);
 
-    // Handle disconnection
+    // Handle disconnection - cleanup all listeners
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
+      // Remove all event listeners to prevent memory leaks
+      socket.off('requestInitialData', handleRequestInitialData);
+      socket.off('voice_command', handleVoiceCommand);
     });
   });
 
@@ -57,6 +68,68 @@ export function setupSocketHandlers(
   // Set up alert broadcasting
   services.telemetryService.on('alert', (alert) => {
     io.emit('alert', alert);
+  });
+
+  // Forward Event Packet events to frontend
+  // High-priority events (header banner - persistent)
+  services.telemetryService.on('event:redFlag', (data) => {
+    io.emit('event:redFlag', data);
+  });
+
+  services.telemetryService.on('safetyCarStatusChanged', (data) => {
+    io.emit('safetyCarStatusChanged', data);
+  });
+
+  // Temporary notifications (3-second display)
+  services.telemetryService.on('event:sessionStarted', (data) => {
+    io.emit('event:sessionStarted', data);
+  });
+
+  services.telemetryService.on('event:sessionEnded', (data) => {
+    io.emit('event:sessionEnded', data);
+  });
+
+  services.telemetryService.on('event:fastestLap', (data) => {
+    io.emit('event:fastestLap', {
+      driverName: data.driverName,
+      lapTime: data.lapTime,
+      carIndex: data.carIndex
+    });
+  });
+
+  services.telemetryService.on('event:retirement', (data) => {
+    io.emit('event:retirement', {
+      driverName: data.driverName,
+      carIndex: data.carIndex
+    });
+  });
+
+  services.telemetryService.on('event:penaltyIssued', (data) => {
+    io.emit('event:penaltyIssued', {
+      driverName: data.driverName,
+      carIndex: data.carIndex,
+      penaltyType: data.penaltyType,
+      time: data.time
+    });
+  });
+
+  services.telemetryService.on('event:raceWinner', (data) => {
+    io.emit('event:raceWinner', {
+      driverName: data.driverName,
+      carIndex: data.carIndex
+    });
+  });
+
+  services.telemetryService.on('event:chequeredFlag', (data) => {
+    io.emit('event:chequeredFlag', data);
+  });
+
+  services.telemetryService.on('event:startLights', (data) => {
+    io.emit('event:startLights', data);
+  });
+
+  services.telemetryService.on('event:lightsOut', (data) => {
+    io.emit('event:lightsOut', data);
   });
 
   // Set up session completion handling

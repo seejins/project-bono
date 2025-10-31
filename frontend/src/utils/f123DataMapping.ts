@@ -161,8 +161,10 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
   const stintHistory = udpData.stintHistory || [];
   
   return {
-    id: udpData.carNumber?.toString() || '0',
+    id: udpData.carIndex?.toString() ?? udpData.carNumber?.toString() ?? '0', // Use carIndex (always unique) instead of carNumber for React keys
     position: lapData.carPosition || 0,
+    hasPenalty: udpData.hasPenalty || false, // For penalty indicator
+    isFastestLap: udpData.isFastestLap || false, // For Best Lap column color coding (isolated from sectors)
     driverName: udpData.driverName || 'Unknown Driver',
     driverAbbreviation: getDriverAbbreviation(udpData.driverName),
     teamColor: getTeamColor(udpData.teamName),
