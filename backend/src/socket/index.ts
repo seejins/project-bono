@@ -12,19 +12,6 @@ export function setupSocketHandlers(
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    // Handle explicit initial data request
-    const handleRequestInitialData = () => {
-      // Get all current session data (array of all cars' telemetry)
-      const currentData = services.telemetryService.getCurrentSessionData();
-      if (currentData && Array.isArray(currentData) && currentData.length > 0) {
-        socket.emit('initialData', serializeBigInt(currentData));
-      } else {
-        // Send empty array to acknowledge request but no data available
-        socket.emit('initialData', []);
-      }
-    };
-    socket.on('requestInitialData', handleRequestInitialData);
-
     // Handle voice commands
     const handleVoiceCommand = (command: any) => {
       console.log('Voice command received:', command);
@@ -39,7 +26,6 @@ export function setupSocketHandlers(
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
       // Remove all event listeners to prevent memory leaks
-      socket.off('requestInitialData', handleRequestInitialData);
       socket.off('voice_command', handleVoiceCommand);
     });
   });

@@ -189,7 +189,6 @@ export class TelemetryService extends EventEmitter {
   public isRunning: boolean = false;
   private lastData: F123TelemetryData | null = null;
   private dataBuffer: F123TelemetryData[] = [];
-  private currentSessionData: F123TelemetryData[] = [];
   
   // Cached header object to avoid recreating on every emission
   private readonly DEFAULT_HEADER: PacketHeader = {
@@ -285,6 +284,11 @@ export class TelemetryService extends EventEmitter {
   
   // Session restart detection
   private previousSessionTimeLeft: number | null = null;
+  
+  // Frame 1 initial load tracking (per spec: Frame 1 has session_timestamp 0.000)
+  private participantsLoadedForCurrentSession: boolean = false;
+  private pendingInitialEmission: boolean = false;
+  private initialEmissionTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
     super();
@@ -396,6 +400,13 @@ export class TelemetryService extends EventEmitter {
         if (this.currentSessionUid === null || this.currentSessionUid !== packetSessionUid) {
           isNewSession = true;
           hasMeaningfulChange = true;
+          // Reset participants flag for new session
+          this.participantsLoadedForCurrentSession = false;
+          // Clear any pending timeout
+          if (this.initialEmissionTimeout) {
+            clearTimeout(this.initialEmissionTimeout);
+            this.initialEmissionTimeout = null;
+          }
           // Update current session UID if it changed
           if (this.currentSessionUid !== packetSessionUid) {
             this.currentSessionUid = packetSessionUid;
@@ -403,9 +414,18 @@ export class TelemetryService extends EventEmitter {
         }
       }
       
+      // Detect Frame 1 using session_time (only check if new session)
+      // Frame 1 has session_timestamp 0.000 per spec
+      let isFrame1 = false;
+      if (isNewSession) {
+        const sessionTime = data.m_header?.m_sessionTime || data.m_header?.sessionTime || data.m_sessionTime || -1;
+        isFrame1 = sessionTime === 0.0 || (sessionTime >= 0 && sessionTime < 0.05);
+      }
+      
       // Process lap data first to populate maps before emission
+      // Allow position 0 during Frame 1 (formation lap/grid positions)
       data.m_lapData.forEach((lapData: any, index: number) => {
-        if (lapData && lapData.m_carPosition > 0) {
+        if (lapData && (lapData.m_carPosition > 0 || isFrame1)) {
           const currentLapNum = lapData.m_currentLapNum || 0;
           const previousLapNum = this.previousLapNumbers.get(index) || 0;
           
@@ -535,7 +555,8 @@ export class TelemetryService extends EventEmitter {
           }
           
           // Capture S1 when entering sector 2 (sector 1 completed)
-          if (currentSector === 1 && prevSector === 0 && currentDriverStatus === 1) {
+          // Allow both RUNNING (1) and IN_LAP (2) statuses
+          if (currentSector === 1 && prevSector === 0 && (currentDriverStatus === 1 || currentDriverStatus === 2)) {
             const s1Time = lapData.m_sector1TimeInMS || 0;
             const s1Minutes = lapData.m_sector1TimeMinutes || 0;
             if (s1Time > 0) {
@@ -549,7 +570,8 @@ export class TelemetryService extends EventEmitter {
           
           // Capture S2 when entering sector 3 (sector 2 completed)
           // Also store S1/S2 for S3 calculation on sector completion
-          if (currentSector === 2 && prevSector === 1 && currentDriverStatus === 1) {
+          // Allow both RUNNING (1) and IN_LAP (2) statuses
+          if (currentSector === 2 && prevSector === 1 && (currentDriverStatus === 1 || currentDriverStatus === 2)) {
             // Capture S2 for persistence (right-side column)
             const s2Time = lapData.m_sector2TimeInMS || 0;
             const s2Minutes = lapData.m_sector2TimeMinutes || 0;
@@ -571,7 +593,8 @@ export class TelemetryService extends EventEmitter {
           }
           
           // Capture S3 when entering sector 1 of next lap (sector 3 completed: sector 2 → 0)
-          if (currentSector === 0 && prevSector === 2 && currentDriverStatus === 1) {
+          // Allow both RUNNING (1) and IN_LAP (2) statuses
+          if (currentSector === 0 && prevSector === 2 && (currentDriverStatus === 1)) {
             // Use lastLapTimeInMS directly from current packet (most accurate timing)
             const lastLapTimeInMS = lapData.m_lastLapTimeInMS || 0;
             if (lastLapTimeInMS > 0) {
@@ -620,8 +643,9 @@ export class TelemetryService extends EventEmitter {
             hasMeaningfulChange = true;
           }
           
-          // Clear right-side sector times when entering out lap (driverStatus = 3)
-          if (currentDriverStatus === 3 && prevState.driverStatus !== 3) {
+          // Clear right-side sector times when entering out lap (driverStatus = 3) or entering pit status (pitStatus = 1 or 2)
+          if ((currentDriverStatus === 3 && prevState.driverStatus !== 3) || 
+              ((currentPitStatus === 1 || currentPitStatus === 2) && prevState.pitStatus === 0)) {
             this.persistedLS1.delete(index);
             this.persistedLS2.delete(index);
             this.persistedLS3.delete(index);
@@ -678,8 +702,29 @@ export class TelemetryService extends EventEmitter {
       });
       
       // Emit if meaningful change detected OR if it's a new session (force initial load)
-      // Process data first so maps are populated before emission
-      if (hasMeaningfulChange || isNewSession) {
+      // For new sessions (Frame 1), wait for participants with timeout fallback
+      if (isNewSession) {
+        if (this.participantsLoadedForCurrentSession) {
+          // Participants already loaded, emit immediately
+          this.pendingInitialEmission = false;
+      this.emitCombinedTelemetryData();
+        } else {
+          // Mark pending and set timeout (2 second fallback)
+          this.pendingInitialEmission = true;
+          if (this.initialEmissionTimeout) {
+            clearTimeout(this.initialEmissionTimeout);
+          }
+          this.initialEmissionTimeout = setTimeout(() => {
+            // Timeout: emit even without participants (fallback)
+            if (this.pendingInitialEmission) {
+              this.pendingInitialEmission = false;
+              this.emitCombinedTelemetryData();
+            }
+            this.initialEmissionTimeout = null;
+          }, 2000);
+        }
+      } else if (hasMeaningfulChange) {
+        // Normal emission (not initial load)
         this.emitCombinedTelemetryData();
       }
     }
@@ -777,10 +822,42 @@ export class TelemetryService extends EventEmitter {
     if (data.m_participants && Array.isArray(data.m_participants)) {
       const participants = data.m_participants.map((participant: any, index: number) => {
         if (participant && participant.m_name) {
-          // Extract name and steamId in one pass (fixes duplicate Buffer.from conversion)
-          const nameBuffer = participant.m_name;
-          const driverName = Buffer.from(nameBuffer).toString('utf8').replace(/\0/g, '');
-          const steamId = this.extractSteamIdFromName(driverName); // Pass already-converted string
+          // The f1-23-udp library may provide m_name as string, Buffer, or byte array
+          // Handle all cases robustly
+          let driverName: string;
+          const nameType = typeof participant.m_name;
+          
+          if (nameType === 'string') {
+            // Already a string - use directly (most common case)
+            driverName = participant.m_name.replace(/\0/g, '').trim();
+          } else if (Buffer.isBuffer(participant.m_name)) {
+            // Already a Buffer - convert to string
+            driverName = participant.m_name.toString('utf8').replace(/\0/g, '').trim();
+          } else if (Array.isArray(participant.m_name)) {
+            // Byte array [u8; 48] - convert to Buffer then string
+            driverName = Buffer.from(participant.m_name).toString('utf8').replace(/\0/g, '').trim();
+          } else {
+            // Fallback: try Buffer.from for any other type
+            try {
+              driverName = Buffer.from(participant.m_name).toString('utf8').replace(/\0/g, '').trim();
+            } catch (error) {
+              console.warn(`⚠️ Failed to parse driver name for participant ${index} (type: ${nameType}):`, error);
+              return null;
+            }
+          }
+          
+          // Only proceed if we got a valid, non-empty name
+          if (!driverName || driverName.length === 0) {
+            console.warn(`⚠️ Empty driver name for participant ${index} (original type: ${nameType})`);
+            return null;
+          }
+          
+          // Debug: Log if name looks suspicious (contains "undefined" or very short)
+          if (driverName.includes('undefined') || driverName.length < 2) {
+            console.warn(`⚠️ Suspicious driver name for participant ${index}: "${driverName}" (type: ${nameType}, original: ${JSON.stringify(participant.m_name).substring(0, 100)})`);
+          }
+          
+          const steamId = this.extractSteamIdFromName(driverName);
           
           return {
             carIndex: index,
@@ -808,6 +885,22 @@ export class TelemetryService extends EventEmitter {
           networkId: participant.networkId
         });
       });
+
+      // Mark participants loaded for current session
+      this.participantsLoadedForCurrentSession = true;
+
+      // If we were waiting for initial emission, emit now
+      if (this.pendingInitialEmission) {
+        this.pendingInitialEmission = false;
+        if (this.initialEmissionTimeout) {
+          clearTimeout(this.initialEmissionTimeout);
+          this.initialEmissionTimeout = null;
+        }
+        // Use setImmediate to ensure maps are fully populated
+        setImmediate(() => {
+          this.emitCombinedTelemetryData();
+        });
+      }
 
       // Emit participants event with enhanced data
       this.emit('participants', {
@@ -889,6 +982,7 @@ export class TelemetryService extends EventEmitter {
           status: this.safetyCarStatus, // 0=none, 1=SC, 2=VSC, 3=formation
           isVSC: this.safetyCarStatus === 2,
           isSC: this.safetyCarStatus === 1,
+          isFormation: this.safetyCarStatus === 3,
           timestamp: new Date()
         });
       }
@@ -919,6 +1013,7 @@ export class TelemetryService extends EventEmitter {
     this.carStatusMap.clear();
     this.participantsMap.clear();
     this.stintHistoryMap.clear();
+    this.carDamageMap.clear(); // Clear car damage data on session change
     this.bestLapTimesMap.clear();
     this.bestLapSector1Map.clear();
     this.bestLapSector2Map.clear();
@@ -936,8 +1031,15 @@ export class TelemetryService extends EventEmitter {
     // this.personalBestMicroSectorLapTimes.clear();
     this.cachedSectorLength = 0;
     this.cachedMicroSectorLength = 0;
-    this.currentSessionData = [];
     this.previousSessionTimeLeft = null; // Reset session restart detection
+    
+    // Reset Frame 1 initial load tracking
+    this.participantsLoadedForCurrentSession = false;
+    this.pendingInitialEmission = false;
+    if (this.initialEmissionTimeout) {
+      clearTimeout(this.initialEmissionTimeout);
+      this.initialEmissionTimeout = null;
+    }
   }
 
   // Event Packet state management
@@ -952,7 +1054,7 @@ export class TelemetryService extends EventEmitter {
   
   // Penalty tracking (for table indicators)
   private penaltyMap: Map<number, boolean> = new Map(); // carIndex → hasPenalty
-  
+
   // Process Event Packet (ID: 3)
   private processEventPacket(data: any): void {
     if (!data.m_eventStringCode || !Array.isArray(data.m_eventStringCode)) {
@@ -1438,16 +1540,12 @@ export class TelemetryService extends EventEmitter {
       
       // Add to buffer (keep last 1000 entries)
       allCarsData.forEach(data => {
-        this.dataBuffer.push(data);
-    this.currentSessionData.push(data);
+    this.dataBuffer.push(data);
       });
       
-      // Trim buffers if they exceed 1000 entries
+      // Trim buffer if it exceeds 1000 entries
       if (this.dataBuffer.length > 1000) {
-      this.dataBuffer.shift();
-    }
-      if (this.currentSessionData.length > 1000) {
-        this.currentSessionData.shift();
+        this.dataBuffer.shift();
       }
     }
   }
@@ -1489,10 +1587,6 @@ export class TelemetryService extends EventEmitter {
 
   public getDataBuffer(): F123TelemetryData[] {
     return [...this.dataBuffer];
-  }
-
-  public getCurrentSessionData(): F123TelemetryData[] {
-    return [...this.currentSessionData];
   }
 
 }
