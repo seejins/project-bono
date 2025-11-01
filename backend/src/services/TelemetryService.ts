@@ -176,8 +176,6 @@ export interface F123TelemetryData {
   
   // Event-driven flags (isolated - do not affect sector color coding)
   isFastestLap?: boolean; // True if this driver has the fastest lap (Best Lap column only)
-  hasPenalty?: boolean; // True if driver has active penalty (table indicator only)
-  
   // Additional calculated fields
   gapToPole?: number; // calculated gap in milliseconds
   sessionUid?: number; // Session UID as number for frontend compatibility (converted from bigint)
@@ -282,8 +280,6 @@ export class TelemetryService extends EventEmitter {
   private currentTotalLaps: number = 0;
   private currentSessionUid: bigint | null = null; // Track current session UID
   
-  // Session restart detection
-  private previousSessionTimeLeft: number | null = null;
   
   // Frame 1 initial load tracking (per spec: Frame 1 has session_timestamp 0.000)
   private participantsLoadedForCurrentSession: boolean = false;
@@ -424,8 +420,11 @@ export class TelemetryService extends EventEmitter {
       
       // Process lap data first to populate maps before emission
       // Allow position 0 during Frame 1 (formation lap/grid positions)
+      const totalCarsInPacket = data.m_lapData.length;
+      let processedCount = 0;
       data.m_lapData.forEach((lapData: any, index: number) => {
         if (lapData && (lapData.m_carPosition > 0 || isFrame1)) {
+          processedCount++;
           const currentLapNum = lapData.m_currentLapNum || 0;
           const previousLapNum = this.previousLapNumbers.get(index) || 0;
           
@@ -555,8 +554,13 @@ export class TelemetryService extends EventEmitter {
           }
           
           // Capture S1 when entering sector 2 (sector 1 completed)
-          // Allow both RUNNING (1) and IN_LAP (2) statuses
-          if (currentSector === 1 && prevSector === 0 && (currentDriverStatus === 1 || currentDriverStatus === 2)) {
+          // Allow RUNNING (1), IN_LAP (2) for practice/qualifying, and ON_TRACK (4) for races
+          const isRace = this.currentSessionType === 10 || this.currentSessionType === 11;
+          if (currentSector === 1 && prevSector === 0 && (
+            currentDriverStatus === 1 || // Flying Lap (all sessions)
+            (!isRace && currentDriverStatus === 2) || // In Lap (practice/qualifying only)
+            (isRace && currentDriverStatus === 4) // On Track (race only)
+          )) {
             const s1Time = lapData.m_sector1TimeInMS || 0;
             const s1Minutes = lapData.m_sector1TimeMinutes || 0;
             if (s1Time > 0) {
@@ -570,8 +574,12 @@ export class TelemetryService extends EventEmitter {
           
           // Capture S2 when entering sector 3 (sector 2 completed)
           // Also store S1/S2 for S3 calculation on sector completion
-          // Allow both RUNNING (1) and IN_LAP (2) statuses
-          if (currentSector === 2 && prevSector === 1 && (currentDriverStatus === 1 || currentDriverStatus === 2)) {
+          // Allow RUNNING (1), IN_LAP (2) for practice/qualifying, and ON_TRACK (4) for races
+          if (currentSector === 2 && prevSector === 1 && (
+            currentDriverStatus === 1 || // Flying Lap (all sessions)
+            (!isRace && currentDriverStatus === 2) || // In Lap (practice/qualifying only)
+            (isRace && currentDriverStatus === 4) // On Track (race only)
+          )) {
             // Capture S2 for persistence (right-side column)
             const s2Time = lapData.m_sector2TimeInMS || 0;
             const s2Minutes = lapData.m_sector2TimeMinutes || 0;
@@ -593,8 +601,12 @@ export class TelemetryService extends EventEmitter {
           }
           
           // Capture S3 when entering sector 1 of next lap (sector 3 completed: sector 2 → 0)
-          // Allow both RUNNING (1) and IN_LAP (2) statuses
-          if (currentSector === 0 && prevSector === 2 && (currentDriverStatus === 1)) {
+          // Allow RUNNING (1), IN_LAP (2) for practice/qualifying, and ON_TRACK (4) for races
+          if (currentSector === 0 && prevSector === 2 && (
+            currentDriverStatus === 1 || // Flying Lap (all sessions)
+            (!isRace && currentDriverStatus === 2) || // In Lap (practice/qualifying only)
+            (isRace && currentDriverStatus === 4) // On Track (race only)
+          )) {
             // Use lastLapTimeInMS directly from current packet (most accurate timing)
             const lastLapTimeInMS = lapData.m_lastLapTimeInMS || 0;
             if (lastLapTimeInMS > 0) {
@@ -931,22 +943,6 @@ export class TelemetryService extends EventEmitter {
       });
     }
     
-    // Detect session restart (same UID and type, but session time suddenly increased)
-    if (this.currentSessionUid === newSessionUid && 
-        this.sessionData.sessionType === newSessionType &&
-        this.previousSessionTimeLeft !== null &&
-        newSessionTimeLeft !== undefined &&
-        newSessionTimeLeft > this.previousSessionTimeLeft + 30) { // 30 second threshold
-      this.clearSessionData();
-      this.clearPreviousStates(); // Clear state tracking for session restart
-      // Emit session restart event to frontend (convert bigint to number for JSON)
-      this.emit('sessionRestarted', {
-        sessionType: newSessionType,
-        sessionUid: Number(newSessionUid),
-        reason: 'Session time reset'
-      });
-    }
-    
     this.currentSessionUid = newSessionUid;
     
     // Extract session data from UDP
@@ -963,7 +959,6 @@ export class TelemetryService extends EventEmitter {
       this.sessionData.sessionType = data.m_sessionType;
     }
     if (data.m_sessionTimeLeft !== undefined) {
-      this.previousSessionTimeLeft = this.sessionData.sessionTimeLeft;
       this.sessionData.sessionTimeLeft = data.m_sessionTimeLeft;
     }
     if (data.m_sessionDuration !== undefined) {
@@ -1007,8 +1002,6 @@ export class TelemetryService extends EventEmitter {
     this.fastestLapCarIndex = null;
     this.fastestLapTime = null;
     
-    // Clear penalty flags
-    this.penaltyMap.clear();
     this.lapDataMap.clear();
     this.carStatusMap.clear();
     this.participantsMap.clear();
@@ -1031,7 +1024,6 @@ export class TelemetryService extends EventEmitter {
     // this.personalBestMicroSectorLapTimes.clear();
     this.cachedSectorLength = 0;
     this.cachedMicroSectorLength = 0;
-    this.previousSessionTimeLeft = null; // Reset session restart detection
     
     // Reset Frame 1 initial load tracking
     this.participantsLoadedForCurrentSession = false;
@@ -1051,25 +1043,33 @@ export class TelemetryService extends EventEmitter {
   // Fastest lap tracking (isolated - ONLY for Best Lap column color coding)
   private fastestLapCarIndex: number | null = null;
   private fastestLapTime: number | null = null;
-  
-  // Penalty tracking (for table indicators)
-  private penaltyMap: Map<number, boolean> = new Map(); // carIndex → hasPenalty
 
   // Process Event Packet (ID: 3)
   private processEventPacket(data: any): void {
-    if (!data.m_eventStringCode || !Array.isArray(data.m_eventStringCode)) {
+    // Handle both string and array formats (UDP library may parse it)
+    let eventCode: string;
+    
+    if (typeof data.m_eventStringCode === 'string') {
+      // Already a string (UDP library parsed it)
+      eventCode = data.m_eventStringCode.trim();
+    } else if (Array.isArray(data.m_eventStringCode)) {
+      // Array of bytes - parse to string
+      eventCode = String.fromCharCode(...data.m_eventStringCode)
+        .replace(/\0/g, '')
+        .trim();
+    } else {
+      // Invalid format - return early
       return;
     }
     
-    // Parse event string code (4-byte array → string)
-    const eventCode = String.fromCharCode(...data.m_eventStringCode)
-      .replace(/\0/g, '')
-      .trim();
+    if (!eventCode || eventCode.length === 0) {
+      return;
+    }
     
-    const eventDetails = data.m_eventDetails || {};
-    const header = data.m_header || {};
-    
-    switch (eventCode) {
+  const eventDetails = data.m_eventDetails || {};
+  const header = data.m_header || {};
+  
+  switch (eventCode) {
       case 'SSTA': // Session Started
         this.emit('event:sessionStarted', {
           sessionUid: Number(header.m_sessionUid || header.sessionUid || 0),
@@ -1130,27 +1130,6 @@ export class TelemetryService extends EventEmitter {
         }
         break;
         
-      case 'PENA': // Penalty Issued
-        {
-          const carIndex = eventDetails.vehicleIdx;
-          if (carIndex !== undefined) {
-            // Set penalty flag
-            this.penaltyMap.set(carIndex, true);
-            
-            // Emit notification
-            const participant = this.participantsMap.get(carIndex);
-            this.emit('event:penaltyIssued', {
-              carIndex,
-              driverName: participant?.driverName || `Driver ${carIndex + 1}`,
-              penaltyType: eventDetails.penaltyType || 0,
-              infringementType: eventDetails.infringementType || 0,
-              time: eventDetails.time || 0,
-              timestamp: new Date()
-            });
-          }
-        }
-        break;
-        
       case 'DRSE': // DRS Enabled
         this.emit('event:drsEnabled', {
           timestamp: new Date()
@@ -1205,26 +1184,6 @@ export class TelemetryService extends EventEmitter {
         this.emit('event:lightsOut', {
           timestamp: new Date()
         });
-        break;
-        
-      case 'DTSV': // Drive Through Penalty Served
-        {
-          const carIndex = eventDetails.vehicleIdx;
-          if (carIndex !== undefined) {
-            // Clear penalty flag when served
-            this.penaltyMap.set(carIndex, false);
-          }
-        }
-        break;
-        
-      case 'SGSV': // Stop Go Penalty Served
-        {
-          const carIndex = eventDetails.vehicleIdx;
-          if (carIndex !== undefined) {
-            // Clear penalty flag when served
-            this.penaltyMap.set(carIndex, false);
-          }
-        }
         break;
         
       default:
@@ -1329,10 +1288,10 @@ export class TelemetryService extends EventEmitter {
     const carIndices = new Set([
       ...this.lapDataMap.keys(),
       ...this.carStatusMap.keys(),
-      ...this.participantsMap.keys()
-    ]);
-    
-    for (const carIndex of carIndices) {
+        ...this.participantsMap.keys()
+      ]);
+      
+      for (const carIndex of carIndices) {
       const lapData = this.lapDataMap.get(carIndex);
       const carStatus = this.carStatusMap.get(carIndex);
       const stintHistory = this.stintHistoryMap.get(carIndex) || [];
@@ -1415,10 +1374,9 @@ export class TelemetryService extends EventEmitter {
           sessionUid: this.currentSessionUid ? Number(this.currentSessionUid) : 0,
           
           // Event-driven flags
-          isFastestLap: (this.fastestLapTime !== null && 
-                        this.fastestLapCarIndex === carIndex && 
-                        lapData.bestLapTimeInMS === this.fastestLapTime),
-          hasPenalty: this.penaltyMap.get(carIndex) || false,
+          // Use event packet as source of truth (FTLP event sets fastestLapCarIndex)
+          isFastestLap: (this.fastestLapCarIndex !== null && 
+                        this.fastestLapCarIndex === carIndex),
           
           // Populate additional fields expected by frontend
           lapNumber: lapData.currentLapNum,
@@ -1458,7 +1416,6 @@ export class TelemetryService extends EventEmitter {
     }
     
     if (allCarsData.length > 0) {
-      
       // Update data buffers for getter methods
       this.updateDataBuffers(allCarsData);
       

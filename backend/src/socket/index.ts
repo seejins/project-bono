@@ -147,14 +147,11 @@ export function setupSocketHandlers(
     }
   });
 
-  // Set up session change/restart forwarding to clients
+  // Set up session change forwarding to clients
   services.telemetryService.on('sessionChanged', (data) => {
     io.emit('sessionChanged', data);
   });
 
-  services.telemetryService.on('sessionRestarted', (data) => {
-    io.emit('sessionRestarted', data);
-  });
 }
 
 function processVoiceCommand(command: any): any {

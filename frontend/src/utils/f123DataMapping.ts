@@ -42,16 +42,32 @@ export const getTireCompound = (compound: number): 'S' | 'M' | 'H' | 'I' | 'W' =
   }
 };
 
+// Visual Tire Compound Mapping - Uses different values (16=soft, 17=medium, 18=hard)
+export const getVisualTireCompound = (compound: number): 'S' | 'M' | 'H' | 'I' | 'W' => {
+  switch (compound) {
+    case 16: return 'S'; // Soft
+    case 17: return 'M'; // Medium
+    case 18: return 'H'; // Hard
+    case 7: return 'I';  // Intermediate
+    case 8: return 'W';  // Wet
+    default: return 'M'; // Default to Medium if unknown
+  }
+};
+
 // Gap Formatting - Add + prefix
+// Format: +SSS.mmm (if < 60s) or +M:ss.mmm (if < 10min) or +MM:ss.mmm (if >= 10min)
 export const formatGap = (gapMs: number): string => {
   if (gapMs === 0) return '0.000'; // Show 0.000 instead of LEADER for consistency
   const seconds = gapMs / 1000;
   if (seconds < 60) {
-    return `+${seconds.toFixed(3)}`;
+    return `+${seconds.toFixed(3)}`; // +SSS.mmm
   } else {
     const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = (seconds % 60).toFixed(3);
-    return `+${minutes}:${remainingSeconds}`;
+    const remainingSeconds = seconds % 60;
+    const minutesStr = minutes >= 10 ? minutes.toString().padStart(2, '0') : minutes.toString(); // M or MM
+    const secondsParts = remainingSeconds.toFixed(3).split('.');
+    const secondsFormatted = `${secondsParts[0].padStart(2, '0')}.${secondsParts[1]}`; // ss.mmm (always two digits)
+    return `+${minutesStr}:${secondsFormatted}`; // +M:ss.mmm or +MM:ss.mmm
   }
 };
 
@@ -155,7 +171,7 @@ const getDriverStatusDisplay = (udpData: any): string => {
 };
 
 // Convert F1 23 UDP data to LiveTimings format
-export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: number): any => {
+export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: number, leaderLapNum?: number, isRace?: boolean, frontCarLapNum?: number): any => {
   const lapData = udpData.lapData;
   const carStatus = udpData.carStatus;
   const stintHistory = udpData.stintHistory || [];
@@ -163,7 +179,6 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
   return {
     id: udpData.carIndex?.toString() ?? udpData.carNumber?.toString() ?? '0', // Use carIndex (always unique) instead of carNumber for React keys
     position: lapData.carPosition || 0,
-    hasPenalty: udpData.hasPenalty || false, // For penalty indicator
     isFastestLap: udpData.isFastestLap || false, // For Best Lap column color coding (isolated from sectors)
     driverName: udpData.driverName || 'Unknown Driver',
     driverAbbreviation: getDriverAbbreviation(udpData.driverName),
@@ -179,14 +194,32 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
     bestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),
     bestLapTire: getTireCompound(carStatus.actualTyreCompound || 0), // Use current tire as approximation
     
-    // Gap and interval - show terminal status when applicable, else gap to leader best
+    // Gap and interval - show terminal status when applicable, else gap to leader
     gap: (() => {
       const result = lapData.resultStatus || 0;
       if (result === 5) return 'DSQ';
       if (result === 7) return 'RET';
       if (result === 4) return 'DNF';
-      if (lapData.carPosition === 1) return 'LEADER';
+      if (lapData.carPosition === 1) return '--'; // Leader - use placeholder
       
+      // For race sessions, use deltaToRaceLeaderInMS directly (UDP provides correct values)
+      if (isRace && lapData.deltaToRaceLeaderInMS !== undefined) {
+        // If delta is 0 and lap numbers differ, calculate laps down
+        if (lapData.deltaToRaceLeaderInMS === 0 && leaderLapNum && lapData.currentLapNum && lapData.currentLapNum !== leaderLapNum) {
+          const lapsDown = leaderLapNum - lapData.currentLapNum;
+          return `+${lapsDown} Lap${lapsDown > 1 ? 's' : ''}`;
+        }
+        
+        // Normal time delta (non-zero)
+        if (lapData.deltaToRaceLeaderInMS > 0) {
+          return formatGap(lapData.deltaToRaceLeaderInMS);
+        }
+        
+        // Leader case (delta 0, same lap number)
+        return '--';
+      }
+      
+      // For practice/qualifying, use best lap time comparison
       const driverBestLap = lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0;
       if (!leaderBestLapTime || leaderBestLapTime === 0 || driverBestLap === 0) {
         return '--';
@@ -195,7 +228,35 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
       const gapToLeaderBest = driverBestLap - leaderBestLapTime;
       return formatGap(gapToLeaderBest);
     })(),
-    interval: lapData.deltaToCarInFrontInMS ? formatGap(lapData.deltaToCarInFrontInMS) : '',
+    interval: (() => {
+      // For leader, show placeholder
+      if (lapData.carPosition === 1) {
+        return '--';
+      }
+      
+      // For race sessions, handle delta === 0 case (lapped by car in front)
+      if (isRace && lapData.deltaToCarInFrontInMS !== undefined) {
+        // If delta is 0 and lap numbers differ, calculate laps down
+        if (lapData.deltaToCarInFrontInMS === 0 && frontCarLapNum && lapData.currentLapNum && lapData.currentLapNum !== frontCarLapNum) {
+          const lapsDown = frontCarLapNum - lapData.currentLapNum;
+          return `+${lapsDown} Lap${lapsDown > 1 ? 's' : ''}`;
+        }
+        
+        // Normal time delta (non-zero)
+        if (lapData.deltaToCarInFrontInMS > 0) {
+          return formatGap(lapData.deltaToCarInFrontInMS);
+        }
+        
+        // Same lap, very close (delta 0, same lap number)
+        return '--';
+      }
+      
+      // For practice/qualifying or non-race, use delta directly
+      if (lapData.deltaToCarInFrontInMS !== undefined && lapData.deltaToCarInFrontInMS > 0) {
+        return formatGap(lapData.deltaToCarInFrontInMS);
+      }
+      return '--';
+    })(),
     
     // Position changes
     positionChange: calculatePositionChange(lapData.gridPosition || 0, lapData.carPosition || 0),
@@ -213,7 +274,8 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
     lapsOnCompound: carStatus.tyresAgeLaps || 0,
     
     // Stint tracking data - simplified to use UDP directly
-    currentTire: getTireCompound(carStatus.actualTyreCompound || 0),
+    // Use only visual compound for stint graph (matches what user sees in-game)
+    currentTire: getVisualTireCompound(carStatus.visualTyreCompound || 0),
     stintLaps: carStatus.tyresAgeLaps || 0, // Direct from UDP
     totalRaceLaps: udpData.sessionData?.totalLaps || 52, // Use dynamic session data
     lapNumber: lapData.currentLapNum || 0,
