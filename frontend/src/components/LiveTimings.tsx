@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
 
 // Driver data interface for live timings
@@ -908,6 +907,349 @@ const useSectorColoring = (drivers: DriverData[]) => {
   return { parseSectorTimeString, fastestSectors, getCurrentSectorColor };
 };
 
+// Extended driver type with sector fastest flags
+type DriverDataWithFlags = DriverData & {
+  isFastestS1: boolean;
+  isFastestS2: boolean;
+  isFastestS3: boolean;
+};
+
+// Pre-calculate sector fastest flags for practice/qualifying
+const useSectorFastestFlags = (drivers: DriverData[], fastestSectors: any, parseSectorTimeString: (timeStr: string) => number): DriverDataWithFlags[] => {
+  return useMemo(() => {
+    return drivers.map(driver => {
+      const sector1Parsed = parseSectorTimeString(driver.sector1Time || '0');
+      const sector2Parsed = parseSectorTimeString(driver.sector2Time || '0');
+      const sector3Parsed = parseSectorTimeString(driver.sector3Time || '0');
+      
+      return {
+        ...driver,
+        isFastestS1: fastestSectors.fastestS1 !== Infinity && Math.abs(sector1Parsed - fastestSectors.fastestS1) < 0.001,
+        isFastestS2: fastestSectors.fastestS2 !== Infinity && Math.abs(sector2Parsed - fastestSectors.fastestS2) < 0.001,
+        isFastestS3: fastestSectors.fastestS3 !== Infinity && Math.abs(sector3Parsed - fastestSectors.fastestS3) < 0.001,
+      } as DriverDataWithFlags;
+    });
+  }, [drivers, fastestSectors, parseSectorTimeString]);
+};
+
+// Memoized Practice/Qualifying Driver Row Component
+const PracticeDriverRow = React.memo(({ 
+  driver,
+  getCurrentSectorColor,
+  isFastestS1,
+  isFastestS2,
+  isFastestS3
+}: {
+  driver: DriverData;
+  getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string;
+  isFastestS1: boolean;
+  isFastestS2: boolean;
+  isFastestS3: boolean;
+}) => {
+  return (
+    <div className="relative transition-all duration-150 ease-out">
+      <div
+        className="grid grid-cols-13 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
+        style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}
+      >
+        {/* POS */}
+        <div className="px-2 border-r border-gray-500 flex items-center justify-center">
+          <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
+            driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
+          }`}>
+            {driver.position}
+          </div>
+        </div>
+        
+        {/* Driver */}
+        <div className={`px-3 border-r border-gray-500 flex items-center ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          <div className="flex items-center space-x-2">
+            <div 
+              className="w-1 h-6 rounded"
+              style={{ backgroundColor: driver.teamColor }}
+            ></div>
+            <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
+          </div>
+        </div>
+        
+        {/* Lap Time */}
+        <div className={`px-[11px] border-r border-gray-500 flex items-center justify-between ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          <span className="text-base font-mono tabular-nums tracking-tighter">{driver.fastestLap}</span>
+          {driver.fastestLapTire && (
+            <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
+              {driver.fastestLapTire}
+            </span>
+          )}
+        </div>
+        
+        {/* Gap */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${getRetirementStatusColor(driver.status)}`}>
+          {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
+        </div>
+        
+        {/* S1 (Best Lap) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${isFastestS1 ? 'text-purple-400 font-semibold' : ''}`}>
+          {driver.sector1Time || '--:--'}
+        </div>
+        
+        {/* S2 (Best Lap) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${isFastestS2 ? 'text-purple-400 font-semibold' : ''}`}>
+          {driver.sector2Time || '--:--'}
+        </div>
+        
+        {/* S3 (Best Lap) */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${isFastestS3 ? 'text-purple-400 font-semibold' : ''}`}>
+          {driver.sector3Time || '--:--'}
+        </div>
+        
+        {/* Micro-sectors */}
+        <div className={`px-8 border-r border-gray-500 flex justify-center items-center ${
+          isDriverRetired(driver.status) ? 'opacity-40' : ''
+        }`}>
+          <div className="flex items-center gap-x-0.5 w-full">
+            {(driver.microSectors && driver.microSectors.length === 24 
+              ? driver.microSectors 
+              : Array(24).fill('grey')
+            ).map((sector, index) => {
+              const isMainSectorEnd = (index + 1) % 8 === 0 && index < 23;
+              return (
+                <Fragment key={index}>
+                  <div
+                    className={`flex-1 h-4 min-w-0 rounded-sm ${
+                      sector === 'purple' ? 'bg-purple-500' :
+                      sector === 'green' ? 'bg-green-500' :
+                      sector === 'yellow' ? 'bg-yellow-500' :
+                      'bg-gray-500'
+                    }`}
+                  ></div>
+                  {isMainSectorEnd && <div className="w-1.5 flex-shrink-0"></div>}
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+        
+        {/* Driver Last Name */}
+        <div className={`px-2 border-r border-gray-500 text-sm text-left ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.driverName.split(' ').pop()}
+        </div>
+        
+        {/* Status */}
+        <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.status || ''}
+        </div>
+        
+        {/* S1 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
+        }`}>
+          {driver.LS1 || '--:--'}
+        </div>
+        
+        {/* S2 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
+        }`}>
+          {driver.LS2 || '--:--'}
+        </div>
+        
+        {/* S3 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
+        }`}>
+          {driver.LS3 || '--:--'}
+        </div>
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these specific props changed
+  return (
+    prevProps.driver.id === nextProps.driver.id &&
+    prevProps.driver.position === nextProps.driver.position &&
+    prevProps.driver.fastestLap === nextProps.driver.fastestLap &&
+    prevProps.driver.fastestLapTire === nextProps.driver.fastestLapTire &&
+    prevProps.driver.gap === nextProps.driver.gap &&
+    prevProps.driver.status === nextProps.driver.status &&
+    prevProps.driver.sector1Time === nextProps.driver.sector1Time &&
+    prevProps.driver.sector2Time === nextProps.driver.sector2Time &&
+    prevProps.driver.sector3Time === nextProps.driver.sector3Time &&
+    prevProps.driver.LS1 === nextProps.driver.LS1 &&
+    prevProps.driver.LS2 === nextProps.driver.LS2 &&
+    prevProps.driver.LS3 === nextProps.driver.LS3 &&
+    prevProps.driver.microSectors === nextProps.driver.microSectors &&
+    prevProps.isFastestS1 === nextProps.isFastestS1 &&
+    prevProps.isFastestS2 === nextProps.isFastestS2 &&
+    prevProps.isFastestS3 === nextProps.isFastestS3
+  );
+});
+
+// Memoized Race Driver Row Component
+const RaceDriverRow = React.memo(({ 
+  driver,
+  getCurrentSectorColor,
+  fastestLapCarIndex,
+  StintGraph
+}: {
+  driver: DriverData;
+  getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string;
+  fastestLapCarIndex: string | null;
+  StintGraph: React.FC<{ driver: DriverData }>;
+}) => {
+  return (
+    <div className="relative transition-all duration-150 ease-out">
+      <div
+        className="grid grid-cols-12 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
+        style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}
+      >
+        {/* POS */}
+        <div className="px-2 border-r border-gray-500 flex items-center justify-center">
+          <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
+            driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
+          }`}>
+            {driver.position}
+          </div>
+        </div>
+        
+        {/* Driver with position change */}
+        <div className="px-[11px] border-r border-gray-500 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div 
+              className="w-1 h-6 rounded"
+              style={{ backgroundColor: driver.teamColor }}
+            ></div>
+            <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
+          </div>
+          <div className="flex items-center justify-end space-x-1 w-14">
+            {driver.positionChange > 0 ? (
+              <>
+                <ArrowUp className="w-4 h-4 text-green-500 position-change" />
+                <span className="text-sm text-green-500 font-semibold position-change tabular-nums">{driver.positionChange}</span>
+              </>
+            ) : driver.positionChange < 0 ? (
+              <>
+                <ArrowDown className="w-4 h-4 text-red-500 position-change" />
+                <span className="text-sm text-red-500 font-semibold position-change tabular-nums">{Math.abs(driver.positionChange)}</span>
+              </>
+            ) : (
+              <>
+                <Minus className="w-3 h-3 text-gray-400" />
+                <span className="text-xs text-gray-400">0</span>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {/* Gap */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${getRetirementStatusColor(driver.status)}`}>
+          {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
+        </div>
+        
+        {/* Interval */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.interval}
+        </div>
+        
+        {/* Best Lap */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        } ${driver.id === fastestLapCarIndex ? 'text-purple-400 font-semibold' : ''}`}>
+          {driver.bestLap}
+        </div>
+        
+        {/* Last Lap */}
+        <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.lastLapTime}
+        </div>
+        
+        {/* Stint Graph */}
+        <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
+          isDriverRetired(driver.status) ? 'opacity-40' : ''
+        }`}>
+          <div className="flex justify-center items-center space-x-1 overflow-hidden w-full">
+            <StintGraph driver={driver} />
+          </div>
+        </div>
+        
+        {/* Driver Last Name */}
+        <div className={`px-2 border-r border-gray-500 text-sm text-left ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.driverName.split(' ').pop()}
+        </div>
+        
+        {/* Status */}
+        <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
+        }`}>
+          {driver.status || ''}
+        </div>
+        
+        {/* S1 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
+        }`}>
+          {driver.LS1 || '--:--'}
+        </div>
+        
+        {/* S2 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
+        }`}>
+          {driver.LS2 || '--:--'}
+        </div>
+        
+        {/* S3 (Current) */}
+        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
+        }`}>
+          {driver.LS3 || '--:--'}
+        </div>
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these specific props changed
+  return (
+    prevProps.driver.id === nextProps.driver.id &&
+    prevProps.driver.position === nextProps.driver.position &&
+    prevProps.driver.positionChange === nextProps.driver.positionChange &&
+    prevProps.driver.gap === nextProps.driver.gap &&
+    prevProps.driver.interval === nextProps.driver.interval &&
+    prevProps.driver.bestLap === nextProps.driver.bestLap &&
+    prevProps.driver.lastLapTime === nextProps.driver.lastLapTime &&
+    prevProps.driver.status === nextProps.driver.status &&
+    prevProps.driver.LS1 === nextProps.driver.LS1 &&
+    prevProps.driver.LS2 === nextProps.driver.LS2 &&
+    prevProps.driver.LS3 === nextProps.driver.LS3 &&
+    prevProps.driver.stintHistory === nextProps.driver.stintHistory &&
+    prevProps.driver.stintLaps === nextProps.driver.stintLaps &&
+    prevProps.fastestLapCarIndex === nextProps.fastestLapCarIndex
+  );
+});
+
 // Practice/Qualifying Timing Table Component
 const PracticeQualifyingTimingTable = ({ 
   drivers, 
@@ -922,7 +1264,8 @@ const PracticeQualifyingTimingTable = ({
   fastestSectors: { fastestS1: number, fastestS2: number, fastestS3: number, sectorBestMap: Record<string, {s1: number, s2: number, s3: number}> },
   parseSectorTimeString: (timeStr: string) => number
 }) => {
-  // Use shared logic from parent (no local calculations)
+  // Pre-calculate sector fastest flags for all drivers
+  const driversWithFlags = useSectorFastestFlags(drivers, fastestSectors, parseSectorTimeString);
 
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden relative">
@@ -942,160 +1285,18 @@ const PracticeQualifyingTimingTable = ({
           <div className="px-2 text-center">S3</div>
         </div>
         
-        <AnimatePresence mode="popLayout">
-          {drivers.map((driver, index) => {
-              return (
-                <motion.div
-                  key={driver.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ 
-                    opacity: 1, 
-                    y: 0
-                  }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ 
-                    duration: 0.2,
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30
-                  }}
-                    className="relative"
-                >
-                  <div
-                    className="grid grid-cols-13 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
-                    style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}
-                  >
-            {/* POS - Fixed width with centered content */}
-            <div className="px-2 border-r border-gray-500 flex items-center justify-center">
-              <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-                driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
-              }`}>
-                {driver.position}
-              </div>
-            </div>
-            
-            {/* Driver (no position change indicators for practice/qualifying) */}
-            <div className={`px-3 border-r border-gray-500 flex items-center ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              <div className="flex items-center space-x-2">
-                <div 
-                  className="w-1 h-6 rounded"
-                  style={{ backgroundColor: driver.teamColor }}
-                ></div>
-                <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
-              </div>
-            </div>
-            
-            {/* Lap Time - justify left for time, right for tire */}
-            <div className={`px-[11px] border-r border-gray-500 flex items-center justify-between ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              <span className="text-base font-mono tabular-nums tracking-tighter">{driver.fastestLap}</span>
-              {driver.fastestLapTire && (
-                <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
-                  {driver.fastestLapTire}
-                </span>
-              )}
-            </div>
-            
-            {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${getRetirementStatusColor(driver.status)}`}>
-              {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
-            </div>
-            
-            {/* S1 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${fastestSectors.fastestS1 !== Infinity && Math.abs(parseSectorTimeString(driver.sector1Time || '0') - fastestSectors.fastestS1) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
-              {driver.sector1Time || '--:--'}
-            </div>
-            
-            {/* S2 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${fastestSectors.fastestS2 !== Infinity && Math.abs(parseSectorTimeString(driver.sector2Time || '0') - fastestSectors.fastestS2) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
-              {driver.sector2Time || '--:--'}
-            </div>
-            
-            {/* S3 (Best Lap) - Purple for fastest overall */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${fastestSectors.fastestS3 !== Infinity && Math.abs(parseSectorTimeString(driver.sector3Time || '0') - fastestSectors.fastestS3) < 0.001 ? 'text-purple-400 font-semibold' : ''}`}>
-              {driver.sector3Time || '--:--'}
-            </div>
-            
-            {/* Micro-sectors as boxes (flexible width to fill remaining space) */}
-            <div className={`px-8 border-r border-gray-500 flex justify-center items-center ${
-              isDriverRetired(driver.status) ? 'opacity-40' : ''
-            }`}>
-              <div className="flex items-center gap-x-0.5 w-full">
-                {/* Always show 24 micro-sectors (grey squares that color in as boundaries are crossed) */}
-                {(driver.microSectors && driver.microSectors.length === 24 
-                  ? driver.microSectors 
-                  : Array(24).fill('grey')
-                ).map((sector, index) => {
-                  // Add larger spacing between main sectors (every 8 micro-sectors)
-                  const isMainSectorEnd = (index + 1) % 8 === 0 && index < 23;
-                  return (
-                    <Fragment key={index}>
-                      <div
-                        className={`flex-1 h-4 min-w-0 rounded-sm ${
-                          sector === 'purple' ? 'bg-purple-500' :
-                          sector === 'green' ? 'bg-green-500' :
-                          sector === 'yellow' ? 'bg-yellow-500' :
-                          'bg-gray-500'
-                        }`}
-                      ></div>
-                      {isMainSectorEnd && <div className="w-1.5 flex-shrink-0"></div>}
-                    </Fragment>
-                  );
-                })}
-              </div>
-            </div>
-            
-            {/* Driver Last Name */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-left ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.driverName.split(' ').pop()}
-            </div>
-            
-            {/* Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.status || ''}
-            </div>
-            
-                {/* S1 (Current) - Color coding: purple = best overall, green = personal best */}
-                <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-                 isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
-                }`}>
-                 {driver.LS1 || '--:--'}
-                </div>
-            
-              {/* S2 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-                isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
-              }`}>
-                {driver.LS2 || '--:--'}
-              </div>
-            
-              {/* S3 (Current) - Color coding: purple = best overall, green = personal best */}
-              <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-                isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
-              }`}>
-                {driver.LS3 || '--:--'}
-              </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-        </AnimatePresence>
+        <div>
+          {driversWithFlags.map((driverWithFlags) => (
+            <PracticeDriverRow
+              key={driverWithFlags.id}
+              driver={driverWithFlags}
+              getCurrentSectorColor={getCurrentSectorColor}
+              isFastestS1={driverWithFlags.isFastestS1}
+              isFastestS2={driverWithFlags.isFastestS2}
+              isFastestS3={driverWithFlags.isFastestS3}
+            />
+          ))}
+        </div>
     </div>
   );
 };
@@ -1131,144 +1332,17 @@ const RaceTimingTable = ({
           <div className="px-2 text-center">S3</div>
         </div>
         
-        <AnimatePresence mode="popLayout">
-          {drivers.map((driver, index) => {
-              return (
-                <motion.div
-                  key={driver.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ 
-                    opacity: 1, 
-                    y: 0
-                  }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ 
-                    duration: 0.2,
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30
-                  }}
-                  className="relative"
-                >
-                  <div
-                    className="grid grid-cols-12 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
-                    style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}
-                  >
-            {/* POS - Fixed width with centered content */}
-            <div className="px-2 border-r border-gray-500 flex items-center justify-center">
-              <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-                driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
-              }`}>
-                {driver.position}
-              </div>
-            </div>
-            
-            {/* Driver with position change icons and numbers */}
-            <div className="px-[11px] border-r border-gray-500 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div 
-                  className="w-1 h-6 rounded"
-                  style={{ backgroundColor: driver.teamColor }}
-                ></div>
-                <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
-              </div>
-              <div className="flex items-center justify-end space-x-1 w-14">
-                {driver.positionChange > 0 ? (
-                  <>
-                    <ArrowUp className="w-4 h-4 text-green-500 position-change" />
-                    <span className="text-sm text-green-500 font-semibold position-change tabular-nums">{driver.positionChange}</span>
-                  </>
-                ) : driver.positionChange < 0 ? (
-                  <>
-                    <ArrowDown className="w-4 h-4 text-red-500 position-change" />
-                    <span className="text-sm text-red-500 font-semibold position-change tabular-nums">{Math.abs(driver.positionChange)}</span>
-                  </>
-                ) : (
-                  <>
-                    <Minus className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-400">0</span>
-                  </>
-                )}
-              </div>
-            </div>
-            
-            {/* Gap or Retirement Status */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${getRetirementStatusColor(driver.status)}`}>
-              {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
-            </div>
-            
-            {/* Interval */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.interval}
-            </div>
-            
-            {/* Best Lap */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${driver.id === fastestLapCarIndex ? 'text-purple-400 font-semibold' : ''}`}>
-              {driver.bestLap}
-            </div>
-            
-            {/* Last Lap */}
-            <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.lastLapTime}
-            </div>
-            
-            {/* Stint Graph (flexible width to fill remaining space) */}
-            <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
-              isDriverRetired(driver.status) ? 'opacity-40' : ''
-            }`}>
-              <div className="flex justify-center items-center space-x-1 overflow-hidden w-full">
-                <StintGraph driver={driver} />
-              </div>
-            </div>
-            
-            {/* Driver Last Name */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-left ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.driverName.split(' ').pop()}
-            </div>
-            
-            {/* Status */}
-            <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            }`}>
-              {driver.status || ''}
-            </div>
-            
-            {/* S1 (Current) - Color coding: purple = best overall, green = personal best (shared with practice/qualifying) */}
-            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's1')
-            }`}>
-              {driver.LS1 || '--:--'}
-            </div>
-            
-            {/* S2 (Current) - Color coding: purple = best overall, green = personal best (shared with practice/qualifying) */}
-            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's2')
-            }`}>
-              {driver.LS2 || '--:--'}
-            </div>
-            
-            {/* S3 (Current) - Color coding: purple = best overall, green = personal best (shared with practice/qualifying) */}
-            <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-              isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : getCurrentSectorColor(driver, 's3')
-            }`}>
-              {driver.LS3 || '--:--'}
-            </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-        </AnimatePresence>
+        <div>
+          {drivers.map((driver) => (
+            <RaceDriverRow
+              key={driver.id}
+              driver={driver}
+              getCurrentSectorColor={getCurrentSectorColor}
+              fastestLapCarIndex={fastestLapCarIndex}
+              StintGraph={StintGraph}
+            />
+          ))}
+        </div>
     </div>
   );
 };
