@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory, formatSectorTime, formatLapTime } from '../utils/f123DataMapping';
+import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
 
 // Driver data interface for live timings
 interface DriverData {
@@ -31,7 +31,7 @@ interface DriverData {
   LS2?: string;
   LS3?: string;
   microSectors: Array<'purple' | 'green' | 'yellow' | 'grey'>;
-  isFastestLap?: boolean; // For Best Lap column color coding (isolated from sectors)
+  isFastestLap?: boolean; // Kept for backward compatibility - not used in LiveTimings (uses event-based fastestLapCarIndex instead)
   stintHistory: Array<{
     compound: 'S' | 'M' | 'H';
     laps: number;
@@ -146,34 +146,93 @@ interface StintGraphProps {
 }
 
 const StintGraph = ({ driver }: StintGraphProps) => {
-  // Use driver data directly from UDP
-  const currentTire = driver.currentTire;
-  const stintLaps = driver.stintLaps; // Direct from m_tyres_age_laps
-  const totalRaceLaps = driver.totalRaceLaps;
-  
-  // Calculate remaining laps (simplified - just show current stint + remaining)
-  const remainingLaps = Math.max(0, totalRaceLaps - stintLaps);
-  
-  // Build render elements: [TIRE] ----- [STINT_LAPS] [REMAINING_LAPS]
-  const renderElements: Array<{ type: 'indicator' | 'lap'; tire?: string; lapNum?: number; isStintCount?: boolean }> = [];
-  
-  // Add current tire indicator
-  renderElements.push({ type: 'indicator', tire: currentTire, isStintCount: false });
-  
-  // Add stint lap boxes (simplified - just show current stint)
-  for (let i = 0; i < stintLaps - 1; i++) {
-    renderElements.push({ type: 'lap', tire: currentTire });
-  }
-  
-  // Add stint count box
-  if (stintLaps > 0) {
-    renderElements.push({ type: 'indicator', tire: currentTire, lapNum: stintLaps, isStintCount: true });
-  }
-  
-  // Add remaining laps
-  for (let i = 0; i < remainingLaps; i++) {
-    renderElements.push({ type: 'lap', tire: undefined });
-  }
+  // Memoize render elements calculation to avoid recalculating on every render
+  const renderElements = useMemo(() => {
+    // Use driver data directly from UDP
+    const currentTire = driver.currentTire;
+    const stintLaps = driver.stintLaps; // Direct from m_tyres_age_laps (0-indexed: laps completed)
+    const totalRaceLaps = driver.totalRaceLaps;
+    const stintHistory = driver.stintHistory || [];
+    
+    // Separate completed stints from current stint
+    // endLap = 255 means current tire, otherwise it's the lap number (1-indexed) where stint ended
+    const completedStints = stintHistory.filter(stint => stint.laps !== 255 && stint.laps > 0);
+    
+    // Process completed stints to calculate laps per stint
+    // endLap is 1-indexed (lap where stint ended), so we calculate laps from previous endLap
+    let previousStintEndLap = 0;
+    const processedStints: Array<{ compound: 'S' | 'M' | 'H' | 'I' | 'W'; laps: number }> = [];
+    
+    for (const stint of completedStints) {
+      const endLap = stint.laps; // 1-indexed lap where this stint ended
+      const stintLapCount = endLap - previousStintEndLap; // Laps in this stint
+      
+      processedStints.push({
+        compound: stint.compound,
+        laps: stintLapCount
+      });
+      
+      previousStintEndLap = endLap;
+    }
+    
+    // Build render elements: [previous_stints] [current_stint] [remaining_laps]
+    const elements: Array<{ type: 'indicator' | 'lap'; tire?: string; lapNum?: number; isStintCount?: boolean }> = [];
+    
+    // Add all previous completed stints
+    for (let stintIndex = 0; stintIndex < processedStints.length; stintIndex++) {
+      const stint = processedStints[stintIndex];
+      const isFirstStint = stintIndex === 0;
+      
+      // Add tire indicator for this stint
+      elements.push({ type: 'indicator', tire: stint.compound, isStintCount: false });
+      
+      // Add lap boxes for this stint
+      // First stint: tire indicator + stint.laps boxes
+      // Subsequent stints: tire indicator + (stint.laps - 1) boxes (to fix off-by-one)
+      const lapBoxesToRender = isFirstStint ? stint.laps : stint.laps - 1;
+      for (let i = 0; i < lapBoxesToRender; i++) {
+        elements.push({ type: 'lap', tire: stint.compound });
+      }
+      
+      // No counter box for previous stints - replaced with colored lap box above
+    }
+    
+    // Add current stint
+    // Current tire indicator
+    elements.push({ type: 'indicator', tire: currentTire, isStintCount: false });
+    
+    // Current stint lap boxes
+    for (let i = 0; i < stintLaps - 1; i++) {
+      elements.push({ type: 'lap', tire: currentTire });
+    }
+    
+    // Current stint count box
+    if (stintLaps > 0) {
+      elements.push({ type: 'indicator', tire: currentTire, lapNum: stintLaps, isStintCount: true });
+    }
+    
+    // Calculate remaining laps - total boxes must equal totalRaceLaps
+    // Boxes used = all previous stints + current stint
+    const boxesUsedForPreviousStints = processedStints.reduce((sum, stint, index) => {
+      const isFirstStint = index === 0;
+      const lapBoxes = isFirstStint ? stint.laps : stint.laps - 1;
+      return sum + 1 + lapBoxes; // tire + lap boxes (adjusted for subsequent stints)
+    }, 0);
+    
+    const boxesUsedForCurrentStint = stintLaps > 0 
+      ? 1 + (stintLaps - 1) + 1  // tire + completed + counter
+      : 1;                        // tire only
+    
+    const totalBoxesUsed = boxesUsedForPreviousStints + boxesUsedForCurrentStint;
+    const remainingLaps = Math.max(0, totalRaceLaps - totalBoxesUsed);
+    
+    // Add remaining laps (adjusted to keep total = totalRaceLaps)
+    for (let i = 0; i < remainingLaps; i++) {
+      elements.push({ type: 'lap', tire: undefined });
+    }
+    
+    return elements;
+  }, [driver.currentTire, driver.stintLaps, driver.totalRaceLaps, driver.stintHistory]);
   
   return (
     <div className="w-full h-5 overflow-hidden flex items-center space-x-0">
@@ -183,32 +242,27 @@ const StintGraph = ({ driver }: StintGraphProps) => {
           return (
             <div
               key={index}
-              className={`w-5 h-5 rounded-sm flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
+              className={`h-5 rounded-sm flex items-center justify-center text-[9px] font-bold flex-1 ${
                 element.tire === 'S' ? 'bg-red-500 text-white' :
                 element.tire === 'M' ? 'bg-yellow-500 text-black' :
-                element.tire === 'H' ? 'bg-white text-black border border-gray-300' :
+                element.tire === 'H' ? 'bg-white text-black' :
                 element.tire === 'I' ? 'bg-green-500 text-white' :
                 element.tire === 'W' ? 'bg-blue-500 text-white' :
                 'bg-gray-800 text-white'
               }`}
+              style={{ 
+                minWidth: '2px'
+              }}
             >
               {element.isStintCount ? element.lapNum : element.tire}
             </div>
           );
         } else {
-          // Lap box
-          const backgroundColor = element.tire 
-            ? (element.tire === 'S' ? '#ef4444' :
-               element.tire === 'M' ? '#eab308' :
-               element.tire === 'H' ? '#ffffff' :
-               element.tire === 'I' ? '#22c55e' :
-               element.tire === 'W' ? '#3b82f6' : '#6b7280')
-            : '#6b7280';
-          
+          // Lap box - use bgClass only (backgroundColor was redundant, Tailwind handles it)
           const bgClass = element.tire
             ? (element.tire === 'S' ? 'bg-red-500' :
                element.tire === 'M' ? 'bg-yellow-500' :
-               element.tire === 'H' ? 'bg-white border border-gray-300' :
+               element.tire === 'H' ? 'bg-white' :
                element.tire === 'I' ? 'bg-green-500' :
                element.tire === 'W' ? 'bg-blue-500' : 'bg-gray-800')
             : 'bg-gray-500';
@@ -218,8 +272,7 @@ const StintGraph = ({ driver }: StintGraphProps) => {
               key={index}
               className={`h-1 rounded-sm flex-1 ${bgClass}`}
               style={{ 
-                minWidth: '2px',
-                backgroundColor
+                minWidth: '2px'
               }}
             />
           );
@@ -236,8 +289,6 @@ export const LiveTimings = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const previousLapNumbers = useRef<Map<string, number>>(new Map());
-  const [currentSessionUid, setCurrentSessionUid] = useState<number | null>(null);
-  const [currentSessionType, setCurrentSessionType] = useState<number | null>(null);
   
   // Header notification state
   const [headerNotification, setHeaderNotification] = useState<{
@@ -254,6 +305,9 @@ export const LiveTimings = () => {
   const prevBestLapMap = useRef<Map<number, number>>(new Map());
   // Backend now handles all persistence of personalBest sector times - no frontend ref needed
   const duplicateWarningRef = useRef<Set<number>>(new Set()); // Track warned carNumbers to avoid console spam
+  
+  // Track fastest lap carIndex from FTLP event packet (authoritative source)
+  const [fastestLapCarIndex, setFastestLapCarIndex] = useState<string | null>(null);
   
   // Calculate sector coloring once at parent level (shared by both tables)
   const { getCurrentSectorColor, fastestSectors, parseSectorTimeString } = useSectorColoring(drivers);
@@ -302,8 +356,7 @@ export const LiveTimings = () => {
       setPreviousDrivers([]);
       previousLapNumbers.current.clear();
       duplicateWarningRef.current.clear(); // Clear duplicate warnings on session change
-      setCurrentSessionUid(data.sessionUid);
-      setCurrentSessionType(data.newSessionType);
+      setFastestLapCarIndex(null); // Clear fastest lap tracking on session change
       // Clear notifications on session change
       setHeaderNotification(null);
     });
@@ -316,6 +369,14 @@ export const LiveTimings = () => {
         message: 'RED FLAG',
         timestamp: Date.now()
       });
+    });
+    
+    // Listen for fastest lap event (FTLP packet)
+    newSocket.on('event:fastestLap', (data: any) => {
+      // carIndex from event - convert to string to match driver.id format
+      if (data.carIndex !== undefined && data.carIndex !== null) {
+        setFastestLapCarIndex(data.carIndex.toString());
+      }
     });
     
     newSocket.on('safetyCarStatusChanged', (data: any) => {
@@ -358,6 +419,7 @@ export const LiveTimings = () => {
       newSocket.off('sessionCompleted');
       newSocket.off('sessionChanged');
       newSocket.off('event:redFlag');
+      newSocket.off('event:fastestLap');
       newSocket.off('safetyCarStatusChanged');
       newSocket.off('connect');
       newSocket.off('disconnect');
@@ -615,20 +677,47 @@ export const LiveTimings = () => {
       }
 
       // Shallow comparison - only update if drivers actually changed
+      // Only check fields that are displayed in the current session type
       const driversChanged = newDrivers.length !== drivers.length || 
         newDrivers.some((d, i) => {
           const prevDriver = drivers[i];
-          return !prevDriver || 
-            d.id !== prevDriver.id ||
-            d.position !== prevDriver.position ||
-            d.gap !== prevDriver.gap ||
-            d.interval !== prevDriver.interval ||
-            d.bestLap !== prevDriver.bestLap ||
-            d.lastLapTime !== prevDriver.lastLapTime ||
-            d.status !== prevDriver.status ||
-            d.sector1Time !== prevDriver.sector1Time ||
-            d.sector2Time !== prevDriver.sector2Time ||
-            d.sector3Time !== prevDriver.sector3Time;
+          if (!prevDriver || d.id !== prevDriver.id) return true;
+          
+          // Fields used in both race and practice/qualifying
+          if (d.position !== prevDriver.position ||
+              d.gap !== prevDriver.gap ||
+              d.interval !== prevDriver.interval ||
+              d.bestLap !== prevDriver.bestLap ||
+              d.lastLapTime !== prevDriver.lastLapTime ||
+              d.status !== prevDriver.status) {
+            return true;
+          }
+          
+          // For race: check LS1/LS2/LS3 (current live sectors displayed on right)
+          // For practice/qualifying: check sector1Time/sector2Time/sector3Time (best lap sectors on left)
+          if (isRace) {
+            // Race table shows LS1, LS2, LS3 (current live sectors) - check those
+            if (d.LS1 !== prevDriver.LS1 ||
+                d.LS2 !== prevDriver.LS2 ||
+                d.LS3 !== prevDriver.LS3) {
+              return true;
+            }
+          } else {
+            // Practice/Qualifying table shows sector1Time/sector2Time/sector3Time (best lap) on left
+            if (d.sector1Time !== prevDriver.sector1Time ||
+                d.sector2Time !== prevDriver.sector2Time ||
+                d.sector3Time !== prevDriver.sector3Time) {
+              return true;
+            }
+            // Also check LS1/LS2/LS3 for right side columns (current live sectors)
+            if (d.LS1 !== prevDriver.LS1 ||
+                d.LS2 !== prevDriver.LS2 ||
+                d.LS3 !== prevDriver.LS3) {
+              return true;
+            }
+          }
+          
+          return false;
         });
       
       if (driversChanged) {
@@ -637,7 +726,8 @@ export const LiveTimings = () => {
     }
   };
 
-  const getSessionDisplay = () => {
+  // Memoize session display to avoid recalculating on every render
+  const sessionDisplay = useMemo(() => {
     if (!sessionData) return 'No Session';
     
     if (sessionData.sessionType === 'RACE') {
@@ -648,7 +738,7 @@ export const LiveTimings = () => {
       const seconds = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
       return `${minutes}:${seconds}`;
     }
-  };
+  }, [sessionData?.sessionType, sessionData?.currentLap, sessionData?.totalLaps, sessionData?.timeRemaining]);
 
   if (!sessionData) {
     return (
@@ -679,7 +769,7 @@ export const LiveTimings = () => {
               <span className="text-lg">🏁 {sessionData.sessionTypeName || sessionData.sessionType}</span>
               <span className="text-lg">⏱️ {
                 sessionData.sessionType === 'RACE' 
-                  ? getSessionDisplay() 
+                  ? sessionDisplay 
                   : <SessionTimer sessionTimeLeft={sessionData.timeRemaining || 0} isRunning={isConnected && sessionData.timeRemaining > 0} />
               }</span>
             </div>
@@ -720,6 +810,7 @@ export const LiveTimings = () => {
                drivers={drivers} 
                previousDrivers={previousDrivers}
                getCurrentSectorColor={getCurrentSectorColor}
+               fastestLapCarIndex={fastestLapCarIndex}
              />
             ) : (
              <PracticeQualifyingTimingTable 
@@ -1013,11 +1104,13 @@ const PracticeQualifyingTimingTable = ({
 const RaceTimingTable = ({ 
   drivers, 
   previousDrivers,
-  getCurrentSectorColor
+  getCurrentSectorColor,
+  fastestLapCarIndex
 }: { 
   drivers: DriverData[], 
   previousDrivers: DriverData[],
-  getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string
+  getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string,
+  fastestLapCarIndex: string | null
 }) => {
   // Use shared logic from parent (no local calculations)
 
@@ -1117,7 +1210,7 @@ const RaceTimingTable = ({
             {/* Best Lap */}
             <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
               isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-            } ${driver.isFastestLap ? 'text-purple-400 font-semibold' : ''}`}>
+            } ${driver.id === fastestLapCarIndex ? 'text-purple-400 font-semibold' : ''}`}>
               {driver.bestLap}
             </div>
             

@@ -179,7 +179,7 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
   return {
     id: udpData.carIndex?.toString() ?? udpData.carNumber?.toString() ?? '0', // Use carIndex (always unique) instead of carNumber for React keys
     position: lapData.carPosition || 0,
-    isFastestLap: udpData.isFastestLap || false, // For Best Lap column color coding (isolated from sectors)
+    // isFastestLap removed - now using event-based fastestLapCarIndex from FTLP event packet
     driverName: udpData.driverName || 'Unknown Driver',
     driverAbbreviation: getDriverAbbreviation(udpData.driverName),
     teamColor: getTeamColor(udpData.teamName),
@@ -303,9 +303,9 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
       return s3Seconds > 0 ? formatSectorTime(s3Seconds * 1000, 0) : '--.---';
     })(),
     
-    // Stint history
+    // Stint history - use visual compound for stint graph (matches what user sees in-game)
     stintHistory: stintHistory.map((stint: any) => ({
-      compound: getTireCompound(stint.tyreActualCompound || stint.tyreVisualCompound || 18),
+      compound: getVisualTireCompound(stint.tyreVisualCompound || stint.tyreActualCompound || 18),
       laps: stint.endLap || 0
     })),
   };
