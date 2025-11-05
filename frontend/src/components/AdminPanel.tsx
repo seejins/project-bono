@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { MembersManagement } from './MembersManagement';
 import { SeasonsManagement } from './SeasonsManagement';
+import { RaceJSONUpload } from './RaceJSONUpload';
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -10,7 +11,7 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthenticate }) => {
   const [password, setPassword] = useState('');
-  const [activeSection, setActiveSection] = useState<'members' | 'seasons'>('members');
+  const [activeSection, setActiveSection] = useState<'members' | 'seasons' | 'races'>('members');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +77,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
         {[
           { id: 'members', label: 'Members', icon: '👥' },
-          { id: 'seasons', label: 'Seasons', icon: '🏆' }
+          { id: 'seasons', label: 'Seasons', icon: '🏆' },
+          { id: 'races', label: 'Races', icon: '🏁' }
         ].map((section) => (
             <button
               key={section.id}
@@ -96,6 +98,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       {/* Content */}
       {activeSection === 'members' && <MembersManagement />}
       {activeSection === 'seasons' && <SeasonsManagement />}
+      {activeSection === 'races' && <RaceJSONUpload />}
     </div>
   );
 };

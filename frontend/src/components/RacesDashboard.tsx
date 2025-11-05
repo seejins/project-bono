@@ -28,11 +28,12 @@ interface Event {
 
 interface RacesDashboardProps {
   seasonId: string;
+  onRaceSelect?: (raceId: string) => void;
 }
 
 type ViewMode = 'cards' | 'list';
 
-export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId }) => {
+export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRaceSelect }) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +179,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId }) => {
           {viewMode === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {events.map((event) => (
-                <EventCard key={event.id} event={event} />
+                <EventCard key={event.id} event={event} onRaceSelect={onRaceSelect} />
               ))}
             </div>
           ) : (
@@ -186,7 +187,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId }) => {
               <EventListHeader />
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {events.map((event) => (
-                  <EventListItem key={event.id} event={event} />
+                  <EventListItem key={event.id} event={event} onRaceSelect={onRaceSelect} />
                 ))}
               </div>
             </div>
@@ -200,9 +201,10 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId }) => {
 // Event Card Component
 interface EventCardProps {
   event: Event;
+  onRaceSelect?: (raceId: string) => void;
 }
 
-const EventCard: React.FC<EventCardProps> = ({ event }) => {
+const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
   const getEventStatusIcon = (event: Event) => {
     switch (event.status) {
       case 'completed':
@@ -287,7 +289,10 @@ const EventCard: React.FC<EventCardProps> = ({ event }) => {
         <div className="flex items-center justify-between">
           {getEventStatus(event)}
           {event.status === 'completed' && (
-            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+            <button 
+              onClick={() => onRaceSelect?.(event.id)}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
               View Results
             </button>
           )}
@@ -315,9 +320,10 @@ const EventListHeader: React.FC = () => {
 // Event List Item Component
 interface EventListItemProps {
   event: Event;
+  onRaceSelect?: (raceId: string) => void;
 }
 
-const EventListItem: React.FC<EventListItemProps> = ({ event }) => {
+const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) => {
   const getEventStatusIcon = (event: Event) => {
     switch (event.status) {
       case 'completed':
@@ -410,7 +416,10 @@ const EventListItem: React.FC<EventListItemProps> = ({ event }) => {
               <Edit className="h-4 w-4" />
             </button>
             {event.status === 'completed' && (
-              <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+              <button 
+                onClick={() => onRaceSelect?.(event.id)}
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
                 Results
               </button>
             )}

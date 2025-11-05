@@ -56,15 +56,37 @@ export interface F123DriverResult {
 export class F123DataService {
   /**
    * Format time from milliseconds to readable format
+   * Returns consistent width: MM:SS.mm (always 8 characters with 2 decimal places)
    */
   static formatTimeFromMs(milliseconds: number): string {
-    if (milliseconds <= 0) return '--:--.---';
+    if (milliseconds <= 0) return '--:--.--';
     
     const minutes = Math.floor(milliseconds / 60000);
     const seconds = Math.floor((milliseconds % 60000) / 1000);
+    const centiseconds = Math.floor((milliseconds % 1000) / 10); // Convert to centiseconds (hundredths)
+    
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Format sector time from milliseconds
+   * Returns --.--- format (6 characters) for times >= 10 seconds
+   * Returns -.--- format (5 characters) for times < 10 seconds
+   * Both formats are right-aligned within the same width container
+   */
+  static formatSectorTimeFromMs(milliseconds: number): string {
+    if (milliseconds <= 0) return '--.---';
+    
+    const seconds = Math.floor(milliseconds / 1000);
     const ms = milliseconds % 1000;
     
-    return `${minutes}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    if (seconds < 10) {
+      // Format as -.--- (5 characters) for times under 10 seconds
+      return `${seconds}.${ms.toString().padStart(3, '0')}`;
+    }
+    
+    // Format as --.--- (6 characters) for times 10 seconds and above
+    return `${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
   }
 
   /**
@@ -103,7 +125,7 @@ export class F123DataService {
   }
 
   /**
-   * Get team color class
+   * Get team color class (Tailwind classes)
    */
   static getTeamColor(team: string): string {
     const colors: { [key: string]: string } = {
@@ -119,6 +141,81 @@ export class F123DataService {
       'Williams': 'text-blue-300'
     };
     return colors[team] || 'text-gray-400';
+  }
+
+  /**
+   * Get team color as hex value (for inline styles)
+   * Uses official F1 team colors
+   * Handles case-insensitive matching and common team name variations
+   */
+  static getTeamColorHex(team: string): string {
+    if (!team || team === 'Unknown Team') {
+      return '#9ca3af'; // Default gray
+    }
+    
+    // Normalize team name for matching (trim, lowercase)
+    const normalizedTeam = team.trim().toLowerCase();
+    
+    const colorMap: { [key: string]: string } = {
+      // Mercedes variations
+      'mercedes': '#00D2BE',
+      'mercedes-amg': '#00D2BE',
+      'mercedes amg': '#00D2BE',
+      
+      // Red Bull variations
+      'red bull racing': '#1E41FF',
+      'red bull': '#1E41FF',
+      'redbull': '#1E41FF',
+      'redbull racing': '#1E41FF',
+      
+      // Ferrari
+      'ferrari': '#DC143C',
+      
+      // McLaren
+      'mclaren': '#FF8700',
+      
+      // Aston Martin variations
+      'aston martin': '#006F62',
+      'aston-martin': '#006F62',
+      
+      // Alpine
+      'alpine': '#0090FF',
+      'alpine f1': '#0090FF',
+      
+      // RB variations
+      'rb': '#469BFF',
+      'rb f1': '#469BFF',
+      'racing bulls': '#469BFF',
+      
+      // Sauber variations
+      'sauber': '#9B0000',
+      'stake f1': '#9B0000',
+      'stake f1 team': '#9B0000',
+      
+      // Haas
+      'haas': '#FFFFFF',
+      'haas f1': '#FFFFFF',
+      
+      // Williams
+      'williams': '#005AFF',
+      'williams f1': '#005AFF',
+      
+      // Alfa Romeo - maroon color
+      'alfa romeo': '#900C3F',
+      'alfa-romeo': '#900C3F',
+      'alfa romeo f1': '#900C3F',
+      'alfa romeo racing': '#900C3F',
+      'alfaromeo': '#900C3F',
+      
+      // AlphaTauri - navy color
+      'alphatauri': '#0A1E2E',
+      'alpha tauri': '#0A1E2E',
+      'alpha-tauri': '#0A1E2E',
+      'alphatauri f1': '#0A1E2E',
+      'scuderia alphatauri': '#0A1E2E'
+    };
+    
+    return colorMap[normalizedTeam] || '#9ca3af'; // Default gray if not found
   }
 
   /**

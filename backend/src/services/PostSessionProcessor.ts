@@ -16,10 +16,10 @@ export class PostSessionProcessor {
     this.io = io;
     this.f123UDPProcessor = f123UDPProcessor || null;
     
-    // Listen for finalClassification events from TelemetryService
-    this.telemetryService.on('finalClassification', this.handleSessionEnd.bind(this));
+    // REMOVED: UDP event listener - now using JSON upload flow exclusively
+    // this.telemetryService.on('finalClassification', this.handleSessionEnd.bind(this));
     
-    console.log('🔄 PostSessionProcessor initialized');
+    console.log('🔄 PostSessionProcessor initialized (UDP post-session flow disabled, using JSON upload)');
   }
 
   private async handleSessionEnd(finalResults: any[]): Promise<void> {
@@ -195,13 +195,13 @@ export class PostSessionProcessor {
     ) : { rows: [] };
     
     // Create lookup maps for O(1) access
-    const steamIdMap = new Map(steamIdMappings.rows.map(r => [r.f123_steam_id, r]));
-    const nameMap = new Map(nameMappings.rows.map(r => [r.driver_name, r]));
+    const steamIdMap = new Map(steamIdMappings.rows.map((r: any) => [r.f123_steam_id, r]));
+    const nameMap = new Map(nameMappings.rows.map((r: any) => [r.driver_name, r]));
     
     // Map results using pre-fetched data
     return finalResults.map((result) => {
       // Try steam_id first (most reliable)
-      const steamMapping = result.steamId ? steamIdMap.get(result.steamId) : null;
+      const steamMapping = result.steamId ? steamIdMap.get(result.steamId) as any : null;
       if (steamMapping) {
         return {
           ...result,
@@ -212,7 +212,7 @@ export class PostSessionProcessor {
       }
       
       // Fallback to driver name matching
-      const nameMapping = nameMap.get(result.driverName);
+      const nameMapping = nameMap.get(result.driverName) as any;
       if (nameMapping) {
         return {
           ...result,

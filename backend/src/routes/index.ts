@@ -1,4 +1,5 @@
 import { Express } from 'express';
+import { Server } from 'socket.io';
 import { TelemetryService } from '../services/TelemetryService';
 import { DatabaseService } from '../services/DatabaseService';
 import { F123UDPProcessor } from '../services/F123UDPProcessor';
@@ -13,6 +14,7 @@ import racesRoutes, { setupRacesRoutes } from './races';
 
 export function setupRoutes(
   app: Express,
+  io: Server,
   services: {
     telemetryService: TelemetryService;
     databaseService: DatabaseService;
@@ -134,6 +136,6 @@ export function setupRoutes(
   app.use('/api/sessions', sessionsRoutes(services.databaseService));
   
   // Race results and editing routes
-  setupRacesRoutes(services.databaseService, services.raceResultsEditor);
+  setupRacesRoutes(services.databaseService, services.raceResultsEditor, io);
   app.use('/api/races', racesRoutes);
 }

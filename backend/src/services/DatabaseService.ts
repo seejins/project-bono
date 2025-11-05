@@ -86,6 +86,7 @@ export interface Race {
 export interface RaceData {
   seasonId: string;
   trackId: string;
+  trackName?: string; // Optional - will be looked up from track if not provided
   raceDate: string;
   status?: 'scheduled' | 'completed' | 'cancelled';
 }
@@ -897,10 +898,17 @@ export class DatabaseService {
     const id = uuidv4();
     const now = new Date().toISOString();
     
+    // Get track name from track record if trackName not provided
+    let trackName = data.trackName;
+    if (!trackName && data.trackId) {
+      const track = await this.getTrackById(data.trackId);
+      trackName = track?.name || 'Unknown Track';
+    }
+    
     await this.db.query(
-      `INSERT INTO races (id, season_id, track_id, race_date, status, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, data.seasonId, data.trackId, data.raceDate, data.status || 'scheduled', now, now]
+      `INSERT INTO races (id, season_id, track_id, track_name, race_date, status, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, data.seasonId, data.trackId, trackName || 'Unknown Track', data.raceDate, data.status || 'scheduled', now, now]
     );
     
     return id;
@@ -914,6 +922,63 @@ export class DatabaseService {
         [seasonId]
       );
       return result.rows;
+  }
+
+  async getRaceById(raceId: string): Promise<any | null> {
+    const result = await this.db.query(
+      `SELECT 
+        r.id,
+        r.season_id as "seasonId",
+        r.track_id as "trackId",
+        r.track_name as "trackName",
+        r.race_date as "raceDate",
+        r.status,
+        r.session_type as "sessionType",
+        r.session_types as "sessionTypes",
+        r.session_duration as "sessionDuration",
+        r.weather_air_temp as "weatherAirTemp",
+        r.weather_track_temp as "weatherTrackTemp",
+        r.weather_rain_percentage as "weatherRainPercentage",
+        r.created_at as "createdAt",
+        r.updated_at as "updatedAt",
+        t.name as track_name,
+        t.country as track_country,
+        t.length_km as track_length
+       FROM races r
+       LEFT JOIN tracks t ON r.track_id = t.id
+       WHERE r.id = $1`,
+      [raceId]
+    );
+    
+    if (result.rows.length === 0) {
+      return null;
+    }
+    
+    const race = result.rows[0];
+    
+    // Format the response to match expected structure
+    return {
+      id: race.id,
+      seasonId: race.seasonId,
+      trackId: race.trackId,
+      trackName: race.trackName,
+      raceDate: race.raceDate,
+      status: race.status,
+      sessionType: race.sessionType,
+      sessionTypes: race.sessionTypes,
+      sessionDuration: race.sessionDuration,
+      weatherAirTemp: race.weatherAirTemp,
+      weatherTrackTemp: race.weatherTrackTemp,
+      weatherRainPercentage: race.weatherRainPercentage,
+      createdAt: race.createdAt,
+      updatedAt: race.updatedAt,
+      track: race.track_name ? {
+        id: race.trackId,
+        name: race.track_name,
+        country: race.track_country,
+        length: race.track_length || 0
+      } : null
+    };
   }
 
   // Driver Mapping operations
@@ -1002,7 +1067,7 @@ export class DatabaseService {
     // Insert new results
     for (const result of results) {
       await this.db.query(
-        `INSERT INTO f123_session_results (id, race_id, driver_id, driver_name, team_name, car_number, position, lap_time, sector1_time, sector2_time, sector3_time, fastest_lap, created_at) 
+        `INSERT INTO f123_session_results (id, race_id, driver_id, driver_name, team_name, car_number, position, lap_time, sector1_time, sector2_time, sector3_time, best_lap_time, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           uuidv4(),
@@ -1016,7 +1081,7 @@ export class DatabaseService {
           result.sector1Time,
           result.sector2Time,
           result.sector3Time,
-          result.fastestLap,
+          (result as any).bestLapTime || null,
           now
         ]
       );
@@ -1027,11 +1092,56 @@ export class DatabaseService {
     const result = await this.db.query(
       `SELECT driver_id as "driverId", driver_name as "driverName", team_name as "teamName", car_number as "carNumber", 
               position, lap_time as "lapTime", sector1_time as "sector1Time", sector2_time as "sector2Time", 
-              sector3_time as "sector3Time", fastest_lap as "fastestLap", created_at as "createdAt"
+              sector3_time as "sector3Time", best_lap_time as "bestLapTime", created_at as "createdAt"
        FROM f123_session_results WHERE race_id = $1 ORDER BY position`,
       [raceId]
       );
       return result.rows;
+  }
+
+  // Store F1 23 session results with driver names and teams (for JSON import fallback)
+  async storeF123SessionResults(raceId: string, sessionType: number, driverResults: any[]): Promise<void> {
+    const now = new Date().toISOString();
+    
+    // Delete existing results for this race (f123_session_results doesn't have session_type, so match by race_id and position)
+    // We'll match by position since we're replacing all results for this race
+    await this.db.query(
+      'DELETE FROM f123_session_results WHERE race_id = $1',
+      [raceId]
+    );
+    
+    // Insert new results with original JSON data
+    for (const result of driverResults) {
+      const driverName = result.driverName || result.mapped_driver_name || result.name || 'Unknown';
+      const teamName = result.teamName || result.team || 'Unknown Team';
+      const carNumber = result.carNumber || result.car_number || result.mapped_driver_number || 0;
+      // Use driver name as ID if no driver_id is available (f123_session_results.driver_id is NOT NULL)
+      const driverId = result.driver_id || driverName || 'UNKNOWN';
+      
+      await this.db.query(
+        `INSERT INTO f123_session_results (
+          id, race_id, driver_id, driver_name, team_name, car_number, position, 
+          lap_time, sector1_time, sector2_time, sector3_time, best_lap_time,
+          data_source, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [
+          uuidv4(),
+          raceId,
+          driverId,
+          driverName,
+          teamName,
+          carNumber,
+          result.position,
+          result.best_lap_time_ms || null,
+          result.sector1_time_ms || null,
+          result.sector2_time_ms || null,
+          result.sector3_time_ms || null,
+          result.best_lap_time_ms || null,
+          'FILE_UPLOAD',
+          now
+        ]
+      );
+    }
   }
 
   // Statistics methods
@@ -1682,7 +1792,7 @@ export class DatabaseService {
   }
 
   // Create new session result entry (dynamic tab creation)
-  async createSessionResult(raceId: string, sessionType: number, sessionName: string, sessionUID: bigint): Promise<string> {
+  async createSessionResult(raceId: string, sessionType: number, sessionName: string, sessionUID: bigint | null): Promise<string> {
     const id = uuidv4();
     const now = new Date().toISOString();
 
@@ -1740,14 +1850,52 @@ export class DatabaseService {
 
   // Get driver results for a specific session
   async getDriverSessionResults(sessionResultId: string): Promise<any[]> {
+    // First get the race_id and session_type from session_results
+    const sessionInfo = await this.db.query(
+      `SELECT sr.race_id, sr.session_type 
+       FROM session_results sr 
+       WHERE sr.id = $1`,
+      [sessionResultId]
+    );
+    
+    if (sessionInfo.rows.length === 0) {
+      return [];
+    }
+    
+    const raceId = sessionInfo.rows[0].race_id;
+    const sessionType = sessionInfo.rows[0].session_type;
+    
+    // Get driver session results with fallback to f123_session_results for names and sector times
     const result = await this.db.query(
-      `SELECT dsr.*, d.name as driver_name, m.name as member_name
+      `SELECT 
+        dsr.*, 
+        d.name as driver_name, 
+        d.team as driver_team,
+        d.number as driver_number,
+        m.name as member_name,
+        fdm.f123_team_name as mapping_team_name,
+        fdm.f123_driver_name as mapping_driver_name,
+        fdm.f123_driver_number as mapping_driver_number,
+        COALESCE(fsr.driver_name, m.name, d.name, fdm.f123_driver_name) as json_driver_name,
+        COALESCE(fsr.team_name, fdm.f123_team_name, d.team) as json_team_name,
+        COALESCE(fsr.car_number, d.number, fdm.f123_driver_number) as json_car_number,
+        COALESCE(dsr.sector1_time_ms, fsr.sector1_time) as sector1_time_ms,
+        COALESCE(dsr.sector2_time_ms, fsr.sector2_time) as sector2_time_ms,
+        COALESCE(dsr.sector3_time_ms, fsr.sector3_time) as sector3_time_ms
        FROM driver_session_results dsr
        LEFT JOIN drivers d ON dsr.driver_id = d.id
        LEFT JOIN members m ON dsr.member_id = m.id
+       LEFT JOIN f123_driver_mappings fdm ON (
+         (dsr.member_id = fdm.member_id OR d.name = fdm.f123_driver_name)
+         AND fdm.member_id IS NOT NULL
+       )
+       LEFT JOIN f123_session_results fsr ON (
+         fsr.race_id = $2 
+         AND fsr.position = dsr.position
+       )
        WHERE dsr.session_result_id = $1
        ORDER BY dsr.position ASC`,
-      [sessionResultId]
+      [sessionResultId, raceId]
     );
     
     return result.rows;

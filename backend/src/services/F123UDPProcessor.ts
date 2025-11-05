@@ -155,14 +155,8 @@ export class F123UDPProcessor {
       }
     });
 
-    // Final Classification packet (ID: 8) - Session results
-    this.telemetryService.on('raw_packet:finalClassification', async (data: any) => {
-      try {
-        await this.handleFinalClassificationPacket(data);
-      } catch (error) {
-        console.error('❌ Error handling final classification packet:', error);
-      }
-    });
+    // Final Classification packet (ID: 8) - REMOVED: Now using JSON upload flow instead
+    // This packet is no longer processed for post-session data storage
 
     // Session History packet (ID: 11) - Lap-by-lap data
     this.telemetryService.on('raw_packet:sessionHistory', async (data: any) => {

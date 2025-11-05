@@ -6,10 +6,12 @@
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
+    scrollbar-gutter: stable;
   }
   
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
+    scrollbar-gutter: stable;
   }
 }
 

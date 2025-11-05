@@ -49,7 +49,7 @@ databaseService.ensureInitialized().then(() => {
 });
 
 // Setup routes
-setupRoutes(app, { 
+setupRoutes(app, io, { 
   telemetryService, 
   databaseService, 
   f123UDPProcessor,

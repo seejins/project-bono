@@ -272,7 +272,7 @@ function AppContent() {
                     />
                   ) : (
                     currentSeason ? (
-                      <RacesDashboard seasonId={currentSeason.id} />
+                      <RacesDashboard seasonId={currentSeason.id} onRaceSelect={handleRaceSelect} />
                     ) : (
                       <div className="text-center py-12">
                         <p className="text-gray-500 dark:text-gray-400">No active season selected</p>
