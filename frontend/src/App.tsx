@@ -4,8 +4,7 @@ import { SeasonDashboard } from './components/SeasonDashboard';
 import { Grid } from './components/Grid';
 import { DriverSeasonStats } from './components/DriverSeasonStats';
 import { HistoryPage } from './components/HistoryPage';
-import { MemberCareerProfileComponent } from './components/MemberCareerProfile';
-import { MemberProfile } from './components/MemberProfile';
+import { DriverCareerProfileComponent } from './components/DriverCareerProfile';
 import { RacesDashboard } from './components/RacesDashboard';
 import { RaceDetail } from './components/RaceDetail';
 import { DriverRaceAnalysis } from './components/DriverRaceAnalysis';
@@ -29,9 +28,9 @@ function AppContent() {
     const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live';
     return savedTab || 'season';
   });
-  const [selectedMember, setSelectedMember] = useState<string | null>(() => {
-    const savedMember = localStorage.getItem('f1-selected-member');
-    return savedMember || null;
+  const [selectedDriver, setSelectedDriver] = useState<string | null>(() => {
+    const savedDriver = localStorage.getItem('f1-selected-driver');
+    return savedDriver || null;
   });
   const [selectedRace, setSelectedRace] = useState<string | null>(() => {
     const savedRace = localStorage.getItem('f1-selected-race');
@@ -54,11 +53,11 @@ function AppContent() {
 
   const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live') => {
     setActiveTab(tab);
-    setSelectedMember(null);
+    setSelectedDriver(null);
     setSelectedRace(null);
     setSelectedDriverRace(null);
     localStorage.setItem('f1-active-tab', tab);
-    localStorage.removeItem('f1-selected-member');
+    localStorage.removeItem('f1-selected-driver');
     localStorage.removeItem('f1-selected-race');
     localStorage.removeItem('f1-selected-driver-race');
   };
@@ -66,20 +65,20 @@ function AppContent() {
   const handleDriverSelect = (driverId: string) => {
     pushToHistory(activeTab, 'list'); // Save current view
     setActiveTab('history'); // Switch to history tab
-    setSelectedMember(driverId);
+    setSelectedDriver(driverId);
     localStorage.setItem('f1-active-tab', 'history');
-    localStorage.setItem('f1-selected-member', driverId);
+    localStorage.setItem('f1-selected-driver', driverId);
   };
 
   const handleGridDriverSelect = (driverId: string) => {
     pushToHistory(activeTab, 'list'); // Save current view
     setActiveTab('grid'); // Stay on grid tab
-    setSelectedMember(driverId);
+    setSelectedDriver(driverId);
     localStorage.setItem('f1-active-tab', 'grid');
-    localStorage.setItem('f1-selected-member', driverId);
+    localStorage.setItem('f1-selected-driver', driverId);
   };
 
-  const handleMemberBack = () => {
+  const handleDriverBack = () => {
     const previous = popFromHistory();
     if (previous) {
       setActiveTab(previous.tab as any);
@@ -87,19 +86,19 @@ function AppContent() {
       if (previous.view === 'race' && selectedRace) {
         // Stay on race detail
       } else {
-        setSelectedMember(null);
-        localStorage.removeItem('f1-selected-member');
+        setSelectedDriver(null);
+        localStorage.removeItem('f1-selected-driver');
       }
     } else {
-      setSelectedMember(null);
-      localStorage.removeItem('f1-selected-member');
+      setSelectedDriver(null);
+      localStorage.removeItem('f1-selected-driver');
     }
   };
 
-  const handleMemberSelect = (memberId: string) => {
+  const handleDriverSelectFromHistory = (driverId: string) => {
     pushToHistory(activeTab, 'list'); // Save current view
-    setSelectedMember(memberId);
-    localStorage.setItem('f1-selected-member', memberId);
+    setSelectedDriver(driverId);
+    localStorage.setItem('f1-selected-driver', driverId);
   };
 
   const handleSeasonSelect = (seasonId: string) => {
@@ -228,10 +227,10 @@ function AppContent() {
               
               {activeTab === 'grid' && (
                 <>
-                  {selectedMember ? (
+                  {selectedDriver ? (
                     <DriverSeasonStats 
-                      driverId={selectedMember} 
-                      onBack={handleMemberBack}
+                      driverId={selectedDriver} 
+                      onBack={handleDriverBack}
                     />
                   ) : (
                     <Grid onDriverSelect={handleGridDriverSelect} />
@@ -241,16 +240,16 @@ function AppContent() {
               
               {activeTab === 'history' && (
                 <>
-                  {selectedMember ? (
-                    <MemberCareerProfileComponent 
-                      memberId={selectedMember} 
-                      onBack={handleMemberBack}
+                  {selectedDriver ? (
+                    <DriverCareerProfileComponent 
+                      memberId={selectedDriver} 
+                      onBack={handleDriverBack}
                       onRaceSelect={handleRaceSelect}
                     />
                   ) : (
                     <HistoryPage 
                       onSeasonSelect={handleSeasonSelect}
-                      onMemberSelect={handleMemberSelect}
+                      onDriverSelect={handleDriverSelectFromHistory}
                     />
                   )}
                 </>

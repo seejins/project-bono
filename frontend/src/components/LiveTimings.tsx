@@ -147,10 +147,10 @@ interface StintGraphProps {
 const StintGraph = ({ driver }: StintGraphProps) => {
   // Memoize render elements calculation to avoid recalculating on every render
   const renderElements = useMemo(() => {
-    // Use driver data directly from UDP
-    const currentTire = driver.currentTire;
+  // Use driver data directly from UDP
+  const currentTire = driver.currentTire;
     const stintLaps = driver.stintLaps; // Direct from m_tyres_age_laps (0-indexed: laps completed)
-    const totalRaceLaps = driver.totalRaceLaps;
+  const totalRaceLaps = driver.totalRaceLaps;
     const stintHistory = driver.stintHistory || [];
     
     // Separate completed stints from current stint
@@ -201,12 +201,12 @@ const StintGraph = ({ driver }: StintGraphProps) => {
     elements.push({ type: 'indicator', tire: currentTire, isStintCount: false });
     
     // Current stint lap boxes
-    for (let i = 0; i < stintLaps - 1; i++) {
+  for (let i = 0; i < stintLaps - 1; i++) {
       elements.push({ type: 'lap', tire: currentTire });
-    }
-    
+  }
+  
     // Current stint count box
-    if (stintLaps > 0) {
+  if (stintLaps > 0) {
       elements.push({ type: 'indicator', tire: currentTire, lapNum: stintLaps, isStintCount: true });
     }
     
@@ -226,9 +226,9 @@ const StintGraph = ({ driver }: StintGraphProps) => {
     const remainingLaps = Math.max(0, totalRaceLaps - totalBoxesUsed);
     
     // Add remaining laps (adjusted to keep total = totalRaceLaps)
-    for (let i = 0; i < remainingLaps; i++) {
+  for (let i = 0; i < remainingLaps; i++) {
       elements.push({ type: 'lap', tire: undefined });
-    }
+  }
     
     return elements;
   }, [driver.currentTire, driver.stintLaps, driver.totalRaceLaps, driver.stintHistory]);
@@ -791,8 +791,8 @@ export const LiveTimings = () => {
         </div>
       </div>
 
-       {/* Main Content - Constrained Width for 1440p Optimization */}
-        <div className="max-w-[2048px] mx-auto px-6 py-6">
+      {/* Main Content - Constrained Width for 1440p Optimization */}
+      <div className="max-w-[2048px] mx-auto px-6 py-6">
           <div className="w-full bg-gray-800 rounded-lg overflow-hidden relative">
             {/* Loading state overlay - show when session exists but no drivers loaded yet */}
             {sessionData && drivers.length === 0 && (
@@ -804,7 +804,7 @@ export const LiveTimings = () => {
             )}
             
             {/* Always show table - empty if no data */}
-            {sessionData.sessionType === 'RACE' ? (
+          {sessionData.sessionType === 'RACE' ? (
              <RaceTimingTable 
                drivers={drivers} 
                previousDrivers={previousDrivers}
@@ -819,9 +819,9 @@ export const LiveTimings = () => {
                fastestSectors={fastestSectors}
                parseSectorTimeString={parseSectorTimeString}
              />
-            )}
-          </div>
+          )}
         </div>
+      </div>
     </div>
   );
 };
@@ -946,60 +946,60 @@ const PracticeDriverRow = React.memo(({
   isFastestS2: boolean;
   isFastestS3: boolean;
 }) => {
-  return (
+              return (
     <div className="relative transition-all duration-150 ease-out">
       <div
         className="grid grid-cols-13 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
         style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}
       >
         {/* POS */}
-        <div className="px-2 border-r border-gray-500 flex items-center justify-center">
-          <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-            driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
-          }`}>
-            {driver.position}
-          </div>
-        </div>
-        
+            <div className="px-2 border-r border-gray-500 flex items-center justify-center">
+              <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
+                driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
+              }`}>
+                {driver.position}
+              </div>
+            </div>
+            
         {/* Driver */}
         <div className={`px-3 border-r border-gray-500 flex items-center ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-        }`}>
-          <div className="flex items-center space-x-2">
-            <div 
-              className="w-1 h-6 rounded"
-              style={{ backgroundColor: driver.teamColor }}
-            ></div>
+            }`}>
+              <div className="flex items-center space-x-2">
+                <div 
+                  className="w-1 h-6 rounded"
+                  style={{ backgroundColor: driver.teamColor }}
+                ></div>
             <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
-          </div>
-        </div>
-        
+              </div>
+            </div>
+            
         {/* Lap Time */}
         <div className={`px-[11px] border-r border-gray-500 flex items-center justify-between ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         }`}>
           <span className="text-base font-mono tabular-nums tracking-tighter">{driver.fastestLap}</span>
           {driver.fastestLapTire && (
-            <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
-              {driver.fastestLapTire}
-            </span>
+              <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
+                {driver.fastestLapTire}
+              </span>
           )}
-        </div>
-        
+            </div>
+            
         {/* Gap */}
         <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
-        </div>
-        
+            </div>
+            
         {/* S1 (Best Lap) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         } ${isFastestS1 ? 'text-purple-400 font-semibold' : ''}`}>
           {driver.sector1Time || '--:--'}
-        </div>
-        
+            </div>
+            
         {/* S2 (Best Lap) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
@@ -1024,36 +1024,36 @@ const PracticeDriverRow = React.memo(({
               : Array(24).fill('grey')
             ).map((sector, index) => {
               const isMainSectorEnd = (index + 1) % 8 === 0 && index < 23;
-              return (
+                  return (
                 <Fragment key={index}>
-                  <div
+                      <div
                     className={`flex-1 h-4 min-w-0 rounded-sm ${
-                      sector === 'purple' ? 'bg-purple-500' :
-                      sector === 'green' ? 'bg-green-500' :
-                      sector === 'yellow' ? 'bg-yellow-500' :
-                      'bg-gray-500'
-                    }`}
-                  ></div>
+                          sector === 'purple' ? 'bg-purple-500' :
+                          sector === 'green' ? 'bg-green-500' :
+                          sector === 'yellow' ? 'bg-yellow-500' :
+                          'bg-gray-500'
+                        }`}
+                      ></div>
                   {isMainSectorEnd && <div className="w-1.5 flex-shrink-0"></div>}
                 </Fragment>
-              );
-            })}
-          </div>
-        </div>
-        
-        {/* Driver Last Name */}
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Driver Last Name */}
         <div className={`px-2 border-r border-gray-500 text-sm text-left ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-        }`}>
-          {driver.driverName.split(' ').pop()}
-        </div>
-        
+            }`}>
+              {driver.driverName.split(' ').pop()}
+            </div>
+            
         {/* Status */}
         <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         }`}>
           {driver.status || ''}
-        </div>
+    </div>
         
         {/* S1 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
@@ -1112,94 +1112,94 @@ const RaceDriverRow = React.memo(({
   fastestLapCarIndex: string | null;
   StintGraph: React.FC<{ driver: DriverData }>;
 }) => {
-  return (
+              return (
     <div className="relative transition-all duration-150 ease-out">
       <div
         className="grid grid-cols-12 gap-0 p-3 border-b border-gray-700 hover:bg-gray-800 flex items-center"
         style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}
       >
         {/* POS */}
-        <div className="px-2 border-r border-gray-500 flex items-center justify-center">
-          <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-            driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
-          }`}>
-            {driver.position}
-          </div>
-        </div>
-        
+            <div className="px-2 border-r border-gray-500 flex items-center justify-center">
+              <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
+                driver.position === 1 ? 'bg-red-600' : 'bg-gray-500'
+              }`}>
+                {driver.position}
+              </div>
+            </div>
+            
         {/* Driver with position change */}
         <div className="px-[11px] border-r border-gray-500 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div 
-              className="w-1 h-6 rounded"
-              style={{ backgroundColor: driver.teamColor }}
-            ></div>
+              <div className="flex items-center space-x-2">
+                <div 
+                  className="w-1 h-6 rounded"
+                  style={{ backgroundColor: driver.teamColor }}
+                ></div>
             <span className="font-semibold text-sm">{driver.driverAbbreviation}</span>
-          </div>
+              </div>
           <div className="flex items-center justify-end space-x-1 w-14">
-            {driver.positionChange > 0 ? (
-              <>
+                {driver.positionChange > 0 ? (
+                  <>
                 <ArrowUp className="w-4 h-4 text-green-500 position-change" />
                 <span className="text-sm text-green-500 font-semibold position-change tabular-nums">{driver.positionChange}</span>
-              </>
-            ) : driver.positionChange < 0 ? (
-              <>
+                  </>
+                ) : driver.positionChange < 0 ? (
+                  <>
                 <ArrowDown className="w-4 h-4 text-red-500 position-change" />
                 <span className="text-sm text-red-500 font-semibold position-change tabular-nums">{Math.abs(driver.positionChange)}</span>
-              </>
-            ) : (
-              <>
-                <Minus className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-400">0</span>
-              </>
-            )}
-          </div>
-        </div>
-        
+                  </>
+                ) : (
+                  <>
+                    <Minus className="w-3 h-3 text-gray-400" />
+                    <span className="text-xs text-gray-400">0</span>
+                  </>
+                )}
+              </div>
+            </div>
+            
         {/* Gap */}
         <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
-        </div>
-        
-        {/* Interval */}
+            </div>
+            
+            {/* Interval */}
         <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-        }`}>
-          {driver.interval}
-        </div>
-        
-        {/* Best Lap */}
+            }`}>
+              {driver.interval}
+            </div>
+            
+            {/* Best Lap */}
         <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         } ${driver.id === fastestLapCarIndex ? 'text-purple-400 font-semibold' : ''}`}>
-          {driver.bestLap}
-        </div>
-        
-        {/* Last Lap */}
+              {driver.bestLap}
+            </div>
+            
+            {/* Last Lap */}
         <div className={`px-2 border-r border-gray-500 text-base text-center font-mono tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-        }`}>
-          {driver.lastLapTime}
-        </div>
-        
+            }`}>
+              {driver.lastLapTime}
+            </div>
+            
         {/* Stint Graph */}
-        <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
+            <div className={`px-2 border-r border-gray-500 flex justify-center items-center ${
           isDriverRetired(driver.status) ? 'opacity-40' : ''
-        }`}>
-          <div className="flex justify-center items-center space-x-1 overflow-hidden w-full">
-            <StintGraph driver={driver} />
-          </div>
-        </div>
-        
-        {/* Driver Last Name */}
+            }`}>
+              <div className="flex justify-center items-center space-x-1 overflow-hidden w-full">
+                <StintGraph driver={driver} />
+              </div>
+            </div>
+            
+            {/* Driver Last Name */}
         <div className={`px-2 border-r border-gray-500 text-sm text-left ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
-        }`}>
-          {driver.driverName.split(' ').pop()}
-        </div>
-        
+            }`}>
+              {driver.driverName.split(' ').pop()}
+            </div>
+            
         {/* Status */}
         <div className={`px-2 border-r border-gray-500 text-sm text-center ${getStatusColor(driver.status || '')} ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''

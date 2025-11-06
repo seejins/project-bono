@@ -5,13 +5,13 @@ import { apiGet } from '../utils/api';
 
 interface HistoryPageProps {
   onSeasonSelect?: (seasonId: string) => void;
-  onMemberSelect?: (memberId: string) => void;
+  onDriverSelect?: (driverId: string) => void;
 }
 
-export const HistoryPage: React.FC<HistoryPageProps> = ({ onSeasonSelect, onMemberSelect }) => {
+export const HistoryPage: React.FC<HistoryPageProps> = ({ onSeasonSelect, onDriverSelect }) => {
   const [insights, setInsights] = useState<HistoricInsights | null>(null);
   const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,11 +40,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onSeasonSelect, onMemb
         setSeasons(seasonsData.seasons || []);
       }
 
-      // Fetch members with career stats
-      const membersResponse = await fetch(`${apiUrl}/api/members/career-stats`);
-      if (membersResponse.ok) {
-        const membersData = await membersResponse.json();
-        setMembers(membersData.members || []);
+      // Fetch drivers (we'll need to create a career stats endpoint for drivers)
+      // For now, just fetch all drivers
+      const driversResponse = await fetch(`${apiUrl}/api/drivers`);
+      if (driversResponse.ok) {
+        const driversData = await driversResponse.json();
+        setDrivers(driversData.drivers || []);
       }
 
     } catch (error) {
@@ -61,9 +62,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onSeasonSelect, onMemb
     }
   };
 
-  const handleMemberClick = (memberId: string) => {
-    if (onMemberSelect) {
-      onMemberSelect(memberId);
+  const handleDriverClick = (driverId: string) => {
+    if (onDriverSelect) {
+      onDriverSelect(driverId);
     }
   };
 
@@ -208,28 +209,28 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ onSeasonSelect, onMemb
           {/* All Members */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">All Members</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">All Drivers</h2>
             </div>
             <div className="p-6 max-h-[32rem] overflow-y-auto">
-              {members.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-8">No members available</p>
+              {drivers.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400 text-center py-8">No drivers available</p>
               ) : (
                 <div className="space-y-4">
-                  {members.map((member) => (
+                  {drivers.map((driver) => (
                     <div
-                      key={member.id}
-                      onClick={() => handleMemberClick(member.id)}
+                      key={driver.id}
+                      onClick={() => handleDriverClick(driver.id)}
                       className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{member.name}</h3>
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{driver.name}</h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {member.career_stats?.wins || 0} Wins • {member.career_stats?.podiums || 0} Podiums • {member.career_stats?.seasons || 0} Seasons
+                            {driver.team || 'No team'} • {driver.number ? `#${driver.number}` : 'No number'}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {member.isActive && (
+                          {driver.isActive && (
                             <span className="px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200">
                               Active
                             </span>

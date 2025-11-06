@@ -109,11 +109,19 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         setPreviousRace(completedRaces[0] || null);
       }
       
-      // Fetch season statistics
-      const statsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/stats`);
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData.stats || null);
+      // Fetch season statistics (endpoint doesn't exist yet, handle 404 gracefully)
+      try {
+        const statsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/stats`);
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setStats(statsData.stats || null);
+        } else if (statsResponse.status !== 404) {
+          // Only log non-404 errors (404 is expected if endpoint doesn't exist)
+          console.warn('Failed to fetch season stats:', statsResponse.status);
+        }
+      } catch (error) {
+        // Silently handle stats fetch errors (endpoint may not exist)
+        console.warn('Season stats endpoint not available');
       }
       
       // For now, set empty achievements - will be populated from race results

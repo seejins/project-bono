@@ -242,15 +242,30 @@ const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
     return sessionTypes.split(', ');
   };
 
+  const getSessionTypeColor = (sessionType: string) => {
+    const type = sessionType.toLowerCase();
+    if (type.includes('practice')) {
+      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+    } else if (type.includes('qualifying')) {
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+    } else if (type.includes('race')) {
+      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+    }
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow">
+    <div 
+      className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-xl hover:scale-[1.02] transition-all duration-200 cursor-pointer border border-transparent hover:border-red-600/20"
+      onClick={() => onRaceSelect?.(event.id)}
+    >
       <div className="p-6">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-2">
             <MapPin className="h-5 w-5 text-red-600" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {event.track.name}
+              {event.track_name}
             </h3>
           </div>
           {getEventStatusIcon(event)}
@@ -259,7 +274,7 @@ const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
         {/* Track Info */}
         <div className="mb-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {event.track.country} • {event.track.length}km
+            {event.track.name ? `${event.track.name} • ` : ''}{event.track.length}km
           </p>
         </div>
 
@@ -277,7 +292,7 @@ const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
             {getSessionTypes(event.session_types).map((sessionType, index) => (
               <span
                 key={index}
-                className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs"
+                className={`px-2 py-1 rounded-full text-xs ${getSessionTypeColor(sessionType)}`}
               >
                 {sessionType}
               </span>
@@ -288,14 +303,6 @@ const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
         {/* Status */}
         <div className="flex items-center justify-between">
           {getEventStatus(event)}
-          {event.status === 'completed' && (
-            <button 
-              onClick={() => onRaceSelect?.(event.id)}
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-            >
-              View Results
-            </button>
-          )}
         </div>
       </div>
     </div>
@@ -359,8 +366,23 @@ const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) =>
     return sessionTypes.split(', ');
   };
 
+  const getSessionTypeColor = (sessionType: string) => {
+    const type = sessionType.toLowerCase();
+    if (type.includes('practice')) {
+      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+    } else if (type.includes('qualifying')) {
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+    } else if (type.includes('race')) {
+      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+    }
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+  };
+
   return (
-    <div className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+    <div 
+      className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer border-l-4 border-transparent hover:border-red-600"
+      onClick={() => onRaceSelect?.(event.id)}
+    >
       <div className="grid grid-cols-12 gap-4 items-center">
         {/* Track */}
         <div className="col-span-4">
@@ -368,10 +390,10 @@ const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) =>
             <MapPin className="h-4 w-4 text-red-600" />
             <div>
               <div className="font-medium text-gray-900 dark:text-white">
-                {event.track.name}
+                {event.track_name}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">
-                {event.track.country} • {event.track.length}km
+                {event.track.name ? `${event.track.name} • ` : ''}{event.track.length}km
               </div>
             </div>
           </div>
@@ -393,7 +415,7 @@ const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) =>
             {getSessionTypes(event.session_types).map((sessionType, index) => (
               <span
                 key={index}
-                className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs"
+                className={`px-2 py-1 rounded-full text-xs ${getSessionTypeColor(sessionType)}`}
               >
                 {sessionType}
               </span>
@@ -415,14 +437,6 @@ const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) =>
             <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
               <Edit className="h-4 w-4" />
             </button>
-            {event.status === 'completed' && (
-              <button 
-                onClick={() => onRaceSelect?.(event.id)}
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-              >
-                Results
-              </button>
-            )}
           </div>
         </div>
       </div>

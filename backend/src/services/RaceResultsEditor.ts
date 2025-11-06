@@ -20,6 +20,17 @@ export class RaceResultsEditor {
     }
   }
 
+  // Remove penalty with history tracking
+  async removePenalty(sessionResultId: string, driverId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void> {
+    try {
+      await this.dbService.removePenalty(sessionResultId, driverId, penaltySeconds, reason, editedBy);
+      console.log(`✅ Removed ${penaltySeconds} penalty seconds from driver ${driverId} in session ${sessionResultId}`);
+    } catch (error) {
+      console.error('❌ Error removing penalty:', error);
+      throw error;
+    }
+  }
+
   // Change driver position
   async changePosition(sessionResultId: string, driverId: string, newPosition: number, reason: string, editedBy: string): Promise<void> {
     try {

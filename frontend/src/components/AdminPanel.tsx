@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Settings } from 'lucide-react';
-import { MembersManagement } from './MembersManagement';
+import { DriversManagement } from './DriversManagement';
 import { SeasonsManagement } from './SeasonsManagement';
 import { RaceJSONUpload } from './RaceJSONUpload';
 
@@ -96,7 +96,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       </div>
 
       {/* Content */}
-      {activeSection === 'members' && <MembersManagement />}
+      {activeSection === 'members' && <DriversManagement />}
       {activeSection === 'seasons' && <SeasonsManagement />}
       {activeSection === 'races' && <RaceJSONUpload />}
     </div>

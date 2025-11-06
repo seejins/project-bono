@@ -38,6 +38,12 @@ interface Event {
   weather_rain_percentage?: number;
   created_at: string;
   updated_at: string;
+  track?: {
+    id: string;
+    name: string;
+    country: string;
+    length: number;
+  };
 }
 
 interface SeasonDetailProps {
@@ -88,21 +94,21 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
     try {
       setLoading(true);
       
-      // Load all members, season drivers, events, and seasons in parallel
-      const [membersRes, driversRes, eventsRes, seasonsRes] = await Promise.all([
-        apiGet('/api/members'),
+      // Load all drivers, season drivers, events, and seasons in parallel
+      const [driversRes, seasonDriversRes, eventsRes, seasonsRes] = await Promise.all([
+        apiGet('/api/drivers'),
         apiGet(`/api/seasons/${season.id}/participants`),
         apiGet(`/api/seasons/${season.id}/events`),
         apiGet('/api/seasons')
       ]);
 
-      if (membersRes.ok) {
-        const membersData = await membersRes.json();
-        setMembers(membersData.members || []);
-      }
-
       if (driversRes.ok) {
         const driversData = await driversRes.json();
+        setMembers(driversData.drivers || []);
+      }
+
+      if (seasonDriversRes.ok) {
+        const driversData = await seasonDriversRes.json();
         setSeasonDrivers(driversData.participants || []);
       }
 
@@ -122,13 +128,13 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
     }
   };
 
-  const handleAddDriver = async (memberId: string) => {
+  const handleAddDriver = async (driverId: string) => {
     try {
       setStatus('loading');
       setStatusMessage('Adding driver to season...');
 
       const response = await apiPost(`/api/seasons/${season.id}/participants`, {
-        memberId
+        driverId
       });
 
       if (response.ok) {
@@ -285,7 +291,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
     }
   };
 
-  const handleRemoveDriver = async (memberId: string) => {
+  const handleRemoveDriver = async (driverId: string) => {
     if (!confirm('Are you sure you want to remove this driver from the season?')) {
       return;
     }
@@ -294,7 +300,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
       setStatus('loading');
       setStatusMessage('Removing driver from season...');
 
-      const response = await apiDelete(`/api/seasons/${season.id}/participants/${memberId}`);
+      const response = await apiDelete(`/api/seasons/${season.id}/participants/${driverId}`);
 
       if (response.ok) {
         setStatus('success');
@@ -556,6 +562,11 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
                       <p className="text-gray-900 dark:text-white font-medium">{event.track_name}</p>
                       <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                         <span>Sessions: {event.session_types || getSessionTypeName(event.session_type || 0)}</span>
+                        {event.track && event.track.length && (
+                          <span>
+                            {event.track.length}km {event.track.name ? `• ${event.track.name}` : ''}
+                          </span>
+                        )}
                         <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
                           {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                         </span>

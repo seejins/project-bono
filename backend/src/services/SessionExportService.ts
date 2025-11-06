@@ -332,7 +332,7 @@ export class SessionExportService {
       // Get statistics from driver_session_results for all race sessions in this race
       const statsResult = await this.dbService.query(`
         SELECT 
-          COUNT(DISTINCT dsr.member_id) as total_drivers,
+          COUNT(DISTINCT dsr.driver_id) as total_drivers,
           COUNT(DISTINCT dsr.id) as total_results,
           AVG(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as average_lap_time,
           MIN(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as fastest_lap,

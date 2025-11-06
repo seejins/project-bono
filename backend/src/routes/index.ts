@@ -8,7 +8,7 @@ import { RaceResultsEditor } from '../services/RaceResultsEditor';
 import uploadRoutes from './upload';
 import seasonsRoutes from './seasons';
 import sessionsRoutes from './sessions';
-import membersRoutes from './members';
+import driversRoutes from './drivers';
 import tracksRoutes from './tracks';
 import racesRoutes, { setupRacesRoutes } from './races';
 
@@ -108,12 +108,12 @@ export function setupRoutes(
     }
   });
 
-  // Get UDP lap history for a member
-  app.get('/api/f123-udp/lap-history/:memberId', async (req, res) => {
+  // Get UDP lap history for a driver
+  app.get('/api/f123-udp/lap-history/:driverId', async (req, res) => {
     try {
-      const { memberId } = req.params;
+      const { driverId } = req.params;
       const { sessionUid } = req.query;
-      const lapHistory = await services.databaseService.getUDPLapHistory();
+      const lapHistory = await services.databaseService.getUDPLapHistory(driverId);
       res.json({ lapHistory });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get lap history' });
@@ -126,8 +126,8 @@ export function setupRoutes(
   // Seasons management routes
   app.use('/api/seasons', seasonsRoutes(services.databaseService));
   
-  // Members management routes
-  app.use('/api/members', membersRoutes(services.databaseService));
+  // Drivers management routes
+  app.use('/api/drivers', driversRoutes(services.databaseService));
   
   // Tracks management routes
   app.use('/api/tracks', tracksRoutes);

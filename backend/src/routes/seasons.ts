@@ -230,11 +230,11 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       
       // Merge team information from driver mappings
       const participantsWithTeams = participants.map(participant => {
-        const mapping = driverMappings.find(m => m.memberId === participant.id);
+        const mapping = driverMappings.find(m => m.yourDriverId === participant.id);
         return {
           ...participant,
-          team: mapping?.f123TeamName || 'TBD',
-          number: mapping?.f123DriverNumber || 0
+          team: mapping?.f123TeamName || participant.team || 'TBD',
+          number: mapping?.f123DriverNumber || participant.number || 0
         };
       });
       
@@ -255,52 +255,52 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.post('/:id/participants', async (req, res) => {
     try {
       const { id } = req.params;
-      const { memberId } = req.body;
+      const { driverId } = req.body;
       
-      if (!memberId) {
-        return res.status(400).json({ error: 'Member ID is required' });
+      if (!driverId) {
+        return res.status(400).json({ error: 'Driver ID is required' });
       }
 
       await dbService.ensureInitialized();
-      await dbService.addDriverToSeason(id, memberId);
+      await dbService.addDriverToSeason(id, driverId);
       
       res.json({
         success: true,
-        message: 'Member added to season successfully'
+        message: 'Driver added to season successfully'
       });
     } catch (error) {
-      console.error('Add member to season error:', error);
+      console.error('Add driver to season error:', error);
       res.status(500).json({ 
-        error: 'Failed to add member to season',
+        error: 'Failed to add driver to season',
         details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
 
-  // Remove member from season
-  router.delete('/:id/participants/:memberId', async (req, res) => {
+  // Remove driver from season
+  router.delete('/:id/participants/:driverId', async (req, res) => {
     try {
-      const { id, memberId } = req.params;
+      const { id, driverId } = req.params;
       await dbService.ensureInitialized();
-      await dbService.removeDriverFromSeason(id, memberId);
+      await dbService.removeDriverFromSeason(id, driverId);
       
       res.json({
         success: true,
-        message: 'Member removed from season successfully'
+        message: 'Driver removed from season successfully'
       });
     } catch (error) {
-      console.error('Remove member from season error:', error);
+      console.error('Remove driver from season error:', error);
       res.status(500).json({ 
-        error: 'Failed to remove member from season',
+        error: 'Failed to remove driver from season',
         details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
 
   // Update participant in season
-  router.put('/:id/participants/:memberId', async (req, res) => {
+  router.put('/:id/participants/:driverId', async (req, res) => {
     try {
-      const { id, memberId } = req.params;
+      const { id, driverId } = req.params;
       const { team, number } = req.body;
       
       await dbService.ensureInitialized();

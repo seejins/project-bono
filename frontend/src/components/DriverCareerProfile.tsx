@@ -3,17 +3,18 @@ import { ArrowLeft, Trophy, Zap, TrendingUp, Calendar, Flag, Loader2 } from 'luc
 import { MemberCareerProfile, MemberCareerStats, RaceHistoryEntry } from '../types';
 import { apiGet } from '../utils/api';
 
-interface MemberCareerProfileProps {
-  memberId: string;
+interface DriverCareerProfileProps {
+  memberId: string; // Keep for backward compatibility, but treat as driverId
   onBack: () => void;
   onRaceSelect?: (raceId: string) => void;
 }
 
-export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = ({ 
+export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = ({ 
   memberId, 
   onBack, 
   onRaceSelect 
 }) => {
+  const driverId = memberId; // Treat memberId as driverId
   const [careerProfile, setCareerProfile] = useState<MemberCareerProfile | null>(null);
   const [raceHistory, setRaceHistory] = useState<RaceHistoryEntry[]>([]);
   const [seasonStats, setSeasonStats] = useState<MemberCareerStats | null>(null);
@@ -22,8 +23,8 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMemberCareerProfile();
-  }, [memberId]);
+    fetchDriverCareerProfile();
+  }, [driverId]);
 
   useEffect(() => {
     if (careerProfile) {
@@ -36,23 +37,23 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
     }
   }, [careerProfile, activeTab]);
 
-  const fetchMemberCareerProfile = async () => {
+  const fetchDriverCareerProfile = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/members/${memberId}/career-profile`);
+      const response = await fetch(`${apiUrl}/api/drivers/${driverId}/career-profile`);
       
       if (response.ok) {
         const data = await response.json();
         setCareerProfile(data.careerProfile);
       } else {
-        throw new Error('Failed to fetch member career profile');
+        throw new Error('Failed to fetch driver career profile');
       }
     } catch (error) {
-      console.error('Error fetching member career profile:', error);
-      setError('Failed to load member career profile');
+      console.error('Error fetching driver career profile:', error);
+      setError('Failed to load driver career profile');
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
   const fetchSeasonStats = async (seasonId: string) => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/members/${memberId}/seasons/${seasonId}/stats`);
+      const response = await fetch(`${apiUrl}/api/drivers/${driverId}/seasons/${seasonId}/stats`);
       
       if (response.ok) {
         const data = await response.json();
@@ -81,8 +82,8 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const seasonId = activeTab === 'career' ? undefined : activeTab;
       const url = seasonId 
-        ? `${apiUrl}/api/members/${memberId}/race-history?seasonId=${seasonId}`
-        : `${apiUrl}/api/members/${memberId}/race-history`;
+        ? `${apiUrl}/api/drivers/${driverId}/race-history?seasonId=${seasonId}`
+        : `${apiUrl}/api/drivers/${driverId}/race-history`;
       
       const response = await fetch(url);
       
@@ -130,7 +131,7 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
   if (error || !careerProfile) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-500 text-xl">{error || 'Member not found'}</p>
+        <p className="text-red-500 text-xl">{error || 'Driver not found'}</p>
         <button 
           onClick={onBack}
           className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -326,3 +327,4 @@ export const MemberCareerProfileComponent: React.FC<MemberCareerProfileProps> = 
     </div>
   );
 };
+

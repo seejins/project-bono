@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { getSessionTypeName } from '../utils/f123Constants';
+import { mapTrackIdToTrackName } from '../utils/trackNameMapping';
 
 export interface F123SessionInfo {
   trackName: string;
@@ -17,10 +18,17 @@ export class F123JSONParser {
       const fileContent = fs.readFileSync(filePath, 'utf-8');
       const data = JSON.parse(fileContent);
 
-      // Extract track name
-      const trackName = data['track-name'] || data.trackName || data.track || 
-                       data['session-info']?.['track-name'] || 
-                       data.sessionInfo?.trackName || 'Unknown Track';
+      // Extract track name from session-info (track-id is the actual field name)
+      const trackId = data['session-info']?.['track-id'] || 
+                      data.sessionInfo?.trackId ||
+                      data['session-info']?.['track-name'] ||
+                      data['track-name'] || 
+                      data.trackName || 
+                      data.track || 
+                      null;
+      
+      // Map track-id to full track name (e.g., "Austria" -> "Red Bull Ring")
+      const trackName = trackId ? mapTrackIdToTrackName(trackId) : 'Unknown Track';
 
       // Extract session type
       let sessionType = 0;

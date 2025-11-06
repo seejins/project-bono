@@ -66,11 +66,16 @@ router.get('/:raceId/results', async (req, res) => {
     
     await dbService.ensureInitialized();
     
+    console.log(`🔍 Fetching results for race: ${raceId}`);
+    
     // Get all completed sessions for this race
     const sessions = await dbService.getCompletedSessions(raceId);
+    console.log(`📊 Found ${sessions.length} sessions for race ${raceId}`);
     
     const results = await Promise.all(sessions.map(async (session) => {
+      console.log(`🔍 Fetching driver results for session ${session.id} (${session.sessionName})`);
       const driverResults = await dbService.getDriverSessionResults(session.id);
+      console.log(`📊 Session ${session.id} has ${driverResults.length} driver results`);
       return {
         sessionId: session.id,
         sessionType: session.sessionType,
@@ -79,6 +84,8 @@ router.get('/:raceId/results', async (req, res) => {
         results: driverResults
       };
     }));
+    
+    console.log(`✅ Returning ${results.length} sessions with total ${results.reduce((sum, s) => sum + s.results.length, 0)} driver results`);
     
     res.json({
       success: true,
@@ -140,36 +147,73 @@ router.get('/sessions/:sessionId/edit-history', async (req, res) => {
   }
 });
 
-// Add penalty to a driver
-router.post('/sessions/:sessionId/penalties', async (req, res) => {
+// Add penalty to a driver (penaltySeconds is in seconds, e.g., 5 for a 5-second penalty)
+// Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
+router.post('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
   try {
-    const { sessionId } = req.params;
-    const { driverId, penaltyPoints, reason, editedBy } = req.body;
+    const { driverSessionResultId } = req.params;
+    const { penaltySeconds, reason, editedBy } = req.body;
     
-    if (!driverId || !penaltyPoints || !reason || !editedBy) {
+    if (!penaltySeconds || !reason || !editedBy) {
       return res.status(400).json({ 
-        error: 'Missing required fields: driverId, penaltyPoints, reason, editedBy' 
+        error: 'Missing required fields: penaltySeconds (in seconds), reason, editedBy' 
+      });
+    }
+    
+    if (penaltySeconds <= 0) {
+      return res.status(400).json({ 
+        error: 'Penalty seconds must be greater than 0' 
       });
     }
     
     await dbService.ensureInitialized();
     
-    // Validate the edit
-    const isValid = await raceResultsEditor.validateEdit(sessionId, 'penalty', { penaltyPoints });
-    if (!isValid) {
-      return res.status(400).json({ error: 'Invalid penalty data' });
-    }
-    
-    await raceResultsEditor.addPenalty(sessionId, driverId, penaltyPoints, reason, editedBy);
+    await dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
     
     res.json({
       success: true,
-      message: `Added ${penaltyPoints} penalty points to driver ${driverId}`
+      message: `Added ${penaltySeconds} second penalty`
     });
   } catch (error) {
     console.error('Add penalty error:', error);
     res.status(500).json({ 
       error: 'Failed to add penalty',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Remove penalty from a driver (penaltySeconds is in seconds)
+// Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
+router.delete('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
+  try {
+    const { driverSessionResultId } = req.params;
+    const { penaltySeconds, reason, editedBy } = req.body;
+    
+    if (!penaltySeconds || !reason || !editedBy) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: penaltySeconds (in seconds), reason, editedBy' 
+      });
+    }
+    
+    if (penaltySeconds <= 0) {
+      return res.status(400).json({ 
+        error: 'Penalty seconds must be greater than 0' 
+      });
+    }
+    
+    await dbService.ensureInitialized();
+    
+    await dbService.removePenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
+    
+    res.json({
+      success: true,
+      message: `Removed ${penaltySeconds} second penalty`
+    });
+  } catch (error) {
+    console.error('Remove penalty error:', error);
+    res.status(500).json({ 
+      error: 'Failed to remove penalty',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

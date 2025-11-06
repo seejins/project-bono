@@ -1,108 +1,132 @@
 import express from 'express';
-import { DatabaseService } from '../services/DatabaseService';
+import { DatabaseService, DriverData } from '../services/DatabaseService';
 
 export default function createDriversRoutes(dbService: DatabaseService) {
   const router = express.Router();
 
-  // Get all drivers for a season
+  // Get all drivers
   router.get('/', async (req, res) => {
     try {
-      const { seasonId } = req.query;
-      
-      if (!seasonId) {
-        return res.status(400).json({ error: 'Season ID is required' });
-      }
-
-      await dbService.ensureInitialized();
-      const drivers = await dbService.getDriversBySeason(seasonId as string);
-      
-      res.json({
-        success: true,
-        drivers
-      });
+      const drivers = await dbService.getAllDrivers();
+      res.json({ success: true, drivers });
     } catch (error) {
-      console.error('Get drivers error:', error);
-      res.status(500).json({ 
-        error: 'Failed to get drivers',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
+      console.error('Error getting drivers:', error);
+      res.status(500).json({ error: 'Failed to retrieve drivers' });
     }
   });
 
   // Create a new driver
   router.post('/', async (req, res) => {
     try {
-      const { seasonId, name, team, number } = req.body;
-    
-    if (!seasonId || !name) {
-      return res.status(400).json({ error: 'Season ID and name are required' });
+      const { name, team, number, seasonId, steam_id, isActive } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: 'Driver name is required' });
+      }
+      const driverId = await dbService.createDriver({ name, team, number, seasonId, steam_id, isActive });
+      const newDriver = await dbService.getDriverById(driverId);
+      res.status(201).json({ success: true, driver: newDriver });
+    } catch (error) {
+      console.error('Error creating driver:', error);
+      res.status(500).json({ error: 'Failed to create driver' });
     }
+  });
 
-    await dbService.ensureInitialized();
-    const driverId = await dbService.createDriver({
-      name,
-      team,
-      number
-    });
-    
-    res.json({
-      success: true,
-      driverId
-    });
-  } catch (error) {
-    console.error('Create driver error:', error);
-    res.status(500).json({ 
-      error: 'Failed to create driver',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+  // Get a specific driver
+  router.get('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const driver = await dbService.getDriverById(id);
+      if (!driver) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
+      res.json({ success: true, driver });
+    } catch (error) {
+      console.error('Error getting driver:', error);
+      res.status(500).json({ error: 'Failed to retrieve driver' });
+    }
+  });
 
-// Update a driver
-router.put('/:driverId', async (req, res) => {
-  try {
-    const { driverId } = req.params;
-    const { name, team, number } = req.body;
+  // Update a driver
+  router.put('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, team, number, seasonId, steam_id, isActive } = req.body;
+      
+      const driver = await dbService.getDriverById(id);
+      if (!driver) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
 
-    await dbService.ensureInitialized();
-    await dbService.updateDriver(driverId, {
-      name,
-      team,
-      number
-    });
-    
-    res.json({
-      success: true,
-      message: 'Driver updated successfully'
-    });
-  } catch (error) {
-    console.error('Update driver error:', error);
-    res.status(500).json({ 
-      error: 'Failed to update driver',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+      await dbService.updateDriver(id, { name, team, number, seasonId, steam_id, isActive });
+      const updatedDriver = await dbService.getDriverById(id);
+      res.json({ success: true, driver: updatedDriver });
+    } catch (error) {
+      console.error('Error updating driver:', error);
+      res.status(500).json({ error: 'Failed to update driver' });
+    }
+  });
 
-// Delete a driver
-router.delete('/:driverId', async (req, res) => {
-  try {
-    const { driverId } = req.params;
-    await dbService.ensureInitialized();
-    await dbService.deleteDriver(driverId);
-    
-    res.json({
-      success: true,
-      message: 'Driver deleted successfully'
-    });
-  } catch (error) {
-    console.error('Delete driver error:', error);
-    res.status(500).json({ 
-      error: 'Failed to delete driver',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+  // Delete a driver
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const driver = await dbService.getDriverById(id);
+      if (!driver) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
 
-return router;
+      await dbService.deleteDriver(id);
+      res.json({ success: true, message: 'Driver deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting driver:', error);
+      res.status(500).json({ error: 'Failed to delete driver' });
+    }
+  });
+
+  // Get driver career profile
+  router.get('/:id/career-profile', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const careerProfile = await dbService.getDriverCareerProfile(id);
+      
+      if (!careerProfile) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
+      
+      res.json({ success: true, careerProfile });
+    } catch (error) {
+      console.error('Error getting driver career profile:', error);
+      res.status(500).json({ error: 'Failed to retrieve driver career profile' });
+    }
+  });
+
+  // Get driver statistics for specific season
+  router.get('/:id/seasons/:seasonId/stats', async (req, res) => {
+    try {
+      const { id, seasonId } = req.params;
+      const seasonStats = await dbService.getDriverSeasonStats(id, seasonId);
+      
+      res.json({ success: true, stats: seasonStats });
+    } catch (error) {
+      console.error('Error getting driver season stats:', error);
+      res.status(500).json({ error: 'Failed to retrieve driver season stats' });
+    }
+  });
+
+  // Get driver race history with optional season filtering
+  router.get('/:id/race-history', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { seasonId } = req.query;
+      const raceHistory = await dbService.getDriverRaceHistory(id, seasonId as string);
+      
+      res.json({ success: true, raceHistory });
+    } catch (error) {
+      console.error('Error getting driver race history:', error);
+      res.status(500).json({ error: 'Failed to retrieve driver race history' });
+    }
+  });
+
+  return router;
 }

@@ -26,6 +26,7 @@ export interface F123DriverResult {
   // Race data
   racePosition?: number;
   raceTime?: string; // formatted time or gap
+  raceGap?: number | null; // gap to leader in milliseconds (null for leader)
   raceLapTime?: number; // in milliseconds
   raceSector1Time?: number;
   raceSector2Time?: number;
@@ -35,6 +36,7 @@ export interface F123DriverResult {
   // New fields for enhanced race data
   status?: 'finished' | 'dnf' | 'dsq' | 'dns' | 'dnq';
   gridPosition?: number; // starting position
+  positionGain?: number | null; // positions gained/lost from grid (positive = gained, negative = lost, null = no data)
   pitStops?: number; // number of pit stops
   tireCompound?: 'soft' | 'medium' | 'hard' | 'intermediate' | 'wet' | 'unknown';
   
@@ -45,6 +47,7 @@ export interface F123DriverResult {
   
   // Penalties and DNF
   penalties: number;
+  penaltyReason?: string | null; // Reason for penalty(s)
   warnings: number;
   dnf: boolean;
   dnfReason?: string;
@@ -56,16 +59,58 @@ export interface F123DriverResult {
 export class F123DataService {
   /**
    * Format time from milliseconds to readable format
-   * Returns consistent width: MM:SS.mm (always 8 characters with 2 decimal places)
+   * Returns formats: --:--.--- (invalid), -:--.--- (single digit minutes), or MM:SS.mmm (double digit minutes)
+   * Supports single-digit minutes for times under 1 hour
    */
   static formatTimeFromMs(milliseconds: number): string {
-    if (milliseconds <= 0) return '--:--.--';
+    if (milliseconds <= 0) return '--:--.---';
     
     const minutes = Math.floor(milliseconds / 60000);
     const seconds = Math.floor((milliseconds % 60000) / 1000);
-    const centiseconds = Math.floor((milliseconds % 1000) / 10); // Convert to centiseconds (hundredths)
+    const millisecondsPart = milliseconds % 1000;
     
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+    // Use single digit minutes format (-:--.---) for times under 1 hour
+    if (minutes < 10) {
+      return `${minutes}:${seconds.toString().padStart(2, '0')}.${millisecondsPart.toString().padStart(3, '0')}`;
+    }
+    
+    // Use double digit minutes format (MM:SS.mmm) for times 1 hour and above
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millisecondsPart.toString().padStart(3, '0')}`;
+  }
+  
+  /**
+   * Format gap time from milliseconds (for gaps, use sector time format)
+   * Returns formats: --.--- (invalid or >= 10 seconds), -.--- (< 10 seconds)
+   * For gaps >= 1 minute, shows as minutes:seconds.milliseconds
+   */
+  static formatGapTimeFromMs(milliseconds: number): string {
+    if (milliseconds <= 0) return '--.---';
+    
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const ms = milliseconds % 1000;
+    
+    // If gap is less than 1 minute, use sector time format
+    if (totalSeconds < 60) {
+      if (totalSeconds < 10) {
+        // Format as -.--- (5 characters) for gaps under 10 seconds
+        return `${totalSeconds}.${ms.toString().padStart(3, '0')}`;
+      } else {
+        // Format as --.--- (6 characters) for gaps 10-59 seconds
+        return `${totalSeconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+      }
+    }
+    
+    // For gaps >= 1 minute, use minutes:seconds.milliseconds format
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (minutes < 10) {
+      // Single digit minutes: -:--.---
+      return `${minutes}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    } else {
+      // Double digit minutes: MM:SS.mmm
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
   }
 
   /**

@@ -12,6 +12,13 @@ interface Race {
   type: 'race' | 'qualifying' | 'practice' | 'sprint';
   winner?: string;
   fastestLap?: string;
+  track?: {
+    id: string;
+    name: string;
+    length: number;
+    country: string;
+  };
+  laps?: number;
 }
 
 interface Season {
@@ -144,7 +151,7 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
                 key={race.id}
                 onClick={() => onRaceSelect?.(race.id)}
                 className={`text-xs p-1 rounded cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(race.status)}`}
-                title={`${race.trackName} - ${race.type}`}
+                title={`${race.trackName}${race.track?.name ? ` - ${race.track.name}` : ''} - ${race.type}`}
               >
                 <div className="font-medium truncate">{race.trackName}</div>
                 <div className="flex items-center space-x-1">
@@ -228,6 +235,11 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
                       <Clock className="w-4 h-4" />
                       <span>{formatTime(race.time)}</span>
                     </div>
+                    {race.track?.length && (
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {race.track.length}km {race.track.name ? `• ${race.track.name}` : ''}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

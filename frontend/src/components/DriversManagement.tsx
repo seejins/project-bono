@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit, Trash2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 
-interface Member {
+interface Driver {
   id: string;
   name: string;
   steam_id?: string;
@@ -10,41 +10,41 @@ interface Member {
   updatedAt: string;
 }
 
-interface MembersManagementProps {
+interface DriversManagementProps {
   // No props needed for now
 }
 
-export const MembersManagement: React.FC<MembersManagementProps> = () => {
-  const [members, setMembers] = useState<Member[]>([]);
+export const DriversManagement: React.FC<DriversManagementProps> = () => {
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
-  const [newMember, setNewMember] = useState({ name: '', steam_id: '' });
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [newDriver, setNewDriver] = useState({ name: '', steam_id: '' });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [formErrors, setFormErrors] = useState<{name?: string, steam_id?: string}>({});
   const [editFormErrors, setEditFormErrors] = useState<{name?: string, steam_id?: string}>({});
 
-  // Load members on component mount
+  // Load drivers on component mount
   useEffect(() => {
-    loadMembers();
+    loadDrivers();
   }, []);
 
-  const loadMembers = async () => {
+  const loadDrivers = async () => {
     try {
       setLoading(true);
-      const response = await apiGet('/api/members');
+      const response = await apiGet('/api/drivers');
       if (response.ok) {
         const data = await response.json();
-        setMembers(data.members || []);
+        setDrivers(data.drivers || []);
       } else {
-        throw new Error('Failed to load members');
+        throw new Error('Failed to load drivers');
       }
     } catch (error) {
-      console.error('Error loading members:', error);
+      console.error('Error loading drivers:', error);
       setStatus('error');
-      setStatusMessage('Failed to load members');
+      setStatusMessage('Failed to load drivers');
     } finally {
       setLoading(false);
     }
@@ -62,14 +62,14 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
     return cleaned;
   };
 
-  const handleAddMember = async () => {
+  const handleAddDriver = async () => {
     const errors: {name?: string, steam_id?: string} = {};
     
-    if (!newMember.name.trim()) {
+    if (!newDriver.name.trim()) {
       errors.name = 'Name is required';
     }
 
-    if (newMember.steam_id && !validateSteamId(newMember.steam_id)) {
+    if (newDriver.steam_id && !validateSteamId(newDriver.steam_id)) {
       errors.steam_id = 'Steam ID must be 17 digits';
     }
 
@@ -82,45 +82,45 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
 
     try {
       setStatus('loading');
-      setStatusMessage('Adding member...');
+      setStatusMessage('Adding driver...');
 
-      const response = await apiPost('/api/members', {
-        name: newMember.name.trim(),
-        steam_id: newMember.steam_id ? formatSteamId(newMember.steam_id) : undefined,
+      const response = await apiPost('/api/drivers', {
+        name: newDriver.name.trim(),
+        steam_id: newDriver.steam_id ? formatSteamId(newDriver.steam_id) : undefined,
       });
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Member added successfully');
-        setNewMember({ name: '', steam_id: '' });
+        setStatusMessage('Driver added successfully');
+        setNewDriver({ name: '', steam_id: '' });
         setFormErrors({});
         setShowAddModal(false);
-        loadMembers(); // Reload the list
+        loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to add member');
+        throw new Error(error.message || 'Failed to add driver');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to add member');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to add driver');
     }
   };
 
-  const handleEditMember = (member: Member) => {
-    setEditingMember(member);
+  const handleEditDriver = (driver: Driver) => {
+    setEditingDriver(driver);
     setShowEditModal(true);
   };
 
-  const handleUpdateMember = async () => {
-    if (!editingMember) return;
+  const handleUpdateDriver = async () => {
+    if (!editingDriver) return;
 
     const errors: {name?: string, steam_id?: string} = {};
     
-    if (!editingMember.name.trim()) {
+    if (!editingDriver.name.trim()) {
       errors.name = 'Name is required';
     }
 
-    if (editingMember.steam_id && !validateSteamId(editingMember.steam_id)) {
+    if (editingDriver.steam_id && !validateSteamId(editingDriver.steam_id)) {
       errors.steam_id = 'Steam ID must be 17 digits';
     }
 
@@ -133,52 +133,52 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
 
     try {
       setStatus('loading');
-      setStatusMessage('Updating member...');
+      setStatusMessage('Updating driver...');
 
-      const response = await apiPut(`/api/members/${editingMember.id}`, {
-        name: editingMember.name.trim(),
-        steam_id: editingMember.steam_id ? formatSteamId(editingMember.steam_id) : undefined,
+      const response = await apiPut(`/api/drivers/${editingDriver.id}`, {
+        name: editingDriver.name.trim(),
+        steam_id: editingDriver.steam_id ? formatSteamId(editingDriver.steam_id) : undefined,
       });
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Member updated successfully');
+        setStatusMessage('Driver updated successfully');
         setEditFormErrors({});
         setShowEditModal(false);
-        setEditingMember(null);
-        loadMembers(); // Reload the list
+        setEditingDriver(null);
+        loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to update member');
+        throw new Error(error.message || 'Failed to update driver');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to update member');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to update driver');
     }
   };
 
-  const handleDeleteMember = async (memberId: string) => {
-    if (!confirm('Are you sure you want to delete this member? This action cannot be undone.')) {
+  const handleDeleteDriver = async (driverId: string) => {
+    if (!confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
       return;
     }
 
     try {
       setStatus('loading');
-      setStatusMessage('Deleting member...');
+      setStatusMessage('Deleting driver...');
 
-      const response = await apiDelete(`/api/members/${memberId}`);
+      const response = await apiDelete(`/api/drivers/${driverId}`);
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Member deleted successfully');
-        loadMembers(); // Reload the list
+        setStatusMessage('Driver deleted successfully');
+        loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to delete member');
+        throw new Error(error.message || 'Failed to delete driver');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to delete member');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to delete driver');
     }
   };
 
@@ -191,7 +191,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading members...</span>
+        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading drivers...</span>
       </div>
     );
   }
@@ -201,7 +201,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Members</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Drivers</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage your league participants</p>
         </div>
         <button 
@@ -209,7 +209,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Member</span>
+          <span>Add Driver</span>
         </button>
       </div>
 
@@ -233,32 +233,32 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
         </div>
       )}
 
-      {/* Members List */}
+      {/* Drivers List */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
-        {members.length > 0 ? (
+        {drivers.length > 0 ? (
           <div className="flex flex-col gap-3">
-            {members.map((member) => (
+            {drivers.map((driver) => (
               <div 
-                key={member.id} 
+                key={driver.id} 
                 className="relative flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer z-10"
-                onClick={() => handleEditMember(member)}
+                onClick={() => handleEditDriver(driver)}
               >
                 <div className="flex items-center space-x-4 flex-1">
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white font-bold">
-                    {member.name.charAt(0).toUpperCase()}
+                    {driver.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-gray-900 dark:text-white font-medium">{member.name}</p>
+                    <p className="text-gray-900 dark:text-white font-medium">{driver.name}</p>
                     <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                      {member.steam_id && (
-                        <span>Steam ID: {member.steam_id}</span>
+                      {driver.steam_id && (
+                        <span>Steam ID: {driver.steam_id}</span>
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                   <button 
-                    onClick={() => handleDeleteMember(member.id)}
+                    onClick={() => handleDeleteDriver(driver.id)}
                     className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -271,13 +271,13 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
         ) : (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No members added yet</p>
-            <p className="text-sm">Add your first member to get started</p>
+            <p>No drivers added yet</p>
+            <p className="text-sm">Add your first driver to get started</p>
           </div>
         )}
       </div>
 
-      {/* Add Member Modal */}
+      {/* Add Driver Modal */}
       {showAddModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -287,18 +287,18 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
             className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Member</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Member Name *
+                  Driver Name *
                 </label>
                 <input
                   type="text"
-                  value={newMember.name}
+                  value={newDriver.name}
                   onChange={(e) => {
-                    setNewMember({ ...newMember, name: e.target.value });
+                    setNewDriver({ ...newDriver, name: e.target.value });
                     if (formErrors.name) {
                       setFormErrors({ ...formErrors, name: undefined });
                     }
@@ -321,9 +321,9 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 </label>
                 <input
                   type="text"
-                  value={newMember.steam_id}
+                  value={newDriver.steam_id}
                   onChange={(e) => {
-                    setNewMember({ ...newMember, steam_id: formatSteamId(e.target.value) });
+                    setNewDriver({ ...newDriver, steam_id: formatSteamId(e.target.value) });
                     if (formErrors.steam_id) {
                       setFormErrors({ ...formErrors, steam_id: undefined });
                     }
@@ -350,7 +350,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setNewMember({ name: '', steam_id: '' });
+                  setNewDriver({ name: '', steam_id: '' });
                   clearStatus();
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -358,19 +358,19 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 Cancel
               </button>
               <button
-                onClick={handleAddMember}
+                onClick={handleAddDriver}
                 disabled={status === 'loading'}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {status === 'loading' ? 'Adding...' : 'Add Member'}
+                {status === 'loading' ? 'Adding...' : 'Add Driver'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Member Modal */}
-      {showEditModal && editingMember && (
+      {/* Edit Driver Modal */}
+      {showEditModal && editingDriver && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={() => setShowEditModal(false)}
@@ -379,18 +379,18 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
             className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Member</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Driver</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Member Name *
+                  Driver Name *
                 </label>
                 <input
                   type="text"
-                  value={editingMember.name}
+                  value={editingDriver.name}
                   onChange={(e) => {
-                    setEditingMember({ ...editingMember, name: e.target.value });
+                    setEditingDriver({ ...editingDriver, name: e.target.value });
                     if (editFormErrors.name) {
                       setEditFormErrors({ ...editFormErrors, name: undefined });
                     }
@@ -413,9 +413,9 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 </label>
                 <input
                   type="text"
-                  value={editingMember.steam_id || ''}
+                  value={editingDriver.steam_id || ''}
                   onChange={(e) => {
-                    setEditingMember({ ...editingMember, steam_id: formatSteamId(e.target.value) });
+                    setEditingDriver({ ...editingDriver, steam_id: formatSteamId(e.target.value) });
                     if (editFormErrors.steam_id) {
                       setEditFormErrors({ ...editFormErrors, steam_id: undefined });
                     }
@@ -442,7 +442,7 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
               <button
                 onClick={() => {
                   setShowEditModal(false);
-                  setEditingMember(null);
+                  setEditingDriver(null);
                   clearStatus();
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -450,11 +450,11 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
                 Cancel
               </button>
               <button
-                onClick={handleUpdateMember}
+                onClick={handleUpdateDriver}
                 disabled={status === 'loading'}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {status === 'loading' ? 'Updating...' : 'Update Member'}
+                {status === 'loading' ? 'Updating...' : 'Update Driver'}
               </button>
             </div>
           </div>
@@ -463,3 +463,4 @@ export const MembersManagement: React.FC<MembersManagementProps> = () => {
     </div>
   );
 };
+

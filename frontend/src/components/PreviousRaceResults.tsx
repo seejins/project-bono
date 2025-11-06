@@ -109,7 +109,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
       </div>
 
       <div className="space-y-2">
-        {previousRace.drivers.slice(0, 5).map((driver) => (
+        {(previousRace.drivers || []).slice(0, 5).map((driver) => (
           <div 
             key={driver.position}
             className={`flex items-center justify-between py-2 px-3 rounded-lg ${
@@ -136,7 +136,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
           </div>
         ))}
         
-        {previousRace.drivers.length > 5 && (
+        {previousRace.drivers && previousRace.drivers.length > 5 && (
           <div className="text-center pt-2">
             <button
               onClick={handleRaceClick}
