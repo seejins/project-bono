@@ -196,6 +196,9 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
         dnf: result.result_status === 4 || result.result_status === 7 || result.dnf_reason ? true : false,
         dnfReason: result.dnf_reason,
         
+        // Lap-by-lap data (if available)
+        lap_times: result.lap_times || [], // Array of { lap_number, lap_time_ms, sector1_ms, sector2_ms, sector3_ms, tire_compound }
+        
         // Data source
         dataSource: 'FILE_UPLOAD' as const
       };
@@ -904,29 +907,29 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Pos</th>
-                <th className="px-3 py-3 text-left text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Driver</th>
-                <th className="px-3 py-3 text-left text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Team</th>
+                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Pos</th>
+                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Driver</th>
+                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Team</th>
                 {activeSession === 'race' && (
-                  <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Grid</th>
+                  <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Grid</th>
                 )}
                 {activeSession === 'qualifying' || activeSession === 'practice' ? (
                   <>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Time</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Gap</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S1</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S2</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S3</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Tire</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Time</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Gap</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S1</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S2</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S3</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Tire</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Best Lap</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Total Time</th>
-                    <th className="px-2 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">Penalty</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Status</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Tires</th>
-                    <th className="px-3 py-3 text-center text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Points</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Best Lap</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Total Time</th>
+                    <th className="px-2 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">Penalty</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Status</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Tires</th>
+                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Points</th>
                   </>
                 )}
               </tr>
@@ -1001,79 +1004,78 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                     })()}
                   </td>
                   {activeSession === 'race' && (
-                    <td className="px-3 py-4 whitespace-nowrap text-center w-16">
-                      {driver.gridPosition != null ? (
-                        <span className="text-base font-normal text-gray-900 dark:text-white">{driver.gridPosition}</span>
-                      ) : (
-                        <span className="text-base text-gray-500 dark:text-gray-400">-</span>
-                      )}
+                    <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-16">
+                      {driver.gridPosition != null ? driver.gridPosition : '-'}
                     </td>
                   )}
                   {activeSession === 'qualifying' || activeSession === 'practice' ? (
                     <>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-28">
+                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-28">
                         {driver.qualifyingTime ? (
-                          <span className="font-mono text-base font-normal text-gray-900 dark:text-white">{F123DataService.formatTimeFromMs(driver.qualifyingTime)}</span>
-                        ) : <span className="font-mono text-base text-gray-500 dark:text-gray-400">--:--.---</span>}
+                          F123DataService.formatTimeFromMs(driver.qualifyingTime)
+                        ) : '--:--.---'}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-24">
+                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-24">
                         {driver.qualifyingGap && driver.qualifyingGap > 0 ? (
-                          <span className="font-mono text-base font-normal text-gray-900 dark:text-white">+{F123DataService.formatGapTimeFromMs(driver.qualifyingGap)}</span>
+                          '+' + F123DataService.formatGapTimeFromMs(driver.qualifyingGap)
                         ) : driver.qualifyingPosition === 1 ? (
-                          activeSession === 'qualifying' ? (
-                            <span className="text-base font-normal text-gray-900 dark:text-white">Pole</span>
-                          ) : (
-                            <span className="text-base font-normal text-gray-900 dark:text-white">Leader</span>
-                          )
+                          activeSession === 'qualifying' ? 'Pole' : 'Leader'
                         ) : (
-                          <span className="font-mono text-base font-normal text-gray-500 dark:text-gray-400">--.---</span>
+                          '--.---'
                         )}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-20">
+                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
+                        driver.qualifyingSector1Time === fastestS1
+                          ? 'text-purple-600 dark:text-purple-400'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
                         {driver.qualifyingSector1Time ? (
-                          <span className={`font-mono text-base font-normal text-gray-900 dark:text-white ${driver.qualifyingSector1Time === fastestS1 ? 'text-purple-600 dark:text-purple-400' : ''}`}>
-                            {F123DataService.formatSectorTimeFromMs(driver.qualifyingSector1Time)}
-                          </span>
-                        ) : <span className="font-mono text-base text-gray-500 dark:text-gray-400">--.---</span>}
+                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector1Time)
+                        ) : '--.---'}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-20">
+                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
+                        driver.qualifyingSector2Time === fastestS2
+                          ? 'text-purple-600 dark:text-purple-400'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
                         {driver.qualifyingSector2Time ? (
-                          <span className={`font-mono text-base font-normal text-gray-900 dark:text-white ${driver.qualifyingSector2Time === fastestS2 ? 'text-purple-600 dark:text-purple-400' : ''}`}>
-                            {F123DataService.formatSectorTimeFromMs(driver.qualifyingSector2Time)}
-                          </span>
-                        ) : <span className="font-mono text-base text-gray-500 dark:text-gray-400">--.---</span>}
+                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector2Time)
+                        ) : '--.---'}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-20">
+                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
+                        driver.qualifyingSector3Time === fastestS3
+                          ? 'text-purple-600 dark:text-purple-400'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
                         {driver.qualifyingSector3Time ? (
-                          <span className={`font-mono text-base font-normal text-gray-900 dark:text-white ${driver.qualifyingSector3Time === fastestS3 ? 'text-purple-600 dark:text-purple-400' : ''}`}>
-                            {F123DataService.formatSectorTimeFromMs(driver.qualifyingSector3Time)}
-                          </span>
-                        ) : <span className="font-mono text-base text-gray-500 dark:text-gray-400">--.---</span>}
+                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector3Time)
+                        ) : '--.---'}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-center w-16">
                         {(() => {
                           const tire = (driver as any).qualifyingTire;
-                          if (!tire) return <span className="text-base text-gray-500 dark:text-gray-400">-</span>;
-                          // Handle visual compound strings like "Soft", "Medium", "Hard", etc.
-                          let tireStr = typeof tire === 'number' ? getTireCompound(tire) : tire;
-                          // Map common visual compound names to abbreviations
-                          if (typeof tireStr === 'string') {
-                            const tireLower = tireStr.toLowerCase();
-                            if (tireLower.includes('soft')) tireStr = 'S';
-                            else if (tireLower.includes('medium')) tireStr = 'M';
-                            else if (tireLower.includes('hard')) tireStr = 'H';
-                            else if (tireLower.includes('intermediate')) tireStr = 'I';
-                            else if (tireLower.includes('wet')) tireStr = 'W';
+                          if (!tire) return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
+
+                          const tireValue = typeof tire === 'number' ? getTireCompound(tire) : tire;
+                          const icon = F123DataService.getTireCompoundIcon(tireValue);
+                          const label = F123DataService.getTireCompoundText(tireValue);
+                          const fullName = F123DataService.getTireCompoundFullName(tireValue);
+
+                          if (icon) {
+                            return (
+                              <div className="flex items-center justify-center">
+                                <img
+                                  src={icon}
+                                  alt={`${fullName} tire`}
+                                  className="h-6 w-6"
+                                />
+                              </div>
+                            );
                           }
-                          const tireColor = tireStr === 'S' || tireStr === 'SOFT' ? 'text-red-600 dark:text-red-400' :
-                                          tireStr === 'M' || tireStr === 'MEDIUM' ? 'text-yellow-600 dark:text-yellow-400' :
-                                          tireStr === 'H' || tireStr === 'HARD' ? 'text-white dark:text-gray-300' :
-                                          tireStr === 'I' || tireStr === 'INTERMEDIATE' ? 'text-green-600 dark:text-green-400' :
-                                          tireStr === 'W' || tireStr === 'WET' ? 'text-blue-600 dark:text-blue-400' :
-                                          'text-gray-600 dark:text-gray-400';
+
                           return (
-                            <span className={`text-base font-bold inline-block ${tireColor}`}>
-                              {tireStr}
+                            <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {label}
                             </span>
                           );
                         })()}
@@ -1081,25 +1083,27 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                     </>
                   ) : (
                     <>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-28">
+                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg w-28 ${
+                        driver.fastestLap
+                          ? 'text-purple-600 dark:text-purple-400 font-semibold'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
                         {driver.raceBestLapTime ? (
-                          <span className={`font-mono text-base font-normal ${driver.fastestLap ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-white'}`}>
-                            {F123DataService.formatTimeFromMs(driver.raceBestLapTime)}
-                          </span>
-                        ) : <span className="font-mono text-base text-gray-500 dark:text-gray-400">--:--.---</span>}
+                          F123DataService.formatTimeFromMs(driver.raceBestLapTime)
+                        ) : '--:--.---'}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-28">
+                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-28">
                         {(() => {
                           // If already formatted (race session with gap calculation), use it directly
                           if ((driver as any)._raceTimeFormatted && driver.raceTime) {
-                            return <span className="font-mono text-base font-normal text-gray-900 dark:text-white">{driver.raceTime}</span>;
+                            return driver.raceTime;
                           }
                           // Otherwise, format the total race time
                           const totalTimeMs = (driver as any)._totalRaceTimeMs;
                           if (totalTimeMs && totalTimeMs > 0) {
-                            return <span className="font-mono text-base font-normal text-gray-900 dark:text-white">{F123DataService.formatTimeFromMs(totalTimeMs)}</span>;
+                            return F123DataService.formatTimeFromMs(totalTimeMs);
                           }
-                          return <span className="font-mono text-base text-gray-500 dark:text-gray-400">--:--.---</span>;
+                          return '--:--.---';
                         })()}
                       </td>
                       <td className="px-2 py-4 whitespace-nowrap text-center w-20">
@@ -1190,7 +1194,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                         {(() => {
                           const tiresUsed = (driver as any).raceTiresUsed;
                           if (!tiresUsed || (Array.isArray(tiresUsed) && tiresUsed.length === 0)) {
-                            return <span className="text-base text-gray-500 dark:text-gray-400">-</span>;
+                            return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
                           }
                           // If it's an array of tire compounds, format them (these should be visual compounds)
                           if (Array.isArray(tiresUsed)) {
@@ -1208,17 +1212,21 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                               return String(t);
                             });
                             return (
-                              <div className="flex items-center justify-center space-x-1">
+                              <div className="flex items-center justify-center gap-1">
                                 {tireStrings.map((tireStr, idx) => {
-                                  const tireColor = tireStr === 'S' || tireStr.toLowerCase() === 'soft' ? 'text-red-600 dark:text-red-400' :
-                                                  tireStr === 'M' || tireStr.toLowerCase() === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                                                  tireStr === 'H' || tireStr.toLowerCase() === 'hard' ? 'text-white dark:text-gray-300' :
-                                                  tireStr === 'I' || tireStr.toLowerCase() === 'intermediate' ? 'text-green-600 dark:text-green-400' :
-                                                  tireStr === 'W' || tireStr.toLowerCase() === 'wet' ? 'text-blue-600 dark:text-blue-400' :
-                                                  'text-gray-600 dark:text-gray-400';
-                                  return (
-                                    <span key={idx} className={`text-base font-bold ${tireColor}`}>
-                                      {tireStr}
+                                  const icon = F123DataService.getTireCompoundIcon(tireStr);
+                                  const fullName = F123DataService.getTireCompoundFullName(tireStr);
+                                  const label = F123DataService.getTireCompoundText(tireStr);
+                                  return icon ? (
+                                    <img
+                                      key={`${tireStr}-${idx}`}
+                                      src={icon}
+                                      alt={`${fullName} tire`}
+                                      className="h-6 w-6"
+                                    />
+                                  ) : (
+                                    <span key={`${tireStr}-${idx}`} className="text-lg font-semibold text-gray-900 dark:text-white">
+                                      {label}
                                     </span>
                                   );
                                 })}
@@ -1226,10 +1234,19 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                             );
                           }
                           // If it's a string, just display it
-                          return <span className="text-base text-gray-900 dark:text-white">{tiresUsed}</span>;
+                          const icon = F123DataService.getTireCompoundIcon(tiresUsed);
+                          const fullName = F123DataService.getTireCompoundFullName(tiresUsed);
+                          const label = F123DataService.getTireCompoundText(tiresUsed);
+                          return icon ? (
+                            <div className="flex items-center justify-center">
+                              <img src={icon} alt={`${fullName} tire`} className="h-6 w-6" />
+                            </div>
+                          ) : (
+                            <span className="text-lg text-gray-900 dark:text-white">{label}</span>
+                          );
                         })()}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-16 text-base font-normal text-gray-900 dark:text-white">
+                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-16">
                         {driver.points}
                       </td>
                     </>

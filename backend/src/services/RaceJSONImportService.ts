@@ -649,6 +649,169 @@ export class RaceJSONImportService {
         
         const jsonCarNumber = participant?.raceNumber || participant?.number || participant?.['race-number'] || null;
         
+        // Extract lap-by-lap data from lap-history-data and per-lap-info
+        const lapTimesData: Array<{
+          lapNumber: number;
+          lapTimeMs: number;
+          sector1Ms?: number;
+          sector2Ms?: number;
+          sector3Ms?: number;
+          sector1TimeMinutes?: number;
+          sector2TimeMinutes?: number;
+          sector3TimeMinutes?: number;
+          lapValidBitFlags?: number;
+          tireCompound?: string;
+          trackPosition?: number;
+          tireAgeLaps?: number;
+          topSpeedKmph?: number;
+          maxSafetyCarStatus?: string;
+          vehicleFiaFlags?: string;
+          pitStop?: boolean;
+          ersStoreEnergy?: number;
+          ersDeployedThisLap?: number;
+          ersDeployMode?: string;
+          fuelInTank?: number;
+          fuelRemainingLaps?: number;
+          gapToLeaderMs?: number;
+          gapToPositionAheadMs?: number;
+          carDamageData?: any;
+          tyreSetsData?: any;
+        }> = [];
+        
+        // Debug: Check if lap-time-history exists
+        if (!lapTimeHistory || Object.keys(lapTimeHistory).length === 0) {
+          console.log(`⚠️  No lap-time-history found for driver ${jsonDriverName || i} (position ${position})`);
+        }
+        
+        if (lapTimeHistory['lap-history-data'] && Array.isArray(lapTimeHistory['lap-history-data'])) {
+          const lapHistoryData = lapTimeHistory['lap-history-data'];
+          console.log(`📊 Found ${lapHistoryData.length} laps in lap-history-data for driver ${jsonDriverName || i}`);
+          
+          // Get tyre stint information for mapping lap numbers to tire compounds
+          const tyreStintsEndLaps = finalClassification['tyre-stints-end-laps'] || finalClassification.tyreStintsEndLaps || [];
+          const tyreStintsVisual = finalClassification['tyre-stints-visual'] || finalClassification.tyreStintsVisual || [];
+          
+          // Iterate with index to get lap number (lap-history-data doesn't include lap-number field)
+          for (let lapIndex = 0; lapIndex < lapHistoryData.length; lapIndex++) {
+            const lap = lapHistoryData[lapIndex];
+            // Lap number is 1-indexed (first lap is lap 1, not lap 0)
+            const lapNumber = lap['lap-number'] || lap.lapNumber || (lapIndex + 1);
+            const lapTimeMs = lap['lap-time-in-ms'] || lap.lapTimeInMs || 0;
+            const sector1Ms = lap['sector-1-time-in-ms'] || lap.sector1TimeInMs || 0;
+            const sector2Ms = lap['sector-2-time-in-ms'] || lap.sector2TimeInMs || 0;
+            const sector3Ms = lap['sector-3-time-in-ms'] || lap.sector3TimeInMs || 0;
+            const sector1TimeMinutes = lap['sector-1-time-minutes'] || lap.sector1TimeMinutes || 0;
+            const sector2TimeMinutes = lap['sector-2-time-minutes'] || lap.sector2TimeMinutes || 0;
+            const sector3TimeMinutes = lap['sector-3-time-minutes'] || lap.sector3TimeMinutes || 0;
+            const lapValidBitFlags = lap['lap-valid-bit-flags'] || lap.lapValidBitFlags || 0;
+            
+            // Only include valid laps (lap time > 0)
+            if (lapNumber > 0 && lapTimeMs > 0) {
+              // Find matching per-lap-info entry
+              let perLapData: any = null;
+              if (additionalDriverData.perLapInfo && Array.isArray(additionalDriverData.perLapInfo)) {
+                perLapData = additionalDriverData.perLapInfo.find((pl: any) => 
+                  (pl['lap-number'] || pl.lapNumber) === lapNumber
+                );
+              }
+              
+              // Extract tire compound
+              let tireCompound: string | undefined = undefined;
+              let tireAgeLaps: number | undefined = undefined;
+              
+              if (perLapData) {
+                tireCompound = perLapData['tyre-compound'] || perLapData.tyreCompound || 
+                              perLapData['tyre-visual-compound'] || perLapData.tyreVisualCompound ||
+                              perLapData['car-status-data']?.['visual-tyre-compound'] ||
+                              perLapData['car-status-data']?.['actual-tyre-compound'];
+                tireAgeLaps = perLapData['car-status-data']?.['tyres-age-laps'] || 
+                             perLapData['car-status-data']?.['tyresAgeLaps'];
+              }
+              
+              // Fallback: determine from tyre stints
+              if (!tireCompound && tyreStintsEndLaps.length > 0 && tyreStintsVisual.length > 0) {
+                let stintIndex = 0;
+                for (let j = 0; j < tyreStintsEndLaps.length; j++) {
+                  if (lapNumber <= tyreStintsEndLaps[j]) {
+                    stintIndex = j;
+                    break;
+                  }
+                  stintIndex = j + 1;
+                }
+                if (stintIndex < tyreStintsVisual.length) {
+                  const compound = tyreStintsVisual[stintIndex];
+                  if (typeof compound === 'string') {
+                    const compoundLower = compound.toLowerCase();
+                    if (compoundLower.includes('soft')) tireCompound = 'S';
+                    else if (compoundLower.includes('medium')) tireCompound = 'M';
+                    else if (compoundLower.includes('hard')) tireCompound = 'H';
+                    else if (compoundLower.includes('intermediate')) tireCompound = 'I';
+                    else if (compoundLower.includes('wet')) tireCompound = 'W';
+                    else tireCompound = compound;
+                  } else {
+                    tireCompound = compound;
+                  }
+                }
+              }
+              
+              // Determine if this is a pit stop lap (tire age resets or compound changes)
+              let pitStop = false;
+              if (lapNumber > 1) {
+                const prevLapData = lapTimesData.find(l => l.lapNumber === lapNumber - 1);
+                if (prevLapData) {
+                  // Pit stop if tire compound changes or tire age resets
+                  if (prevLapData.tireCompound && tireCompound && prevLapData.tireCompound !== tireCompound) {
+                    pitStop = true;
+                  } else if (prevLapData.tireAgeLaps && tireAgeLaps && tireAgeLaps < prevLapData.tireAgeLaps) {
+                    pitStop = true;
+                  }
+                }
+              }
+              
+              // Gap data will be calculated from lap times when needed for analytics
+              // (lap-data is UDP current state, not historical per-lap data)
+              
+              lapTimesData.push({
+                lapNumber,
+                lapTimeMs,
+                sector1Ms: sector1Ms > 0 ? sector1Ms : undefined,
+                sector2Ms: sector2Ms > 0 ? sector2Ms : undefined,
+                sector3Ms: sector3Ms > 0 ? sector3Ms : undefined,
+                sector1TimeMinutes: sector1TimeMinutes > 0 ? sector1TimeMinutes : undefined,
+                sector2TimeMinutes: sector2TimeMinutes > 0 ? sector2TimeMinutes : undefined,
+                sector3TimeMinutes: sector3TimeMinutes > 0 ? sector3TimeMinutes : undefined,
+                lapValidBitFlags: lapValidBitFlags > 0 ? lapValidBitFlags : undefined,
+                tireCompound,
+                trackPosition: perLapData?.['track-position'] || perLapData?.trackPosition,
+                tireAgeLaps,
+                topSpeedKmph: perLapData?.['top-speed-kmph'] || perLapData?.topSpeedKmph,
+                maxSafetyCarStatus: perLapData?.['max-safety-car-status'] || perLapData?.maxSafetyCarStatus,
+                vehicleFiaFlags: perLapData?.['car-status-data']?.['vehicle-fia-flags'] || 
+                                perLapData?.['car-status-data']?.['vehicleFiaFlags'],
+                pitStop,
+                ersStoreEnergy: perLapData?.['car-status-data']?.['ers-store-energy'] || 
+                               perLapData?.['car-status-data']?.['ersStoreEnergy'],
+                ersDeployedThisLap: perLapData?.['car-status-data']?.['ers-deployed-this-lap'] || 
+                                   perLapData?.['car-status-data']?.['ersDeployedThisLap'],
+                ersDeployMode: perLapData?.['car-status-data']?.['ers-deploy-mode'] || 
+                              perLapData?.['car-status-data']?.['ersDeployMode'],
+                fuelInTank: perLapData?.['car-status-data']?.['fuel-in-tank'] || 
+                           perLapData?.['car-status-data']?.['fuelInTank'],
+                fuelRemainingLaps: perLapData?.['car-status-data']?.['fuel-remaining-laps'] || 
+                                  perLapData?.['car-status-data']?.['fuelRemainingLaps'],
+                gapToLeaderMs: undefined, // Will be calculated from lap times when needed
+                gapToPositionAheadMs: undefined, // Will be calculated from lap times when needed
+                carDamageData: perLapData?.['car-damage-data'] || perLapData?.carDamageData || null,
+                tyreSetsData: perLapData?.['tyre-sets-data'] || perLapData?.tyreSetsData || null
+              });
+            }
+          }
+        } else {
+          console.log(`⚠️  No lap-history-data array found for driver ${jsonDriverName || i} (position ${position}). lapTimeHistory keys: ${Object.keys(lapTimeHistory || {}).join(', ')}`);
+        }
+        
+        console.log(`📊 Extracted ${lapTimesData.length} valid lap times for driver ${jsonDriverName || i} (position ${position})`);
+        
         driverResults.push({
           user_id: userId,
           json_driver_id: jsonDriverId ? Number(jsonDriverId) : null,
@@ -674,7 +837,8 @@ export class RaceJSONImportService {
           fastest_lap: false, // Will be set after loop
           _best_lap_time_for_fastest: bestLapTimeForFastestCheck, // Store for fastest lap calculation
           pole_position: polePosition || isQualifyingPole,
-          additional_data: Object.keys(additionalDriverData).length > 0 ? additionalDriverData : null
+          additional_data: Object.keys(additionalDriverData).length > 0 ? additionalDriverData : null,
+          _lap_times_data: lapTimesData // Store lap data temporarily for later insertion
         });
         
         importedCount++;
@@ -771,8 +935,26 @@ export class RaceJSONImportService {
       // Store original results snapshot (preserve raw data)
       await this.dbService.storeOriginalSessionResults(sessionResultId, driverResults);
       
-      // Store driver session results
-      await this.dbService.storeDriverSessionResults(sessionResultId, driverResults);
+      // Store driver session results and get mapping of index to driver_session_result_id
+      const driverResultIdMap = await this.dbService.storeDriverSessionResults(sessionResultId, driverResults);
+      
+      // Store lap times for each driver
+      for (let i = 0; i < driverResults.length; i++) {
+        const driverResult = driverResults[i];
+        const driverSessionResultId = driverResultIdMap.get(i);
+        
+        if (driverSessionResultId && driverResult._lap_times_data && driverResult._lap_times_data.length > 0) {
+          await this.dbService.storeLapTimes(
+            driverSessionResultId,
+            targetRaceId,
+            driverResult._lap_times_data
+          );
+          console.log(`✅ Stored ${driverResult._lap_times_data.length} lap times for driver ${driverResult.json_driver_name || i}`);
+        }
+        
+        // Clean up temporary field
+        delete driverResult._lap_times_data;
+      }
       
       // Mark event as completed if this was a race session
       if (sessionType === 10) {

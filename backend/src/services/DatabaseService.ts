@@ -690,6 +690,84 @@ export class DatabaseService {
         `);
       });
       
+      // Migration 7: Add driver_session_result_id to lap_times table
+      await this.runMigration('add_driver_session_result_id_to_lap_times', async () => {
+        await this.addColumnIfNotExists('lap_times', 'driver_session_result_id', 'UUID');
+        
+        // Create index for fast lookups
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_driver_session_result_id 
+          ON lap_times(driver_session_result_id)
+        `);
+        
+        // Add foreign key constraint
+        await this.db.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint 
+              WHERE conname = 'lap_times_driver_session_result_id_fkey'
+            ) THEN
+              ALTER TABLE lap_times
+              ADD CONSTRAINT lap_times_driver_session_result_id_fkey
+              FOREIGN KEY (driver_session_result_id)
+              REFERENCES driver_session_results(id)
+              ON DELETE CASCADE;
+            END IF;
+          END $$;
+        `);
+      });
+      
+      // Migration 8: Add comprehensive lap analytics columns to lap_times
+      await this.runMigration('add_lap_analytics_columns', async () => {
+        // Add columns from lap-history-data
+        await this.addColumnIfNotExists('lap_times', 'sector1_time_minutes', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'sector2_time_minutes', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'sector3_time_minutes', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'lap_valid_bit_flags', 'INTEGER');
+        
+        // Add columns from per-lap-info
+        await this.addColumnIfNotExists('lap_times', 'track_position', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'tire_age_laps', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'top_speed_kmph', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'max_safety_car_status', 'VARCHAR(50)');
+        await this.addColumnIfNotExists('lap_times', 'vehicle_fia_flags', 'VARCHAR(50)');
+        await this.addColumnIfNotExists('lap_times', 'pit_stop', 'BOOLEAN DEFAULT FALSE');
+        
+        // Add ERS and fuel data
+        await this.addColumnIfNotExists('lap_times', 'ers_store_energy', 'DECIMAL(10,2)');
+        await this.addColumnIfNotExists('lap_times', 'ers_deployed_this_lap', 'DECIMAL(10,2)');
+        await this.addColumnIfNotExists('lap_times', 'ers_deploy_mode', 'VARCHAR(50)');
+        await this.addColumnIfNotExists('lap_times', 'fuel_in_tank', 'DECIMAL(10,2)');
+        await this.addColumnIfNotExists('lap_times', 'fuel_remaining_laps', 'DECIMAL(10,2)');
+        
+        // Add gap data
+        await this.addColumnIfNotExists('lap_times', 'gap_to_leader_ms', 'INTEGER');
+        await this.addColumnIfNotExists('lap_times', 'gap_to_position_ahead_ms', 'INTEGER');
+        
+        // Add JSONB columns
+        await this.addColumnIfNotExists('lap_times', 'car_damage_data', 'JSONB');
+        await this.addColumnIfNotExists('lap_times', 'tyre_sets_data', 'JSONB');
+        
+        // Create indexes
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_track_position 
+          ON lap_times(track_position)
+        `);
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_tire_compound 
+          ON lap_times(tire_compound)
+        `);
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_pit_stop 
+          ON lap_times(pit_stop)
+        `);
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_lap_number 
+          ON lap_times(lap_number)
+        `);
+      });
+      
       // Migration 5: Add session_types column to season_events table (skipped - table doesn't exist)
       // await this.runMigration('add_session_types_to_season_events', async () => {
       //   await this.addColumnIfNotExists('season_events', 'session_types', 'TEXT');
@@ -1632,9 +1710,9 @@ export class DatabaseService {
 
   async getUDPLapHistory(driverId?: string): Promise<any[]> {
     if (driverId) {
-      const result = await this.db.query(`
+    const result = await this.db.query(`
         SELECT ulh.*, d.name as driver_name
-        FROM f123_udp_lap_history ulh
+      FROM f123_udp_lap_history ulh
         LEFT JOIN drivers d ON ulh.user_id = d.id
         WHERE ulh.user_id = $1
         ORDER BY ulh.created_at DESC
@@ -1756,7 +1834,7 @@ export class DatabaseService {
     // Otherwise, update the existing driver to include this season
     if (!driver.seasonId) {
       // Create a new driver entry for this season
-      await this.db.query(
+    await this.db.query(
         'INSERT INTO drivers (id, name, team, number, season_id, steam_id, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7)',
         [driverId, driver.name, driver.team || 'TBD', driver.number || 0, seasonId, driver.steam_id || null, driver.isActive]
       );
@@ -1849,27 +1927,27 @@ export class DatabaseService {
         const finalSessionTypes = row.session_types || (sessionTypes.length > 0 ? sessionTypes.join(', ') : null);
         
         return {
-          id: row.id,
-          season_id: row.season_id,
-          track_id: row.track_id,
+      id: row.id,
+      season_id: row.season_id,
+      track_id: row.track_id,
           track_name: row.track_name, // Event name (track-id from JSON, e.g., "Austria")
-          track: {
-            id: row.track_id,
+      track: {
+        id: row.track_id,
             name: row.track_name_full || 'Unknown Track', // Full track name from tracks table (e.g., "Red Bull Ring")
-            country: row.country || '',
-            length: row.length_km || 0
-          },
-          race_date: row.race_date,
-          status: row.status,
-          session_type: row.session_type,
+        country: row.country || '',
+        length: row.length_km || 0
+      },
+      race_date: row.race_date,
+      status: row.status,
+      session_type: row.session_type,
           session_types: finalSessionTypes, // Use derived session types if database value is null
-          session_duration: row.session_duration,
-          weather_air_temp: row.weather_air_temp,
-          weather_track_temp: row.weather_track_temp,
-          weather_rain_percentage: row.weather_rain_percentage,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-          session_config: row.session_config // Include session config
+      session_duration: row.session_duration,
+      weather_air_temp: row.weather_air_temp,
+      weather_track_temp: row.weather_track_temp,
+      weather_rain_percentage: row.weather_rain_percentage,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      session_config: row.session_config // Include session config
         };
       })
     );
@@ -2092,7 +2170,24 @@ export class DatabaseService {
   }
 
   // Delete all driver session results for a session (for re-importing)
+  // This will cascade delete lap_times due to foreign key constraint
   async deleteDriverSessionResults(sessionResultId: string): Promise<void> {
+    // First get all driver_session_result_ids to delete their lap times explicitly
+    // (though CASCADE should handle this, we'll do it explicitly for clarity)
+    const driverResults = await this.db.query(
+      `SELECT id FROM driver_session_results WHERE session_result_id = $1`,
+      [sessionResultId]
+    );
+    
+    const driverResultIds = driverResults.rows.map(r => r.id);
+    if (driverResultIds.length > 0) {
+      await this.db.query(
+        `DELETE FROM lap_times WHERE driver_session_result_id = ANY($1)`,
+        [driverResultIds]
+      );
+    }
+    
+    // Then delete driver session results (CASCADE will also delete lap_times, but we did it explicitly above)
     await this.db.query(
       `DELETE FROM driver_session_results WHERE session_result_id = $1`,
       [sessionResultId]
@@ -2100,10 +2195,15 @@ export class DatabaseService {
   }
 
   // Store driver results for a session
-  async storeDriverSessionResults(sessionResultId: string, driverResults: any[]): Promise<void> {
+  // Returns a map of driver result index to driver_session_result_id for linking lap times
+  async storeDriverSessionResults(sessionResultId: string, driverResults: any[]): Promise<Map<number, string>> {
     const now = new Date().toISOString();
+    const driverResultIdMap = new Map<number, string>();
 
-    for (const result of driverResults) {
+    for (let i = 0; i < driverResults.length; i++) {
+      const result = driverResults[i];
+      const driverSessionResultId = uuidv4();
+      
       await this.db.query(
         `INSERT INTO driver_session_results (
           id, session_result_id, user_id, json_driver_id, json_driver_name, json_team_name, json_car_number,
@@ -2113,7 +2213,7 @@ export class DatabaseService {
           num_unserved_stop_go_pens, result_status, dnf_reason, fastest_lap, pole_position, additional_data, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
-          uuidv4(), sessionResultId, result.user_id, 
+          driverSessionResultId, sessionResultId, result.user_id, 
           result.json_driver_id || null,
           result.json_driver_name || null,
           result.json_team_name || null,
@@ -2125,6 +2225,102 @@ export class DatabaseService {
           result.num_unserved_drive_through_pens, result.num_unserved_stop_go_pens,
           result.result_status, result.dnf_reason, result.fastest_lap, result.pole_position,
           result.additional_data ? JSON.stringify(result.additional_data) : null, now
+        ]
+      );
+      
+      // Store the mapping for linking lap times
+      driverResultIdMap.set(i, driverSessionResultId);
+    }
+    
+    return driverResultIdMap;
+  }
+
+  // Store lap times for driver session results
+  async storeLapTimes(driverSessionResultId: string, raceId: string, lapData: Array<{
+    lapNumber: number;
+    lapTimeMs: number;
+    sector1Ms?: number;
+    sector2Ms?: number;
+    sector3Ms?: number;
+    sector1TimeMinutes?: number;
+    sector2TimeMinutes?: number;
+    sector3TimeMinutes?: number;
+    lapValidBitFlags?: number;
+    tireCompound?: string;
+    trackPosition?: number;
+    tireAgeLaps?: number;
+    topSpeedKmph?: number;
+    maxSafetyCarStatus?: string;
+    vehicleFiaFlags?: string;
+    pitStop?: boolean;
+    ersStoreEnergy?: number;
+    ersDeployedThisLap?: number;
+    ersDeployMode?: string;
+    fuelInTank?: number;
+    fuelRemainingLaps?: number;
+    gapToLeaderMs?: number;
+    gapToPositionAheadMs?: number;
+    carDamageData?: any;
+    tyreSetsData?: any;
+  }>): Promise<void> {
+    if (!lapData || lapData.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    
+    // Get user_id from driver_session_results for backward compatibility
+    const driverResult = await this.db.query(
+      `SELECT user_id FROM driver_session_results WHERE id = $1`,
+      [driverSessionResultId]
+    );
+    const userId = driverResult.rows[0]?.user_id || null;
+
+    // Batch insert lap times
+    for (const lap of lapData) {
+      await this.db.query(
+        `INSERT INTO lap_times (
+          id, driver_session_result_id, race_id, driver_id, lap_number, 
+          lap_time_ms, sector1_ms, sector2_ms, sector3_ms, 
+          sector1_time_minutes, sector2_time_minutes, sector3_time_minutes,
+          lap_valid_bit_flags, tire_compound, track_position, tire_age_laps,
+          top_speed_kmph, max_safety_car_status, vehicle_fia_flags, pit_stop,
+          ers_store_energy, ers_deployed_this_lap, ers_deploy_mode,
+          fuel_in_tank, fuel_remaining_laps, gap_to_leader_ms, gap_to_position_ahead_ms,
+          car_damage_data, tyre_sets_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        ON CONFLICT DO NOTHING`,
+        [
+          uuidv4(),
+          driverSessionResultId,
+          raceId,
+          userId,
+          lap.lapNumber,
+          lap.lapTimeMs,
+          lap.sector1Ms || null,
+          lap.sector2Ms || null,
+          lap.sector3Ms || null,
+          lap.sector1TimeMinutes || null,
+          lap.sector2TimeMinutes || null,
+          lap.sector3TimeMinutes || null,
+          lap.lapValidBitFlags || null,
+          lap.tireCompound || null,
+          lap.trackPosition || null,
+          lap.tireAgeLaps || null,
+          lap.topSpeedKmph || null,
+          lap.maxSafetyCarStatus || null,
+          lap.vehicleFiaFlags || null,
+          lap.pitStop || false,
+          lap.ersStoreEnergy || null,
+          lap.ersDeployedThisLap || null,
+          lap.ersDeployMode || null,
+          lap.fuelInTank || null,
+          lap.fuelRemainingLaps || null,
+          lap.gapToLeaderMs || null,
+          lap.gapToPositionAheadMs || null,
+          lap.carDamageData ? JSON.stringify(lap.carDamageData) : null,
+          lap.tyreSetsData ? JSON.stringify(lap.tyreSetsData) : null,
+          now
         ]
       );
     }
@@ -2152,7 +2348,8 @@ export class DatabaseService {
   }
 
   // Get driver results for a specific session
-  async getDriverSessionResults(sessionResultId: string): Promise<any[]> {
+  // includeLapTimes: if true, includes lap_times array for each driver
+  async getDriverSessionResults(sessionResultId: string, includeLapTimes: boolean = false): Promise<any[]> {
     // First get the race_id and session_type from session_results
     const sessionInfo = await this.db.query(
       `SELECT sr.race_id, sr.session_type 
@@ -2218,7 +2415,39 @@ export class DatabaseService {
         fdm.f123_driver_name as mapping_driver_name,
         fdm.f123_driver_number as mapping_driver_number,
         penalty_info.penalty_reason,
-        penalty_info.all_penalty_reasons
+        penalty_info.all_penalty_reasons${includeLapTimes ? `,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'lap_number', lt.lap_number,
+              'lap_time_ms', lt.lap_time_ms,
+              'sector1_ms', lt.sector1_ms,
+              'sector2_ms', lt.sector2_ms,
+              'sector3_ms', lt.sector3_ms,
+              'sector1_time_minutes', lt.sector1_time_minutes,
+              'sector2_time_minutes', lt.sector2_time_minutes,
+              'sector3_time_minutes', lt.sector3_time_minutes,
+              'lap_valid_bit_flags', lt.lap_valid_bit_flags,
+              'tire_compound', lt.tire_compound,
+              'track_position', lt.track_position,
+              'tire_age_laps', lt.tire_age_laps,
+              'top_speed_kmph', lt.top_speed_kmph,
+              'max_safety_car_status', lt.max_safety_car_status,
+              'vehicle_fia_flags', lt.vehicle_fia_flags,
+              'pit_stop', lt.pit_stop,
+              'ers_store_energy', lt.ers_store_energy,
+              'ers_deployed_this_lap', lt.ers_deployed_this_lap,
+              'ers_deploy_mode', lt.ers_deploy_mode,
+              'fuel_in_tank', lt.fuel_in_tank,
+              'fuel_remaining_laps', lt.fuel_remaining_laps,
+              'gap_to_leader_ms', lt.gap_to_leader_ms,
+              'gap_to_position_ahead_ms', lt.gap_to_position_ahead_ms,
+              'car_damage_data', lt.car_damage_data,
+              'tyre_sets_data', lt.tyre_sets_data
+            ) ORDER BY lt.lap_number
+          ) FILTER (WHERE lt.id IS NOT NULL),
+          '[]'::json
+        ) as lap_times` : ''}
        FROM driver_session_results dsr
        LEFT JOIN drivers d ON dsr.user_id = d.id
        LEFT JOIN f123_driver_mappings fdm ON (
@@ -2242,8 +2471,10 @@ export class DatabaseService {
             WHERE reh.driver_session_result_id = dsr.id
               AND reh.edit_type IN ('penalty', 'post_race_penalty', 'post_race_penalty_removal')
               AND reh.is_reverted = false) as all_penalty_reasons
-       ) penalty_info ON true
+       ) penalty_info ON true${includeLapTimes ? `
+       LEFT JOIN lap_times lt ON lt.driver_session_result_id = dsr.id` : ''}
        WHERE dsr.session_result_id = $1
+       ${includeLapTimes ? 'GROUP BY dsr.id, d.name, d.team, d.number, fdm.f123_team_name, fdm.f123_driver_name, fdm.f123_driver_number, penalty_info.penalty_reason, penalty_info.all_penalty_reasons' : ''}
        ORDER BY dsr.position ASC NULLS LAST`,
       [sessionResultId, raceId]
     );
@@ -2284,6 +2515,22 @@ export class DatabaseService {
       // Set additional_data as a plain object
       transformed.additional_data = additionalData;
       transformed.additionalData = additionalData;  // Also add camelCase alias
+      
+      // Parse lap_times if included (it's already JSON from the query, but ensure it's an array)
+      if (includeLapTimes && row.lap_times) {
+        if (typeof row.lap_times === 'string') {
+          try {
+            transformed.lap_times = JSON.parse(row.lap_times);
+          } catch (e) {
+            console.warn('Failed to parse lap_times:', e);
+            transformed.lap_times = [];
+          }
+        } else {
+          transformed.lap_times = row.lap_times;
+        }
+      } else if (includeLapTimes) {
+        transformed.lap_times = [];
+      }
       
       // Debug: Log if additional_data is missing
       if (!additionalData && row.additional_data) {
@@ -2627,7 +2874,7 @@ export class DatabaseService {
       [sessionResultId]
     );
     
-    return result.rows;
+      return result.rows;
   }
   
   // Get edit history for a specific driver result (by driver_session_result_id)
@@ -2642,7 +2889,7 @@ export class DatabaseService {
       [driverSessionResultId]
     );
     
-    return result.rows;
+      return result.rows;
   }
 
   // Revert specific edit
@@ -2676,7 +2923,7 @@ export class DatabaseService {
         
         if (driverResult.rows[0]) {
           const driverId = driverResult.rows[0].id;
-          await this.db.query(
+      await this.db.query(
             `UPDATE driver_session_results 
              SET post_race_penalties = $1, total_race_time_ms = $2 
              WHERE id = $3`,
@@ -2693,8 +2940,8 @@ export class DatabaseService {
         // Legacy penalty revert (for old edit_type = 'penalty')
         await this.db.query(
           'UPDATE driver_session_results SET penalties = $1 WHERE session_result_id = $2 AND (driver_id = $3 OR (driver_id IS NULL AND $3 IS NULL))',
-          [editData.old_value.penalties, editData.session_result_id, editData.driver_id]
-        );
+        [editData.old_value.penalties, editData.session_result_id, editData.driver_id]
+      );
       }
     } else if (editData.edit_type === 'position_change') {
       // Find driver by session_result_id and driver_id (handle NULL)
@@ -2706,10 +2953,10 @@ export class DatabaseService {
       );
       
       if (driverResult.rows[0]) {
-        await this.db.query(
+      await this.db.query(
           'UPDATE driver_session_results SET position = $1 WHERE id = $2',
           [editData.old_value.position, driverResult.rows[0].id]
-        );
+      );
       }
     }
     

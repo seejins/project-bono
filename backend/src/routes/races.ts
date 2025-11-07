@@ -74,7 +74,8 @@ router.get('/:raceId/results', async (req, res) => {
     
     const results = await Promise.all(sessions.map(async (session) => {
       console.log(`🔍 Fetching driver results for session ${session.id} (${session.sessionName})`);
-      const driverResults = await dbService.getDriverSessionResults(session.id);
+      // Include lap times for all sessions (they'll be empty arrays if no lap data exists)
+      const driverResults = await dbService.getDriverSessionResults(session.id, true);
       console.log(`📊 Session ${session.id} has ${driverResults.length} driver results`);
       return {
         sessionId: session.id,

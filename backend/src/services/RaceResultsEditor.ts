@@ -258,7 +258,7 @@ export class RaceResultsEditor {
       );
       
       // Restore from backup
-      await this.dbService.storeDriverSessionResults(sessionResultId, backupData);
+      await this.dbService.storeDriverSessionResults(sessionResultId, backupData); // Return value not needed here
       
       console.log(`🔄 Restored session ${sessionResultId} from backup ${backupId}`);
     } catch (error) {

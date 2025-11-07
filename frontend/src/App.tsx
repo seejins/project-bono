@@ -40,7 +40,7 @@ function AppContent() {
     const savedDriverRace = localStorage.getItem('f1-selected-driver-race');
     return savedDriverRace ? JSON.parse(savedDriverRace) : null;
   });
-  const [navigationHistory, setNavigationHistory] = useState<Array<{tab: string, view?: string}>>(() => {
+  const [navigationHistory, setNavigationHistory] = useState<Array<{tab: string, view?: string, raceId?: string}>>(() => {
     const savedHistory = localStorage.getItem('f1-navigation-history');
     return savedHistory ? JSON.parse(savedHistory) : [];
   });
@@ -135,7 +135,8 @@ function AppContent() {
   };
 
   const handleDriverRaceSelect = (driverId: string, raceId: string) => {
-    pushToHistory(activeTab, 'race'); // Save current view (race detail)
+    // Save current view (race detail) with raceId
+    pushToHistory(activeTab, 'race', raceId);
     setSelectedDriverRace({ driverId, raceId });
     localStorage.setItem('f1-selected-driver-race', JSON.stringify({ driverId, raceId }));
   };
@@ -145,19 +146,29 @@ function AppContent() {
     if (previous) {
       setActiveTab(previous.tab as any);
       localStorage.setItem('f1-active-tab', previous.tab);
-      if (previous.view === 'race') {
-        setSelectedRace(previous.tab === 'races' ? 'race-1' : null);
+      if (previous.view === 'race' && previous.raceId) {
+        // Restore the race detail view with the correct raceId
+        setSelectedRace(previous.raceId);
+        localStorage.setItem('f1-selected-race', previous.raceId);
       } else if (previous.view === 'driver') {
         // Handle driver view navigation
+      } else {
+        // If no specific view, clear race selection
+        setSelectedRace(null);
+        localStorage.removeItem('f1-selected-race');
       }
+    } else {
+      // No history, go back to races list
+      setSelectedRace(null);
+      localStorage.removeItem('f1-selected-race');
     }
     setSelectedDriverRace(null);
     localStorage.removeItem('f1-selected-driver-race');
   };
 
   // Navigation history helpers
-  const pushToHistory = (tab: string, view?: string) => {
-    const newHistory = [...navigationHistory, { tab, view }];
+  const pushToHistory = (tab: string, view?: string, raceId?: string) => {
+    const newHistory = [...navigationHistory, { tab, view, raceId }];
     setNavigationHistory(newHistory);
     localStorage.setItem('f1-navigation-history', JSON.stringify(newHistory));
   };

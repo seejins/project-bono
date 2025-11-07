@@ -1,4 +1,9 @@
 // F1 23 Data Service for frontend
+import softTyreIcon from '../assets/tires/soft_tyre.svg';
+import mediumTyreIcon from '../assets/tires/medium_tyre.svg';
+import hardTyreIcon from '../assets/tires/hard_tyre.svg';
+import intermediateTyreIcon from '../assets/tires/intermediate_tyre.svg';
+import wetTyreIcon from '../assets/tires/wet_tyre.svg';
 export interface F123SessionData {
   sessionType: number;
   sessionTypeName: string;
@@ -317,27 +322,96 @@ export class F123DataService {
    * Get tire compound color class
    */
   static getTireCompoundColor(compound?: string): string {
-    switch (compound) {
-      case 'soft': return 'text-red-600 dark:text-red-400';
-      case 'medium': return 'text-yellow-600 dark:text-yellow-400';
-      case 'hard': return 'text-gray-600 dark:text-gray-400';
-      case 'intermediate': return 'text-green-600 dark:text-green-400';
-      case 'wet': return 'text-blue-600 dark:text-blue-400';
-      default: return 'text-gray-500 dark:text-gray-400';
+    if (!compound) return 'text-gray-500 dark:text-gray-400';
+    
+    const normalized = compound.toLowerCase().trim();
+    
+    // Handle various formats
+    if (normalized === 's' || normalized === 'soft' || normalized.includes('soft') || normalized.startsWith('c5')) {
+      return 'text-red-600 dark:text-red-400';
     }
+    if (normalized === 'm' || normalized === 'medium' || normalized.includes('medium') || normalized.startsWith('c4')) {
+      return 'text-yellow-600 dark:text-yellow-400';
+    }
+    if (normalized === 'h' || normalized === 'hard' || normalized.includes('hard') || normalized.startsWith('c3')) {
+      return 'text-gray-600 dark:text-gray-400';
+    }
+    if (normalized === 'i' || normalized === 'intermediate' || normalized.includes('intermediate') || normalized.includes('inter')) {
+      return 'text-green-600 dark:text-green-400';
+    }
+    if (normalized === 'w' || normalized === 'wet' || normalized.includes('wet')) {
+      return 'text-blue-600 dark:text-blue-400';
+    }
+    
+    return 'text-gray-500 dark:text-gray-400';
   }
+
+  private static readonly TIRE_ICON_MAP: Record<string, string> = {
+    S: softTyreIcon,
+    SOFT: softTyreIcon,
+    M: mediumTyreIcon,
+    MEDIUM: mediumTyreIcon,
+    H: hardTyreIcon,
+    HARD: hardTyreIcon,
+    I: intermediateTyreIcon,
+    INTERMEDIATE: intermediateTyreIcon,
+    W: wetTyreIcon,
+    WET: wetTyreIcon,
+  };
 
   /**
    * Get tire compound display text
    */
   static getTireCompoundText(compound?: string): string {
-    switch (compound) {
-      case 'soft': return 'S';
-      case 'medium': return 'M';
-      case 'hard': return 'H';
-      case 'intermediate': return 'I';
-      case 'wet': return 'W';
-      default: return '?';
+    if (!compound) return '?';
+    
+    const normalized = compound.toLowerCase().trim();
+    
+    // Handle various formats
+    if (normalized === 's' || normalized === 'soft' || normalized.includes('soft')) return 'S';
+    if (normalized === 'm' || normalized === 'medium' || normalized.includes('medium')) return 'M';
+    if (normalized === 'h' || normalized === 'hard' || normalized.includes('hard')) return 'H';
+    if (normalized === 'i' || normalized === 'intermediate' || normalized.includes('intermediate') || normalized.includes('inter')) return 'I';
+    if (normalized === 'w' || normalized === 'wet' || normalized.includes('wet')) return 'W';
+    
+    // Handle C3, C4, C5 format (F1 tire compounds)
+    if (normalized.startsWith('c3') || normalized === 'hard') return 'H';
+    if (normalized.startsWith('c4') || normalized === 'medium') return 'M';
+    if (normalized.startsWith('c5') || normalized === 'soft') return 'S';
+    
+    return compound; // Return original if we can't match
+  }
+
+  /**
+   * Get the SVG icon path for a tire compound
+   */
+  static getTireCompoundIcon(compound?: string): string | null {
+    if (!compound) return null;
+    const text = this.getTireCompoundText(compound);
+    if (!text) return null;
+    const normalized = text.toUpperCase();
+    return this.TIRE_ICON_MAP[normalized] || null;
+  }
+
+  /**
+   * Get the human-friendly tire compound name
+   */
+  static getTireCompoundFullName(compound?: string): string {
+    const text = this.getTireCompoundText(compound);
+    const normalized = text ? text.toUpperCase() : null;
+    switch (normalized) {
+      case 'S':
+        return 'Soft';
+      case 'M':
+        return 'Medium';
+      case 'H':
+        return 'Hard';
+      case 'I':
+        return 'Intermediate';
+      case 'W':
+        return 'Wet';
+      default:
+        return text || 'Unknown';
     }
   }
 

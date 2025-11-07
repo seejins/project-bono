@@ -56,7 +56,7 @@ export class PostSessionProcessor {
       await this.dbService.storeOriginalSessionResults(sessionResultId, mappedResults);
       
       // 6. Store session results
-      await this.dbService.storeDriverSessionResults(sessionResultId, mappedResults);
+      await this.dbService.storeDriverSessionResults(sessionResultId, mappedResults); // Return value not needed here
       
       // 7. Mark event as completed if this was a race session
       if (sessionInfo.sessionType === 10) { // Race session

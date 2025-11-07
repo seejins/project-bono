@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
+import { F123DataService } from '../services/F123DataService';
 
 // Driver data interface for live timings
 interface DriverData {
@@ -238,6 +239,8 @@ const StintGraph = ({ driver }: StintGraphProps) => {
       {renderElements.map((element, index) => {
         if (element.type === 'indicator') {
           // Tire indicator or stint count box
+          const icon = element.tire ? F123DataService.getTireCompoundIcon(element.tire) : null;
+          const fullName = element.tire ? F123DataService.getTireCompoundFullName(element.tire) : null;
           return (
             <div
               key={index}
@@ -253,7 +256,13 @@ const StintGraph = ({ driver }: StintGraphProps) => {
                 minWidth: '2px'
               }}
             >
-              {element.isStintCount ? element.lapNum : element.tire}
+              {element.isStintCount ? (
+                element.lapNum
+              ) : icon ? (
+                <img src={icon} alt={`${fullName} tire`} className="h-4 w-4" />
+              ) : (
+                element.tire
+              )}
             </div>
           );
         } else {
@@ -979,11 +988,24 @@ const PracticeDriverRow = React.memo(({
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-400' : ''
         }`}>
           <span className="text-base font-mono tabular-nums tracking-tighter">{driver.fastestLap}</span>
-          {driver.fastestLapTire && (
-              <span className={`text-xs tire-indicator ${getTireColor(driver.fastestLapTire)}`}>
-                {driver.fastestLapTire}
-              </span>
-          )}
+          {driver.fastestLapTire && (() => {
+            const icon = F123DataService.getTireCompoundIcon(driver.fastestLapTire);
+            const fullName = F123DataService.getTireCompoundFullName(driver.fastestLapTire);
+            if (!icon) {
+              return (
+                <span className="text-xs font-semibold text-gray-300">
+                  {driver.fastestLapTire}
+                </span>
+              );
+            }
+            return (
+              <img
+                src={icon}
+                alt={`${fullName} tire`}
+                className="h-5 w-5 ml-2"
+              />
+            );
+          })()}
             </div>
             
         {/* Gap */}
