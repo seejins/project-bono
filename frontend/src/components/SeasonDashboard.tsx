@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { Trophy, Calendar, Award, Star, Zap } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
 import { PreviousRaceResultsComponent } from './PreviousRaceResults';
+import { PanelHeader } from './layout/PanelHeader';
 
 interface Driver {
   id: string;
@@ -194,6 +195,82 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     }
   };
 
+  const totalEvents = events.length;
+  const completedEventsCount = events.filter(event => event.status === 'completed').length;
+  const upcomingEventsCount = Math.max(totalEvents - completedEventsCount, 0);
+  const driverCount = standings.length;
+
+  const statusStyles: Record<string, string> = {
+    active: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-600 dark:border-emerald-400/30 dark:text-emerald-300',
+    completed: 'border-sky-400/40 bg-sky-500/10 text-sky-600 dark:border-sky-400/30 dark:text-sky-300',
+    draft: 'border-slate-400/40 bg-slate-500/10 text-slate-600 dark:border-slate-500/30 dark:text-slate-200',
+    scheduled: 'border-amber-400/40 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-300',
+    upcoming: 'border-amber-400/40 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-300',
+  };
+
+  const seasonStatus = (currentSeason?.status || 'draft').toLowerCase();
+
+  const metaBadge = (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusStyles[seasonStatus] ?? statusStyles.scheduled}`}
+    >
+      <span className="h-2 w-2 rounded-full bg-current" />
+      {seasonStatus}
+    </span>
+  );
+
+  const headerSecondaryActions: ReactNode[] = [];
+
+  if (previousRace) {
+    headerSecondaryActions.push(
+      <button
+        key="previous-race"
+        onClick={handlePreviousRaceClick}
+        className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white"
+      >
+        <Trophy className="h-4 w-4" />
+        Previous race
+      </button>
+    );
+  }
+
+  if (nextRace) {
+    headerSecondaryActions.push(
+      <button
+        key="next-race"
+        onClick={handleNextRaceClick}
+        className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white"
+      >
+        <Calendar className="h-4 w-4" />
+        Next race
+      </button>
+    );
+  }
+
+  const primaryAction = onScheduleView ? (
+    <button
+      onClick={onScheduleView}
+      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#FF1E56] via-[#FFAC33] to-[#3A86FF] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[#FF1E56]/30 transition hover:shadow-[0_18px_40px_-24px_rgba(255,30,86,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FF1E56]"
+    >
+      <Calendar className="h-4 w-4" />
+      View schedule
+    </button>
+  ) : undefined;
+
+  const eventProgressText = totalEvents > 0
+    ? `${completedEventsCount}/${totalEvents} races complete`
+    : 'No races scheduled yet';
+
+  const upcomingText = upcomingEventsCount > 0
+    ? `${upcomingEventsCount} upcoming`
+    : completedEventsCount === totalEvents && totalEvents > 0
+      ? 'Season complete'
+      : 'Awaiting next update';
+
+  const overviewDescription = currentSeason
+    ? `Season ${currentSeason.year} • ${eventProgressText} • ${driverCount} drivers • ${upcomingText}`
+    : undefined;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -204,71 +281,24 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
 
   return (
     <div className="max-w-[2048px] mx-auto space-y-6">
-      {/* Hero Banner with F1 Grid Background */}
-      <div 
-        className="relative h-80 md:h-96 lg:h-[500px] overflow-hidden rounded-xl shadow-2xl cursor-pointer group"
-        onClick={onScheduleView}
-      >
-        {/* F1 Grid Background */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat group-hover:scale-105 transition-transform duration-700"
-          style={{ backgroundImage: 'url(/banner/2024-Formula1-Ferrari-SF-24-007-1440sw.jpg)' }}
-        />
-        
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black bg-opacity-50" />
-        
-        
-        {/* Content */}
-        <div className="relative z-10 h-full flex flex-col justify-center items-start text-white p-8 md:p-12">
-          <div className="max-w-2xl">
-            <h1 className="text-5xl md:text-7xl font-black mb-4 tracking-tight text-shadow-lg">
-              {currentSeason?.name}
-            </h1>
-            <p className="text-2xl md:text-3xl mb-8 font-light">
-              Season {currentSeason?.year}
-            </p>
-            
-            {/* Status Badge with F1 styling */}
-            <div className={`inline-flex items-center px-6 py-3 rounded-full text-lg font-bold mb-8 ${
-              currentSeason?.status === 'active' ? 'bg-green-500 text-white shadow-lg' :
-              currentSeason?.status === 'completed' ? 'bg-blue-500 text-white shadow-lg' :
-              'bg-gray-500 text-white shadow-lg'
-            }`}>
-              <div className={`w-3 h-3 rounded-full mr-3 ${
-                currentSeason?.status === 'active' ? 'bg-white animate-pulse' :
-                'bg-white'
-              }`}></div>
-              {currentSeason?.status?.toUpperCase()}
-            </div>
-            
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-3 gap-8">
-              <div className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-red-400">{events.length}</div>
-                <div className="text-sm uppercase tracking-wider font-medium">Events</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-red-400">{standings.length}</div>
-                <div className="text-sm uppercase tracking-wider font-medium">Drivers</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-red-400">{events.filter(event => event.status === 'completed').length}</div>
-                <div className="text-sm uppercase tracking-wider font-medium">Completed</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <PanelHeader
+        icon={<Calendar className="h-6 w-6" />}
+        title={currentSeason?.name || 'Season Overview'}
+        subtitle={currentSeason ? `Season ${currentSeason.year}` : undefined}
+        description={overviewDescription}
+        metaBadge={metaBadge}
+        primaryAction={primaryAction}
+        secondaryActions={headerSecondaryActions}
+        breadcrumbs={<span>Season Panel</span>}
+      />
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div 
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
           onClick={handleMostWinsClick}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow-lg shadow-purple-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-purple-500/40">
               <Award className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -279,11 +309,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         </div>
 
         <div 
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
           onClick={handleDriverOfTheDayClick}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-lg shadow-orange-400/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-orange-400/40">
               <Star className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -294,11 +324,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         </div>
 
         <div 
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
           onClick={handleNextRaceClick}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-sky-500/40">
               <Calendar className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -323,11 +353,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         </div>
 
         <div 
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
           onClick={handlePreviousRaceClick}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-lime-500 text-white shadow-lg shadow-emerald-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-emerald-500/40">
               <Trophy className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -340,13 +370,13 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Championship Standings - Main Display */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+        <div className="relative lg:col-span-2 overflow-hidden rounded-3xl bg-white/70 shadow-[0_30px_65px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl transition hover:shadow-[0_36px_80px_-48px_rgba(15,23,42,0.75)] dark:bg-slate-900/70">
+          <div className="relative p-6 after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-black/5 dark:after:bg-white/10">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 text-white shadow-lg shadow-red-500/30">
                 <Trophy className="w-4 h-4 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Championship Standings</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Championship Standings</h2>
             </div>
           </div>
           
@@ -355,7 +385,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
               {standings.map((driver) => (
                 <div 
                   key={driver.id} 
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  className="flex items-center justify-between rounded-2xl bg-white/50 p-3 backdrop-blur-lg transition hover:bg-white/70 dark:bg-slate-800/60 dark:hover:bg-slate-800/80"
                   onClick={() => onDriverSelect?.(driver.id)}
                 >
                   <div className="flex items-center space-x-4">
@@ -390,21 +420,21 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
           />
           
           {/* Achievements - Below Previous Race */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+        <div className="relative overflow-hidden rounded-3xl bg-white/70 shadow-[0_30px_65px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl transition hover:shadow-[0_36px_80px_-48px_rgba(15,23,42,0.75)] dark:bg-slate-900/70">
+          <div className="relative p-6 after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-black/5 dark:after:bg-white/10">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-500/30">
                 <Star className="w-4 h-4 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Achievements</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Achievements</h2>
             </div>
           </div>
           
           <div className="p-6">
             <div className="space-y-4">
               {achievements.map((achievement) => (
-                <div key={achievement.id} className="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${getAchievementColor(achievement.type)} bg-gray-100 dark:bg-gray-600`}>
+                <div key={achievement.id} className="flex items-start gap-3 rounded-2xl bg-white/45 p-4 backdrop-blur-lg transition hover:bg-white/65 dark:bg-slate-800/60 dark:hover:bg-slate-800/80">
+                  <div className={`flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-full ${getAchievementColor(achievement.type)} bg-white/40 dark:bg-white/10`}>
                     {getAchievementIcon(achievement.type)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -419,8 +449,8 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
                 </div>
               ))}
               {achievements.length === 0 && (
-                <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-                  <Star className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <div className="rounded-2xl bg-white/40 py-8 text-center text-gray-500 backdrop-blur-lg dark:bg-slate-800/60 dark:text-gray-400">
+                  <Star className="w-12 h-12 mx-auto mb-4 opacity-60" />
                   <p>No new achievements this season</p>
                 </div>
               )}

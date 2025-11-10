@@ -1,23 +1,85 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, BarChart3, TrendingUp, Activity, Award, Clock, Target, Zap, Flag, AlertTriangle } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from './charts/ChartCard';
-import { BaseLineChart, type LineConfig } from './charts/BaseLineChart';
+import { BaseLineChart, DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
 import { BaseBarChart } from './charts/BaseBarChart';
 import { F123DataService } from '../services/F123DataService';
 import { useDriverRaceData } from './DriverRaceAnalysis/hooks/useDriverRaceData';
 import { useLapAnalytics } from './DriverRaceAnalysis/hooks/useLapAnalytics';
 import { useStintAnalytics } from './DriverRaceAnalysis/hooks/useStintAnalytics';
 import { useRaceStats } from './DriverRaceAnalysis/hooks/useRaceStats';
-import { DriverRaceAnalysisProps } from './DriverRaceAnalysis/types';
+import { DriverRaceAnalysisProps, LapStatusType } from './DriverRaceAnalysis/types';
 import { formatSecondsValue, formatSecondsDifference, getCompoundKey, getCompoundDisplayName } from './DriverRaceAnalysis/utils';
 
 type AnalyticsTab = 'overview' | 'pace' | 'strategy' | 'telemetry';
 
-export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, onBack }) => {
-  const { driver, raceData, lapData, sessionDrivers, loading, error } = useDriverRaceData(driverId, raceId);
+export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, backHref, initialSessionType }) => {
+  const { raceData, sessions, defaultSessionId, loading, error } = useDriverRaceData(driverId, raceId);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const hasAppliedInitialSession = useRef(false);
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview');
   const [comparisonDriverId, setComparisonDriverId] = useState<string | null>(null);
+
+  const determineSessionKind = useCallback((sessionType: number): 'practice' | 'qualifying' | 'race' => {
+    if (sessionType === 10) {
+      return 'race';
+    }
+    if (sessionType >= 5 && sessionType <= 9) {
+      return 'qualifying';
+    }
+    return 'practice';
+  }, []);
+
+  useEffect(() => {
+    if (sessions.length === 0) {
+      return;
+    }
+
+    const sessionIds = new Set(sessions.map((session) => session.sessionId));
+    const selectedIsValid = selectedSessionId ? sessionIds.has(selectedSessionId) : false;
+
+    if (selectedIsValid) {
+      return;
+    }
+
+    let nextSessionId: string | null = null;
+
+    if (!hasAppliedInitialSession.current && initialSessionType) {
+      const matchingSession = sessions.find(
+        (session) => determineSessionKind(session.sessionType) === initialSessionType
+      );
+
+      if (matchingSession?.sessionId) {
+        nextSessionId = matchingSession.sessionId;
+        hasAppliedInitialSession.current = true;
+      }
+    }
+
+    if (!nextSessionId && defaultSessionId && sessionIds.has(defaultSessionId)) {
+      nextSessionId = defaultSessionId;
+    }
+
+    if (!nextSessionId) {
+      nextSessionId = sessions[0]?.sessionId ?? null;
+    }
+
+    if (nextSessionId && nextSessionId !== selectedSessionId) {
+      setSelectedSessionId(nextSessionId);
+    }
+  }, [sessions, selectedSessionId, initialSessionType, defaultSessionId, determineSessionKind]);
+
+  const selectedSession = useMemo(
+    () => sessions.find((session) => session.sessionId === selectedSessionId) || null,
+    [sessions, selectedSessionId]
+  );
+
+  const driver = selectedSession?.driver ?? null;
+  const lapData = selectedSession?.lapData ?? [];
+  const sessionDrivers = selectedSession?.sessionDrivers ?? [];
+  const sessionLabel = selectedSession?.sessionName || selectedSession?.sessionTypeName || 'Session';
+  const sessionKind = selectedSession ? determineSessionKind(selectedSession.sessionType) : null;
 
   const getTeamColor = (team: string) => F123DataService.getTeamColor(team);
   const getTireCompoundColor = (compound?: string) => F123DataService.getTireCompoundColor(compound);
@@ -61,30 +123,41 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   }, [comparisonDriver]);
 
   useEffect(() => {
-    if (!driver || sessionDrivers.length === 0) return;
-    if (comparisonDriverId) return;
-
-    const sortedDrivers = [...sessionDrivers].sort((a: any, b: any) => (
-      Number(a?.position ?? 999) - Number(b?.position ?? 999)
-    ));
-
-    let defaultId: string | null = null;
-    const leaderEntry = sortedDrivers.find((result: any) => Number(result?.position ?? 999) === 1 && result?.id);
-    if (leaderEntry && leaderEntry.id !== driver.id) {
-      defaultId = leaderEntry.id;
-    } else {
-      const firstOther = sortedDrivers.find((result: any) => result?.id && result.id !== driver.id);
-      if (firstOther) {
-        defaultId = firstOther.id;
+    if (!driver || sessionDrivers.length === 0) {
+      if (comparisonDriverId !== null) {
+        setComparisonDriverId(null);
       }
+      return;
     }
 
-    if (defaultId) {
-      setComparisonDriverId(defaultId);
-    }
-  }, [driver, sessionDrivers, comparisonDriverId]);
+    const availableDrivers = sessionDrivers.filter((result: any) => result && result.id && result.id !== driver.id);
 
-  const { lapComparisonData, deltaComparisonData } = useLapAnalytics({ lapData, comparisonDriver });
+    if (availableDrivers.length === 0) {
+      if (comparisonDriverId !== null) {
+        setComparisonDriverId(null);
+      }
+      return;
+    }
+
+    const isCurrentValid = comparisonDriverId
+      ? availableDrivers.some((result: any) => result.id === comparisonDriverId)
+      : false;
+
+    if (isCurrentValid) {
+      return;
+    }
+
+    const sortedDrivers = [...availableDrivers].sort(
+      (a: any, b: any) => Number(a?.position ?? 999) - Number(b?.position ?? 999)
+    );
+
+    const leaderEntry = sortedDrivers.find((result: any) => Number(result?.position ?? 999) === 1 && result?.id);
+    const defaultId = leaderEntry?.id && leaderEntry.id !== driver.id ? leaderEntry.id : sortedDrivers[0]?.id ?? null;
+
+    setComparisonDriverId(defaultId ?? null);
+  }, [driver, sessionDrivers, selectedSessionId, comparisonDriverId]);
+
+  const { lapComparisonData, deltaComparisonData, statusOverlays, statusLegend } = useLapAnalytics({ lapData, comparisonDriver });
   const { stintChartData, stintSegments, stintStartLapInfo, compoundLineSetup, compoundAverages } =
     useStintAnalytics(lapData);
   const raceStats = useRaceStats({ lapData, driver });
@@ -288,6 +361,35 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     return raceStats.avgLap > 0 ? raceStats.avgLap / 1000 : null;
   }, [raceStats]);
 
+  const chartOverlays = useMemo(
+    () =>
+      statusOverlays.map((segment, index) => ({
+        key: `overlay-${segment.startLap}-${segment.endLap}-${index}`,
+        x1: segment.startLap - 0.5,
+        x2: segment.endLap + 0.5,
+        statuses: segment.statuses,
+      })),
+    [statusOverlays]
+  );
+
+  const overlayLegendItems = useMemo(
+    () =>
+      statusLegend.map((status) => ({
+        status,
+        label:
+          status === 'safetyCar'
+            ? 'Safety Car'
+            : status === 'virtualSafetyCar'
+            ? 'Virtual Safety Car'
+            : status === 'yellowFlag'
+            ? 'Yellow Flag'
+            : 'Rain',
+        color: DEFAULT_OVERLAY_STYLES[status]?.color ?? '#9ca3af',
+        pattern: DEFAULT_OVERLAY_STYLES[status]?.pattern,
+      })),
+    [statusLegend]
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -304,19 +406,10 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     );
   }
 
-  if (!driver) {
+  if (sessions.length > 0 && !selectedSession) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="text-red-500 mb-2">No driver data found</div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            Driver ID: {driverId}<br />
-            Race ID: {raceId}
-          </div>
-          {error && (
-            <div className="text-sm text-red-400 mt-2">{error}</div>
-          )}
-        </div>
+        <div className="text-gray-500 dark:text-gray-400">Preparing session data...</div>
       </div>
     );
   }
@@ -342,17 +435,70 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     return F123DataService.formatSectorTimeFromMs(ms);
   };
 
+  const hexToRgba = (hex: string, alpha: number): string => {
+    if (!hex) {
+      return `rgba(156, 163, 175, ${alpha})`;
+    }
+
+    const trimmed = hex.trim();
+    if (trimmed.startsWith('rgba')) {
+      return trimmed.replace(/rgba\(([^)]+)\)/, (_match, contents) => {
+        const parts = contents.split(',').map((part: string) => part.trim());
+        parts[3] = alpha.toString();
+        return `rgba(${parts.join(', ')})`;
+      });
+    }
+    if (trimmed.startsWith('rgb')) {
+      return trimmed.replace(/rgb\(([^)]+)\)/, (_match, contents) => `rgba(${contents}, ${alpha})`);
+    }
+
+    let normalized = trimmed.replace('#', '');
+    if (normalized.length === 3) {
+      normalized = normalized
+        .split('')
+        .map((char) => char + char)
+        .join('');
+    }
+
+    const intVal = parseInt(normalized, 16);
+    const r = (intVal >> 16) & 255;
+    const g = (intVal >> 8) & 255;
+    const b = intVal & 255;
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const driverNumberLabel = driver?.number ?? '--';
+  const driverNameLabel = driver?.name ?? 'Driver data unavailable';
+  const driverTeamLabel = driver?.team ?? 'Unknown Team';
+  const driverPositionLabel =
+    driver?.racePosition ?? (driver as any)?.position ?? '--';
+  const fastestLapDisplay =
+    raceStats?.fastestLap && raceStats.fastestLap > 0
+      ? F123DataService.formatTimeFromMs(raceStats.fastestLap)
+      : '--:--.---';
+  const driverTimeLabel =
+    sessionKind === 'race'
+      ? driver?.raceTime ?? '--:--.---'
+      : fastestLapDisplay;
+  const teamColorHex = F123DataService.getTeamColorHex(driverTeamLabel);
+  const hasMultipleSessions = sessions.length > 1;
+
   return (
     <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <button 
-          onClick={onBack} 
-          className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back</span>
-        </button>
+        {backHref ? (
+          <Link
+            to={backHref}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back</span>
+          </Link>
+        ) : (
+          <div className="w-10" />
+        )}
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Driver Race Analysis</h1>
         <div className="w-10"></div>
       </div>
@@ -362,23 +508,72 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-2xl font-bold text-gray-700 dark:text-gray-300">
-              {driver.number}
+              {driverNumberLabel}
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{driver.name}</h2>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{driverNameLabel}</h2>
               <div className="flex items-center space-x-2 mt-1">
-                <div className={`w-3 h-3 rounded-full ${getTeamColor(driver.team)}`}></div>
-                <span className="text-base text-gray-500 dark:text-gray-400">{driver.team}</span>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: teamColorHex }}></div>
+                <span className="text-base text-gray-500 dark:text-gray-400">{driverTeamLabel}</span>
               </div>
             </div>
           </div>
           <div className="text-right">
             <div className="text-3xl font-bold text-gray-900 dark:text-white">
-              P{driver.racePosition || 0}
+              P{driverPositionLabel}
             </div>
             <div className="text-base text-gray-500 dark:text-gray-400">
-              {driver.raceTime || '--:--.---'}
+              {driverTimeLabel}
             </div>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            <span>Viewing session:</span>
+            {hasMultipleSessions ? (
+              <select
+                id="session-selector"
+                className="rounded-md border border-transparent bg-gray-100 px-2.5 py-1.5 text-sm text-gray-700 transition hover:bg-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                value={selectedSessionId ?? ''}
+                onChange={(event) => {
+                  const nextId = event.target.value || null;
+                  setSelectedSessionId(nextId);
+                  setComparisonDriverId(null);
+                }}
+              >
+                {[...sessions]
+                  .sort((a, b) => {
+                    const order: Record<'race' | 'qualifying' | 'practice', number> = {
+                      race: 0,
+                      qualifying: 1,
+                      practice: 2,
+                    };
+
+                    const kindA = determineSessionKind(a.sessionType);
+                    const kindB = determineSessionKind(b.sessionType);
+
+                    if (order[kindA] !== order[kindB]) {
+                      return order[kindA] - order[kindB];
+                    }
+
+                    if (a.sessionType !== b.sessionType) {
+                      return b.sessionType - a.sessionType;
+                    }
+
+                    return 0;
+                  })
+                  .map((session) => {
+                    const label = session.sessionName || session.sessionTypeName;
+                    return (
+                      <option key={session.sessionId} value={session.sessionId} disabled={!session.driver}>
+                        {label}
+                      </option>
+                    );
+                  })}
+              </select>
+            ) : (
+              <span className="font-medium text-gray-900 dark:text-gray-100">{sessionLabel}</span>
+            )}
             </div>
           </div>
         </div>
@@ -456,7 +651,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         <div className="w-10 h-10 bg-blue-500/20 text-blue-500 rounded-lg flex items-center justify-center">
                           <TrendingUp className="w-5 h-5" />
         </div>
-                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">Overall Pace</h3>
+                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">{sessionLabel} Pace</h3>
         </div>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
@@ -480,26 +675,28 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                       </div>
                     </div>
 
-                    {/* Race Time Card */}
+                    {/* Session Summary Card */}
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-10 h-10 bg-green-500/20 text-green-500 rounded-lg flex items-center justify-center">
-                          <Clock className="w-5 h-5" />
-                        </div>
-                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">Race Time</h3>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">Total Time</span>
+                       <div className="flex items-center space-x-3 mb-3">
+                         <div className="w-10 h-10 bg-green-500/20 text-green-500 rounded-lg flex items-center justify-center">
+                           <Clock className="w-5 h-5" />
+                         </div>
+                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">{sessionLabel} Summary</h3>
+                       </div>
+                       <div className="space-y-2">
+                         <div className="flex justify-between items-center">
+                           <span className="text-sm text-gray-500 dark:text-gray-400">Total Time</span>
+                           <span className="text-base font-bold text-gray-900 dark:text-white">
+                             {F123DataService.formatTimeFromMs(raceStats.totalTime)}
+                           </span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Gap to Leader</span>
                           <span className="text-base font-bold text-gray-900 dark:text-white">
-                            {F123DataService.formatTimeFromMs(raceStats.totalTime)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">Gap to Winner</span>
-                          <span className="text-base font-bold text-gray-900 dark:text-white">
-                            {raceStats.gapToWinner !== null 
-                              ? formatGapTime(raceStats.gapToWinner)
+                            {raceStats.gapToLeaderMs !== null && raceStats.gapToLeaderMs !== undefined
+                              ? raceStats.gapToLeaderMs > 0
+                                ? formatGapTime(raceStats.gapToLeaderMs)
+                                : 'Leader'
                               : 'Leader'}
                           </span>
                         </div>
@@ -518,7 +715,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         <div className="w-10 h-10 bg-purple-500/20 text-purple-500 rounded-lg flex items-center justify-center">
                           <Target className="w-5 h-5" />
                         </div>
-                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">Pit Strategy</h3>
+                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">Session Strategy</h3>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
@@ -561,39 +758,49 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         <div className="w-10 h-10 bg-yellow-500/20 text-yellow-500 rounded-lg flex items-center justify-center">
                           <Flag className="w-5 h-5" />
                         </div>
-                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">Positions</h3>
+                        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300">{sessionLabel} Positions</h3>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-500 dark:text-gray-400">Grid</span>
                           <span className="text-base font-bold text-gray-900 dark:text-white">
-                            P{raceStats.gridPosition || '--'}
+                            {sessionKind === 'practice'
+                              ? '--'
+                              : `P${raceStats.gridPosition != null ? raceStats.gridPosition : '--'}`}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-500 dark:text-gray-400">Finish</span>
                           <span className="text-base font-bold text-gray-900 dark:text-white">
-                            P{raceStats.finishPosition || '--'}
+                            {sessionKind === 'practice'
+                              ? '--'
+                              : `P${raceStats.finishPosition != null ? raceStats.finishPosition : '--'}`}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-500 dark:text-gray-400">Change</span>
-                          <span className={`text-base font-bold ${
-                            raceStats.positionsGained !== null
-                              ? raceStats.positionsGained > 0
-                                ? 'text-green-500'
-                                : raceStats.positionsGained < 0
-                                  ? 'text-red-500'
-                                  : 'text-gray-500'
-                              : 'text-gray-500'
-                          }`}>
-                            {raceStats.positionsGained !== null
-                              ? raceStats.positionsGained > 0
-                                ? `+${raceStats.positionsGained}`
-                                : raceStats.positionsGained < 0
-                                  ? `${raceStats.positionsGained}`
-                                  : '0'
-                              : '--'}
+                          <span
+                            className={`text-base font-bold ${
+                              sessionKind === 'practice'
+                                ? 'text-gray-400 dark:text-gray-500'
+                                : raceStats.positionsGained !== null
+                                    ? raceStats.positionsGained > 0
+                                      ? 'text-green-500'
+                                      : raceStats.positionsGained < 0
+                                        ? 'text-red-500'
+                                        : 'text-gray-500'
+                                    : 'text-gray-500'
+                            }`}
+                          >
+                            {sessionKind === 'practice'
+                              ? '--'
+                              : raceStats.positionsGained !== null
+                                ? raceStats.positionsGained > 0
+                                  ? `+${raceStats.positionsGained}`
+                                  : raceStats.positionsGained < 0
+                                    ? `${raceStats.positionsGained}`
+                                    : '0'
+                                : '--'}
                           </span>
                         </div>
                       </div>
@@ -736,7 +943,41 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                   description="Lap times in seconds — lower values indicate a faster lap."
                   bodyClassName="px-6 py-4"
                 >
-                  <div className="h-80 w-full">
+                  <div className="relative h-80 w-full">
+                    {overlayLegendItems.length > 0 && (
+                      <div className="absolute right-3 top-3 z-10 flex flex-wrap gap-2 rounded-md bg-white/80 px-3 py-2 text-xs text-gray-600 backdrop-blur dark:bg-gray-900/70 dark:text-gray-200">
+                        {overlayLegendItems.map((item) => (
+                          <div key={item.status} className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-sm"
+                              style={{
+                                backgroundColor:
+                                  item.pattern ? undefined : item.color,
+                                backgroundImage:
+                                  item.pattern === 'rain'
+                                    ? `repeating-linear-gradient(45deg, ${hexToRgba(
+                                        item.color,
+                                        0.45
+                                      )} 0, ${hexToRgba(item.color, 0.45)} 4px, ${hexToRgba(
+                                        item.color,
+                                        0.18
+                                      )} 4px, ${hexToRgba(item.color, 0.18)} 8px)`
+                                    : item.pattern === 'vsc'
+                                    ? `repeating-linear-gradient(0deg, ${hexToRgba(
+                                        item.color,
+                                        0.6
+                                      )} 0, ${hexToRgba(item.color, 0.6)} 2px, ${hexToRgba(
+                                        item.color,
+                                        0.2
+                                      )} 2px, ${hexToRgba(item.color, 0.2)} 5px)`
+                                    : undefined,
+                              }}
+                            ></span>
+                            <span>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {comparisonDriverId && lapComparisonData.length > 0 && lapComparisonData.some((entry) => entry.comparisonLapSeconds !== null) ? (
                       <BaseLineChart
                         data={lapComparisonData}
@@ -758,6 +999,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         yTickFormatter={(value) => formatSecondsValue(value as number)}
                         tooltipContent={<LapTimeTooltipContent />}
                         legend
+                        overlays={chartOverlays}
                         className="h-full"
                       />
                     ) : (
@@ -775,7 +1017,20 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                   description={`Positive values indicate ${driver?.name || 'the selected driver'} is behind the comparison driver.`}
                   bodyClassName="px-6 py-4"
                 >
-                  <div className="h-72 w-full">
+                  <div className="relative h-72 w-full">
+                    {overlayLegendItems.length > 0 && (
+                      <div className="absolute right-3 top-3 z-10 flex flex-wrap gap-2 rounded-md bg-white/80 px-3 py-2 text-xs text-gray-600 backdrop-blur dark:bg-gray-900/70 dark:text-gray-200">
+                        {overlayLegendItems.map((item) => (
+                          <div key={`delta-${item.status}`} className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-sm"
+                              style={{ backgroundColor: item.color }}
+                            ></span>
+                            <span>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {comparisonDriverId && deltaComparisonData.length > 0 ? (
                       <BaseLineChart
                         data={deltaComparisonData}
@@ -790,6 +1045,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         yTickFormatter={(value) => formatSecondsDifference(value as number)}
                         tooltipContent={<DeltaTooltipContent />}
                         referenceLines={[{ y: 0, stroke: '#94a3b8', strokeDasharray: '4 4' }]}
+                        overlays={chartOverlays}
                         className="h-full"
                       />
                     ) : (
@@ -946,7 +1202,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                         {lap.lap_number}
                   </td>
                       <td className={`px-3 py-4 whitespace-nowrap text-center text-lg w-32 ${
-                        driver.fastestLap && raceStats && lap.lap_time_ms === raceStats.fastestLap
+                        driver?.fastestLap && raceStats && lap.lap_time_ms === raceStats.fastestLap
                           ? 'text-purple-600 dark:text-purple-400 font-semibold'
                           : 'text-gray-900 dark:text-white'
                       }`}>
@@ -983,7 +1239,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                               ) : (
                                 <span className={`font-medium ${getTireCompoundColor(lap.tire_compound)}`}>
                                   {label}
-                      </span>
+                    </span>
                               );
                             })()}
                             <span className="text-sm text-gray-500 dark:text-gray-400">

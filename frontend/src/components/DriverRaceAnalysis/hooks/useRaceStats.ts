@@ -28,7 +28,23 @@ export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats
     const consistencyPercent = ((standardDeviation / avgLap) * 100).toFixed(2);
 
     const totalTime = (driver as any)._totalRaceTimeMs || lapTimes.reduce((sum, time) => sum + time, 0);
-    const gapToWinner = driver.raceGap || null;
+
+    let gapToLeaderMs: number | null = null;
+
+    const latestGapLap = [...lapData]
+      .reverse()
+      .find((lap) => typeof lap.gap_to_leader_ms === 'number' && Number.isFinite(lap.gap_to_leader_ms));
+
+    if (latestGapLap && latestGapLap.gap_to_leader_ms && latestGapLap.gap_to_leader_ms > 0) {
+      gapToLeaderMs = latestGapLap.gap_to_leader_ms;
+    }
+
+    if (gapToLeaderMs === null) {
+      const driverGap = (driver as any).raceGap;
+      if (typeof driverGap === 'number' && Number.isFinite(driverGap) && driverGap > 0) {
+        gapToLeaderMs = driverGap;
+      }
+    }
 
     const pitStops = validLaps.filter((lap) => lap.pit_stop).length;
     const tireCompounds = [...new Set(validLaps.map((lap) => lap.tire_compound).filter(Boolean))];
@@ -61,7 +77,7 @@ export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats
       avgLap,
       consistencyPercent,
       totalTime,
-      gapToWinner,
+      gapToLeaderMs,
       pitStops,
       tireCompounds,
       gridPosition,

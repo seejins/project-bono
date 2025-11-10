@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Trophy, Award, Target, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useSeason } from '../contexts/SeasonContext';
 
 interface DriverSeasonStatsProps {
   driverId: string;
-  onBack: () => void;
+  backHref?: string;
 }
 
 interface DriverStats {
@@ -24,7 +25,7 @@ interface DriverStats {
   totalRaces: number;
 }
 
-export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, onBack }) => {
+export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, backHref }) => {
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
   const { currentSeason } = useSeason();
@@ -103,12 +104,15 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
         <div className="text-center">
           <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-500" />
           <p className="text-xl text-gray-400">Driver not found</p>
-          <button
-            onClick={onBack}
-            className="mt-4 text-red-600 hover:text-red-700 transition-colors"
-          >
-            Go Back
-          </button>
+          {backHref && (
+            <Link
+              to={backHref}
+              className="mt-4 inline-flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Go Back
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -118,13 +122,15 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
     <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center space-x-4">
-        <button
-          onClick={onBack}
-          className="flex items-center space-x-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back to Grid</span>
-        </button>
+        {backHref && (
+          <Link
+            to={backHref}
+            className="flex items-center space-x-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back to Grid</span>
+          </Link>
+        )}
       </div>
 
       {/* Driver Info */}

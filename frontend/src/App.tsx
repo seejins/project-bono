@@ -1,5 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { io } from 'socket.io-client';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+  Navigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { SeasonDashboard } from './components/SeasonDashboard';
 import { Grid } from './components/Grid';
 import { DriverSeasonStats } from './components/DriverSeasonStats';
@@ -11,212 +23,112 @@ import { DriverRaceAnalysis } from './components/DriverRaceAnalysis';
 import { LiveTimings } from './components/LiveTimings';
 import { AdminPanel } from './components/AdminPanel';
 import { AlertSystem } from './components/AlertSystem';
-import { Header } from './components/Header';
 import { HeaderNavigation } from './components/HeaderNavigation';
 import { PasswordGate } from './components/PasswordGate';
+import { HeroSection } from './components/HeroSection';
 import { AdminProvider, useAdmin } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SeasonProvider, useSeason } from './contexts/SeasonContext';
+import { PageTransition } from './components/layout/PageTransition';
 
-function AppContent() {
-  const [alerts, setAlerts] = useState<Array<{id: string, type: string, message: string, timestamp: number}>>([]);
-  const [isConnected, setIsConnected] = useState(false);
+type AlertPayload = { id: string; type: string; message: string; timestamp: number };
+
+const TAB_BAR_HEIGHT = 88;
+
+function AppLayout() {
+  const [alerts, setAlerts] = useState<AlertPayload[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('f1-app-authenticated') === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'season' | 'grid' | 'races' | 'history' | 'admin' | 'live'>(() => {
-    const savedTab = localStorage.getItem('f1-active-tab') as 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live';
-    return savedTab || 'season';
-  });
-  const [selectedDriver, setSelectedDriver] = useState<string | null>(() => {
-    const savedDriver = localStorage.getItem('f1-selected-driver');
-    return savedDriver || null;
-  });
-  const [selectedRace, setSelectedRace] = useState<string | null>(() => {
-    const savedRace = localStorage.getItem('f1-selected-race');
-    return savedRace || null;
-  });
-  const [selectedDriverRace, setSelectedDriverRace] = useState<{driverId: string, raceId: string} | null>(() => {
-    const savedDriverRace = localStorage.getItem('f1-selected-driver-race');
-    return savedDriverRace ? JSON.parse(savedDriverRace) : null;
-  });
-  const [navigationHistory, setNavigationHistory] = useState<Array<{tab: string, view?: string, raceId?: string}>>(() => {
-    const savedHistory = localStorage.getItem('f1-navigation-history');
-    return savedHistory ? JSON.parse(savedHistory) : [];
-  });
-  const { isAuthenticated: isAdminAuthenticated, authenticate } = useAdmin();
-  const { currentSeason } = useSeason();
-
-  const handleAppAuthentication = () => {
-    setIsAuthenticated(true);
+  const contentAnchorRef = useRef<HTMLDivElement | null>(null);
+  const heroRef = useRef<HTMLElement | null>(null);
+  const [isHeroInView, setIsHeroInView] = useState(true);
+  const location = useLocation();
+  const isHome = location.pathname === '/';
+  const scrollToMainContent = () => {
+    contentAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleTabChange = (tab: 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live') => {
-    setActiveTab(tab);
-    setSelectedDriver(null);
-    setSelectedRace(null);
-    setSelectedDriverRace(null);
-    localStorage.setItem('f1-active-tab', tab);
-    localStorage.removeItem('f1-selected-driver');
-    localStorage.removeItem('f1-selected-race');
-    localStorage.removeItem('f1-selected-driver-race');
-  };
-
-  const handleDriverSelect = (driverId: string) => {
-    pushToHistory(activeTab, 'list'); // Save current view
-    setActiveTab('history'); // Switch to history tab
-    setSelectedDriver(driverId);
-    localStorage.setItem('f1-active-tab', 'history');
-    localStorage.setItem('f1-selected-driver', driverId);
-  };
-
-  const handleGridDriverSelect = (driverId: string) => {
-    pushToHistory(activeTab, 'list'); // Save current view
-    setActiveTab('grid'); // Stay on grid tab
-    setSelectedDriver(driverId);
-    localStorage.setItem('f1-active-tab', 'grid');
-    localStorage.setItem('f1-selected-driver', driverId);
-  };
-
-  const handleDriverBack = () => {
-    const previous = popFromHistory();
-    if (previous) {
-      setActiveTab(previous.tab as any);
-      localStorage.setItem('f1-active-tab', previous.tab);
-      if (previous.view === 'race' && selectedRace) {
-        // Stay on race detail
-      } else {
-        setSelectedDriver(null);
-        localStorage.removeItem('f1-selected-driver');
-      }
-    } else {
-      setSelectedDriver(null);
-      localStorage.removeItem('f1-selected-driver');
+  const handleHeroExplore = () => {
+    if (isHome) {
+      scrollToMainContent();
     }
-  };
-
-  const handleDriverSelectFromHistory = (driverId: string) => {
-    pushToHistory(activeTab, 'list'); // Save current view
-    setSelectedDriver(driverId);
-    localStorage.setItem('f1-selected-driver', driverId);
-  };
-
-  const handleSeasonSelect = (seasonId: string) => {
-    pushToHistory(activeTab, 'list'); // Save current view
-    setActiveTab('races'); // Switch to races tab
-    setSelectedRace(seasonId);
-    localStorage.setItem('f1-active-tab', 'races');
-    localStorage.setItem('f1-selected-race', seasonId);
-  };
-
-  const handleRaceSelect = (raceId: string) => {
-    pushToHistory(activeTab, 'list'); // Save current view
-    setActiveTab('races'); // Switch to races tab
-    setSelectedRace(raceId);
-    localStorage.setItem('f1-active-tab', 'races');
-    localStorage.setItem('f1-selected-race', raceId);
-  };
-
-  const handleRaceBack = () => {
-    const previous = popFromHistory();
-    if (previous) {
-      setActiveTab(previous.tab as any);
-      localStorage.setItem('f1-active-tab', previous.tab);
-      if (previous.view === 'driver') {
-        // Stay on driver profile
-      } else {
-        setSelectedRace(null);
-        localStorage.removeItem('f1-selected-race');
-      }
-    } else {
-      setSelectedRace(null);
-      localStorage.removeItem('f1-selected-race');
-    }
-  };
-
-  const handleDriverRaceSelect = (driverId: string, raceId: string) => {
-    // Save current view (race detail) with raceId
-    pushToHistory(activeTab, 'race', raceId);
-    setSelectedDriverRace({ driverId, raceId });
-    localStorage.setItem('f1-selected-driver-race', JSON.stringify({ driverId, raceId }));
-  };
-
-  const handleDriverRaceBack = () => {
-    const previous = popFromHistory();
-    if (previous) {
-      setActiveTab(previous.tab as any);
-      localStorage.setItem('f1-active-tab', previous.tab);
-      if (previous.view === 'race' && previous.raceId) {
-        // Restore the race detail view with the correct raceId
-        setSelectedRace(previous.raceId);
-        localStorage.setItem('f1-selected-race', previous.raceId);
-      } else if (previous.view === 'driver') {
-        // Handle driver view navigation
-      } else {
-        // If no specific view, clear race selection
-        setSelectedRace(null);
-        localStorage.removeItem('f1-selected-race');
-      }
-    } else {
-      // No history, go back to races list
-      setSelectedRace(null);
-      localStorage.removeItem('f1-selected-race');
-    }
-    setSelectedDriverRace(null);
-    localStorage.removeItem('f1-selected-driver-race');
-  };
-
-  // Navigation history helpers
-  const pushToHistory = (tab: string, view?: string, raceId?: string) => {
-    const newHistory = [...navigationHistory, { tab, view, raceId }];
-    setNavigationHistory(newHistory);
-    localStorage.setItem('f1-navigation-history', JSON.stringify(newHistory));
-  };
-
-  const popFromHistory = () => {
-    if (navigationHistory.length === 0) return null;
-    const newHistory = [...navigationHistory];
-    const previous = newHistory.pop();
-    setNavigationHistory(newHistory);
-    localStorage.setItem('f1-navigation-history', JSON.stringify(newHistory));
-    return previous;
   };
 
   useEffect(() => {
-    // Initialize socket connection
+    if (!isHome) {
+      setIsHeroInView(false);
+      return;
+    }
+
+    const element = heroRef.current;
+    if (!element) {
+      setIsHeroInView(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsHeroInView(entry.intersectionRatio >= 0.35);
+      },
+      { threshold: [0.15, 0.35, 0.6] }
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isHome]);
+
+  useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    const newSocket = io(apiUrl);
+    const socket = io(apiUrl);
 
-    // Connection handlers
-    newSocket.on('connect', () => {
+    socket.on('connect', () => {
       console.log('Connected to Project Bono backend');
-      setIsConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
+    socket.on('disconnect', () => {
       console.log('Disconnected from backend');
-      setIsConnected(false);
     });
 
-    // Alert handler
-    newSocket.on('alert', (alert: {type: string, message: string}) => {
-      const newAlert = {
-        id: Date.now().toString(),
-        type: alert.type,
-        message: alert.message,
-        timestamp: Date.now()
-      };
-      setAlerts(prev => [...prev, newAlert]);
+    socket.on('alert', (alert: { type: string; message: string }) => {
+      setAlerts((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          type: alert.type,
+          message: alert.message,
+          timestamp: Date.now(),
+        },
+      ]);
     });
 
     return () => {
-      newSocket.close();
+      socket.close();
     };
   }, []);
 
   const dismissAlert = (alertId: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== alertId));
+    setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
   };
+
+  const handleAppAuthentication = () => {
+    setIsAuthenticated(true);
+    localStorage.setItem('f1-app-authenticated', 'true');
+  };
+
+  const showAlerts = location.pathname !== '/admin' && alerts.length > 0;
+  const headerVariant = isHome && isHeroInView ? 'overlay' : 'surface';
+
+  const mainContainerClass = useMemo(
+    () =>
+      clsx('mx-auto min-h-screen w-full max-w-[1600px] px-6 pb-12', {
+        'pt-24': true,
+      }),
+    []
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -224,88 +136,233 @@ function AppContent() {
         <PasswordGate onAuthenticated={handleAppAuthentication} />
       ) : (
         <>
-          <HeaderNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-          
-          <main className="flex-1 p-6">
-            {activeTab !== 'admin' && <AlertSystem alerts={alerts} onDismiss={dismissAlert} />}
-              
-              {activeTab === 'season' && (
-                <SeasonDashboard 
-                  onRaceSelect={handleRaceSelect} 
-                  onDriverSelect={handleDriverSelect}
-                />
+          <div
+            className={clsx(
+              'sticky top-0 z-50 transition-colors duration-300',
+              headerVariant === 'overlay'
+                ? 'bg-transparent'
+                : 'bg-white/95 shadow-sm dark:bg-gray-900/95'
+            )}
+          >
+            <HeaderNavigation variant={headerVariant} />
+          </div>
+
+          {isHome && (
+            <div style={{ marginTop: -TAB_BAR_HEIGHT }}>
+              <HeroSection ref={heroRef} onExplore={handleHeroExplore} />
+            </div>
+          )}
+
+          <main ref={contentAnchorRef}>
+            <section className={mainContainerClass}>
+              {showAlerts && (
+                <div className="mb-8">
+                  <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+                </div>
               )}
-              
-              {activeTab === 'grid' && (
-                <>
-                  {selectedDriver ? (
-                    <DriverSeasonStats 
-                      driverId={selectedDriver} 
-                      onBack={handleDriverBack}
-                    />
-                  ) : (
-                    <Grid onDriverSelect={handleGridDriverSelect} />
-                  )}
-                </>
-              )}
-              
-              {activeTab === 'history' && (
-                <>
-                  {selectedDriver ? (
-                    <DriverCareerProfileComponent 
-                      memberId={selectedDriver} 
-                      onBack={handleDriverBack}
-                      onRaceSelect={handleRaceSelect}
-                    />
-                  ) : (
-                    <HistoryPage 
-                      onSeasonSelect={handleSeasonSelect}
-                      onDriverSelect={handleDriverSelectFromHistory}
-                    />
-                  )}
-                </>
-              )}
-              
-              {activeTab === 'races' && (
-                <>
-                  {selectedDriverRace ? (
-                    <DriverRaceAnalysis 
-                      driverId={selectedDriverRace.driverId}
-                      raceId={selectedDriverRace.raceId}
-                      onBack={handleDriverRaceBack} 
-                    />
-                  ) : selectedRace ? (
-                    <RaceDetail 
-                      raceId={selectedRace} 
-                      onBack={handleRaceBack}
-                      onDriverSelect={handleDriverRaceSelect}
-                    />
-                  ) : (
-                    currentSeason ? (
-                      <RacesDashboard seasonId={currentSeason.id} onRaceSelect={handleRaceSelect} />
-                    ) : (
-                      <div className="text-center py-12">
-                        <p className="text-gray-500 dark:text-gray-400">No active season selected</p>
-                      </div>
-                    )
-                  )}
-                </>
-              )}
-              
-              {activeTab === 'live' && (
-                <LiveTimings />
-              )}
-              
-              {activeTab === 'admin' && (
-                <AdminPanel 
-                  isAuthenticated={isAdminAuthenticated}
-                  onAuthenticate={authenticate}
-                />
-              )}
+
+              <Outlet />
+            </section>
           </main>
         </>
       )}
     </div>
+  );
+}
+
+function HomePage() {
+  const navigate = useNavigate();
+
+  const handleRaceSelect = (raceId: string) => {
+    navigate(`/races/${raceId}`);
+  };
+
+  const handleDriverSelect = (driverId: string) => {
+    navigate(`/history/driver/${driverId}`);
+  };
+
+  const handleScheduleView = () => {
+    navigate('/races');
+  };
+
+  return (
+    <PageTransition>
+      <SeasonDashboard
+        onRaceSelect={handleRaceSelect}
+        onDriverSelect={handleDriverSelect}
+        onScheduleView={handleScheduleView}
+      />
+    </PageTransition>
+  );
+}
+
+function GridPage() {
+  const navigate = useNavigate();
+
+  return (
+    <PageTransition>
+      <Grid onDriverSelect={(driverId) => navigate(`/grid/${driverId}`)} />
+    </PageTransition>
+  );
+}
+
+function DriverSeasonStatsPage() {
+  const { driverId } = useParams<{ driverId: string }>();
+
+  if (!driverId) {
+    return <Navigate to="/grid" replace />;
+  }
+
+  return (
+    <PageTransition>
+      <DriverSeasonStats driverId={driverId} backHref="/grid" />
+    </PageTransition>
+  );
+}
+
+function HistoryLandingPage() {
+  const navigate = useNavigate();
+
+  return (
+    <PageTransition>
+      <HistoryPage
+        onSeasonSelect={(seasonId) => navigate(`/races?seasonId=${seasonId}`)}
+        onDriverSelect={(driverId) => navigate(`/history/driver/${driverId}`)}
+      />
+    </PageTransition>
+  );
+}
+
+function DriverCareerProfilePage() {
+  const { driverId } = useParams<{ driverId: string }>();
+  const navigate = useNavigate();
+
+  if (!driverId) {
+    return <Navigate to="/history" replace />;
+  }
+
+  return (
+    <PageTransition>
+      <DriverCareerProfileComponent
+        memberId={driverId}
+        backHref="/history"
+        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+      />
+    </PageTransition>
+  );
+}
+
+function RacesPage() {
+  const navigate = useNavigate();
+  const { currentSeason } = useSeason();
+  const [searchParams] = useSearchParams();
+  const requestedSeasonId = searchParams.get('seasonId');
+  const seasonId = requestedSeasonId || currentSeason?.id;
+
+  if (!seasonId) {
+    return (
+      <PageTransition>
+        <div className="py-12 text-center">
+          <p className="text-gray-500 dark:text-gray-400">No season selected.</p>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  return (
+    <PageTransition>
+      <RacesDashboard seasonId={seasonId} onRaceSelect={(raceId) => navigate(`/races/${raceId}`)} />
+    </PageTransition>
+  );
+}
+
+function RaceDetailPage() {
+  const { raceId } = useParams<{ raceId: string }>();
+  const navigate = useNavigate();
+
+  if (!raceId) {
+    return <Navigate to="/races" replace />;
+  }
+
+  return (
+    <PageTransition>
+      <RaceDetail
+        raceId={raceId}
+        backHref="/races"
+        onDriverSelect={(driverId, race, initialSessionType) =>
+          navigate(`/races/${race}/driver/${driverId}${initialSessionType ? `?session=${initialSessionType}` : ''}`)
+        }
+      />
+    </PageTransition>
+  );
+}
+
+function DriverRaceAnalysisPage() {
+  const { raceId, driverId } = useParams<{ raceId: string; driverId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionParam = searchParams.get('session');
+  const initialSessionType = (sessionParam === 'qualifying' || sessionParam === 'practice') ? sessionParam : 'race';
+
+  if (!raceId || !driverId) {
+    return <Navigate to="/races" replace />;
+  }
+
+  return (
+    <PageTransition>
+      <DriverRaceAnalysis
+        raceId={raceId}
+        driverId={driverId}
+        initialSessionType={initialSessionType}
+        backHref={`/races/${raceId}`}
+      />
+    </PageTransition>
+  );
+}
+
+function LivePage() {
+  return (
+    <PageTransition>
+      <LiveTimings />
+    </PageTransition>
+  );
+}
+
+function AdminPage() {
+  const { isAuthenticated: adminAuthenticated, authenticate } = useAdmin();
+
+  return (
+    <PageTransition>
+      <AdminPanel isAuthenticated={adminAuthenticated} onAuthenticate={authenticate} />
+    </PageTransition>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<HomePage />} />
+        <Route path="grid" element={<GridPage />} />
+        <Route path="grid/:driverId" element={<DriverSeasonStatsPage />} />
+        <Route path="history" element={<HistoryLandingPage />} />
+        <Route path="history/driver/:driverId" element={<DriverCareerProfilePage />} />
+        <Route path="races" element={<RacesPage />} />
+        <Route path="races/:raceId" element={<RaceDetailPage />} />
+        <Route path="races/:raceId/driver/:driverId" element={<DriverRaceAnalysisPage />} />
+        <Route path="live" element={<LivePage />} />
+        <Route path="admin" element={<AdminPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function AppContent() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
 

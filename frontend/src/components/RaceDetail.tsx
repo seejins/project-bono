@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
 import { getTireCompound } from '../utils/f123DataMapping';
@@ -6,11 +7,11 @@ import { useAdmin } from '../contexts/AdminContext';
 
 interface RaceDetailProps {
   raceId: string;
-  onBack: () => void;
-  onDriverSelect: (driverId: string, raceId: string) => void;
+  backHref?: string;
+  onDriverSelect: (driverId: string, raceId: string, initialSessionType?: 'race' | 'qualifying' | 'practice') => void;
 }
 
-export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriverSelect }) => {
+export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriverSelect }) => {
   const { isAuthenticated } = useAdmin();
   const [activeSession, setActiveSession] = useState<'practice' | 'qualifying' | 'race'>('race');
   const [raceData, setRaceData] = useState<any>(null);
@@ -389,7 +390,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
   const getPositionColor = (position: number) => F123DataService.getPositionColor(position);
 
   const handleDriverClick = (driver: F123DriverResult) => {
-    onDriverSelect(driver.id, raceId);
+    onDriverSelect(driver.id, raceId, activeSession);
   };
 
   // Get driver_session_result_id (UUID) - this is the primary identifier for all operations
@@ -777,13 +778,17 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
     <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <button 
-          onClick={onBack} 
-          className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2 text-base font-medium"
-        >
-          <ArrowLeft className="w-6 h-6" />
-          <span>Back</span>
-        </button>
+        {backHref ? (
+          <Link 
+            to={backHref} 
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2 text-base font-medium"
+          >
+            <ArrowLeft className="w-6 h-6" />
+            <span>Back</span>
+          </Link>
+        ) : (
+          <div className="w-10" />
+        )}
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{raceData.trackName || 'Race'}</h1>
           {raceData.track?.name && (
@@ -1062,7 +1067,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onBack, onDriver
                           const fullName = F123DataService.getTireCompoundFullName(tireValue);
 
                           if (icon) {
-                            return (
+                          return (
                               <div className="flex items-center justify-center">
                                 <img
                                   src={icon}

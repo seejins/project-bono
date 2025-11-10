@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { F123DataService } from '../../../services/F123DataService';
-import { DriverRaceData, LapData } from '../types';
-import { sanitizeLapTimeMs, parseLapNumber } from '../utils';
+import { DriverRaceData, LapData, DriverSessionData, DriverResultWithMeta } from '../types';
 
 interface UseDriverRaceDataResult extends DriverRaceData {}
+
+type CanonicalDriverIdentifiers = {
+  driverId: string | null;
+  jsonDriverId: string | null;
+  driverName: string | null;
+  carNumber: string | null;
+};
 
 const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const DEFAULT_STATE: UseDriverRaceDataResult = {
-  driver: null,
   raceData: null,
-  lapData: [],
-  sessionDrivers: [],
+  sessions: [],
+  defaultSessionId: null,
   loading: true,
   error: null,
 };
@@ -45,28 +50,78 @@ export const useDriverRaceData = (driverId: string, raceId: string): UseDriverRa
         }
 
         const raceDataResult = await raceResponse.json();
-        const raceSession = raceDataResult.sessions?.find((session: any) => session.sessionType === 10);
-        if (!raceSession || !raceSession.results) {
-          throw new Error('Race session (sessionType 10) not found');
+        const sessionsFromResponse: any[] = Array.isArray(raceDataResult.sessions)
+          ? raceDataResult.sessions
+          : [];
+
+        if (sessionsFromResponse.length === 0) {
+          throw new Error('No session data found for this race');
         }
 
-        const foundDriver = raceSession.results.find((result: any) => result.id === driverId);
-        if (!foundDriver) {
-          throw new Error(`Driver with id ${driverId} not found in race results`);
-        }
-
-        const transformedDriver = transformDriverResult(foundDriver);
-        const { lapData: lapDataWithGaps, sessionDrivers } = buildLapDataWithGaps(
-          transformedDriver,
-          raceSession.results
+        const canonicalIdentifiers = deriveCanonicalDriverIdentifiers(
+          sessionsFromResponse,
+          driverId
         );
+
+        const sessionsData: DriverSessionData[] = sessionsFromResponse.map((session: any, index: number) => {
+          const sessionTypeRaw = session?.sessionType ?? session?.session_type ?? 0;
+          const sessionType = Number(sessionTypeRaw) || 0;
+          const sessionTypeName = F123DataService.getSessionTypeName(sessionType);
+          const sessionIdRaw =
+            session?.id ??
+            session?.sessionId ??
+            session?.session_id ??
+            session?.session_result_id ??
+            `${raceId}-${sessionType}-${index}`;
+          const sessionId = String(sessionIdRaw);
+          const sessionName = session?.sessionName ?? session?.session_name ?? sessionTypeName;
+          const sessionResults: any[] = Array.isArray(session?.results) ? session.results : [];
+
+          const driverResult = sessionResults.find((result: any) =>
+            doesResultMatchDriver(result, canonicalIdentifiers)
+          );
+
+          let transformedDriver: DriverResultWithMeta | null = null;
+          let lapDataWithGaps: LapData[] = [];
+          let sessionDrivers = sessionResults;
+
+          if (driverResult) {
+            transformedDriver = transformDriverResult(driverResult);
+            const { lapData: enrichedLapData, sessionDrivers: enrichedSessionDrivers } = buildLapDataWithGaps(
+              transformedDriver,
+              sessionResults
+            );
+            lapDataWithGaps = enrichedLapData;
+            sessionDrivers = enrichedSessionDrivers;
+          }
+
+          return {
+            sessionId,
+            sessionType,
+            sessionName,
+            sessionTypeName,
+            driver: transformedDriver,
+            lapData: lapDataWithGaps,
+            sessionDrivers,
+          };
+        });
+
+        const hasDriverData = sessionsData.some((session) => session.driver);
+        if (!hasDriverData) {
+          throw new Error(`Driver with id ${driverId} not found in any session results`);
+        }
+
+        const defaultSession =
+          sessionsData.find((session) => session.sessionType === 10 && session.driver) ||
+          sessionsData.find((session) => session.driver) ||
+          sessionsData[0] ||
+          null;
 
         if (!abortController.signal.aborted) {
           setState({
-            driver: transformedDriver,
             raceData: raceMetadata,
-            lapData: lapDataWithGaps,
-            sessionDrivers,
+            sessions: sessionsData,
+            defaultSessionId: defaultSession ? defaultSession.sessionId : null,
             loading: false,
             error: null,
           });
@@ -94,7 +149,7 @@ export const useDriverRaceData = (driverId: string, raceId: string): UseDriverRa
   return state;
 };
 
-const transformDriverResult = (result: any) => {
+const transformDriverResult = (result: any): DriverResultWithMeta => {
   const additionalData = parseAdditionalData(result.additional_data);
 
   return {
@@ -163,7 +218,10 @@ const mapResultStatus = (status: any): string => {
   }
 };
 
-const buildLapDataWithGaps = (driver: any, sessionResults: any[]): { lapData: LapData[]; sessionDrivers: any[] } => {
+const buildLapDataWithGaps = (
+  driver: DriverResultWithMeta,
+  sessionResults: any[]
+): { lapData: LapData[]; sessionDrivers: any[] } => {
   const sessionDrivers = sessionResults || [];
 
   if (!driver.lap_times || driver.lap_times.length === 0) {
@@ -271,5 +329,98 @@ const buildLapDataWithGaps = (driver: any, sessionResults: any[]): { lapData: La
   return { lapData: lapDataWithGaps, sessionDrivers };
 };
 
-export default useDriverRaceData;
+const deriveCanonicalDriverIdentifiers = (
+  sessions: any[],
+  driverId: string
+): CanonicalDriverIdentifiers => {
+  const driverIdStr = driverId ? String(driverId) : null;
 
+  const directMatchSession = sessions.find((session: any) =>
+    Array.isArray(session?.results) && session.results.some((result: any) => String(result?.id) === driverIdStr)
+  );
+
+  if (directMatchSession) {
+    const match = directMatchSession.results.find((result: any) => String(result?.id) === driverIdStr);
+
+    return {
+      driverId: driverIdStr,
+      jsonDriverId: normalizeIdentifier(match?.json_driver_id ?? match?.jsonDriverId),
+      driverName: normalizeIdentifier(
+        match?.json_driver_name ?? match?.driver_name ?? match?.mapping_driver_name ?? match?.name,
+        true
+      ),
+      carNumber: normalizeIdentifier(match?.json_car_number ?? match?.driver_number ?? match?.number),
+    };
+  }
+
+  // Fallback: use the first session's first result as reference if we cannot find an exact match
+  for (const session of sessions) {
+    const candidate = Array.isArray(session?.results) && session.results.length > 0 ? session.results[0] : null;
+    if (!candidate) {
+      continue;
+    }
+
+    return {
+      driverId: driverIdStr,
+      jsonDriverId: normalizeIdentifier(candidate?.json_driver_id ?? candidate?.jsonDriverId),
+      driverName: normalizeIdentifier(
+        candidate?.json_driver_name ?? candidate?.driver_name ?? candidate?.mapping_driver_name ?? candidate?.name,
+        true
+      ),
+      carNumber: normalizeIdentifier(candidate?.json_car_number ?? candidate?.driver_number ?? candidate?.number),
+    };
+  }
+
+  return {
+    driverId: driverIdStr,
+    jsonDriverId: null,
+    driverName: null,
+    carNumber: null,
+  };
+};
+
+const doesResultMatchDriver = (result: any, identifiers: CanonicalDriverIdentifiers): boolean => {
+  if (!result || !identifiers) {
+    return false;
+  }
+
+  if (identifiers.driverId && String(result?.id) === identifiers.driverId) {
+    return true;
+  }
+
+  const resultJsonDriverId = normalizeIdentifier(result?.json_driver_id ?? result?.jsonDriverId);
+  if (identifiers.jsonDriverId && resultJsonDriverId === identifiers.jsonDriverId) {
+    return true;
+  }
+
+  const resultCarNumber = normalizeIdentifier(result?.json_car_number ?? result?.driver_number ?? result?.number);
+  if (identifiers.carNumber && resultCarNumber && resultCarNumber === identifiers.carNumber) {
+    return true;
+  }
+
+  const resultDriverName = normalizeIdentifier(
+    result?.json_driver_name ?? result?.driver_name ?? result?.mapping_driver_name ?? result?.name,
+    true
+  );
+
+  if (identifiers.driverName && resultDriverName && resultDriverName === identifiers.driverName) {
+    return true;
+  }
+
+  return false;
+};
+
+const normalizeIdentifier = (value: any, lowercase: boolean = false): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return lowercase ? normalized.toLowerCase() : normalized;
+};
+
+export default useDriverRaceData;

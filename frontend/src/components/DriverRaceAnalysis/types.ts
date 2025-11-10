@@ -3,7 +3,8 @@ import { F123DriverResult } from '../../services/F123DataService';
 export interface DriverRaceAnalysisProps {
   driverId: string;
   raceId: string;
-  onBack: () => void;
+  backHref?: string;
+  initialSessionType?: 'race' | 'qualifying' | 'practice';
 }
 
 export interface LapData {
@@ -34,21 +35,32 @@ export interface LapData {
   tyre_sets_data?: any;
 }
 
-export interface DriverRaceData {
-  driver: (F123DriverResult & {
-    lap_times?: any[];
-    additional_data?: any;
-    additionalData?: any;
-    _totalRaceTimeMs?: number;
-  }) | null;
-  raceData: any;
+export type DriverResultWithMeta = F123DriverResult & {
+  lap_times?: any[];
+  additional_data?: any;
+  additionalData?: any;
+  _totalRaceTimeMs?: number;
+};
+
+export interface DriverSessionData {
+  sessionId: string;
+  sessionType: number;
+  sessionName: string;
+  sessionTypeName: string;
+  driver: DriverResultWithMeta | null;
   lapData: LapData[];
   sessionDrivers: any[];
+}
+
+export interface DriverRaceData {
+  raceData: any;
+  sessions: DriverSessionData[];
+  defaultSessionId: string | null;
   loading: boolean;
   error: string | null;
 }
 
-export interface LapComparisonEntry {
+export interface LapComparisonEntry extends Record<string, unknown> {
   lap: number;
   targetLapSeconds: number | null;
   comparisonLapSeconds: number | null;
@@ -62,6 +74,16 @@ export interface LapComparisonEntry {
 export interface LapAnalytics {
   lapComparisonData: LapComparisonEntry[];
   deltaComparisonData: Array<{ lap: number; deltaSeconds: number }>;
+  statusOverlays: StatusOverlaySegment[];
+  statusLegend: LapStatusType[];
+}
+
+export type LapStatusType = 'safetyCar' | 'virtualSafetyCar' | 'yellowFlag' | 'rain';
+
+export interface StatusOverlaySegment {
+  startLap: number;
+  endLap: number;
+  statuses: LapStatusType[];
 }
 
 export interface StintChartPoint {
@@ -86,7 +108,7 @@ export interface RaceStats {
   avgLap: number;
   consistencyPercent: string;
   totalTime: number;
-  gapToWinner: number | null;
+  gapToLeaderMs: number | null;
   pitStops: number;
   tireCompounds: Array<string | undefined>;
   gridPosition: number | null;

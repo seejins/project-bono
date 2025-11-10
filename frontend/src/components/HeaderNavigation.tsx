@@ -1,62 +1,73 @@
 import React from 'react';
+import clsx from 'clsx';
+import { NavLink } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import { Trophy, Users, Calendar, History, Settings, Clock } from 'lucide-react';
 
+type HeaderVariant = 'overlay' | 'surface';
+
 interface HeaderNavigationProps {
-  activeTab: string;
-  onTabChange: (tab: 'season' | 'grid' | 'races' | 'history' | 'admin' | 'live') => void;
+  variant?: HeaderVariant;
+  className?: string;
 }
 
-export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({ activeTab, onTabChange }) => {
-  const tabs = [
-    { id: 'season', label: 'Season', icon: Trophy },
-    { id: 'grid', label: 'Grid', icon: Users },
-    { id: 'races', label: 'Schedule', icon: Calendar },
-    { id: 'history', label: 'History', icon: History },
-    { id: 'live', label: 'Live Timings', icon: Clock },
-    { id: 'admin', label: 'Admin', icon: Settings },
-  ] as const;
+const LINKS: Array<{
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+}> = [
+  { to: '/', label: 'Season', icon: Trophy, exact: true },
+  { to: '/grid', label: 'Grid', icon: Users },
+  { to: '/races', label: 'Schedule', icon: Calendar },
+  { to: '/history', label: 'History', icon: History },
+  { to: '/live', label: 'Live Timings', icon: Clock },
+  { to: '/admin', label: 'Admin', icon: Settings },
+];
+
+export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
+  variant = 'surface',
+  className,
+}) => {
+  const isOverlay = variant === 'overlay';
 
   return (
-    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
-      <nav className="flex items-center justify-between">
-        {/* Logo/Brand */}
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center">
-            <Trophy className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Project Bono</h1>
-        </div>
-
-        {/* Navigation Tabs */}
+    <header
+      className={clsx(
+        'z-40 h-[88px] border-b transition-colors duration-300',
+        isOverlay
+          ? 'border-transparent bg-transparent text-white'
+          : 'border-gray-200 bg-white/95 text-gray-900 dark:border-gray-800 dark:bg-gray-900/95 dark:text-white',
+        className
+      )}
+    >
+      <nav
+        className={clsx(
+          'mx-auto flex h-full w-full max-w-5xl items-center justify-center gap-4 px-4 transition-all duration-300',
+          isOverlay ? 'text-white' : ''
+        )}
+      >
         <div className="flex items-center space-x-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          {LINKS.map(({ to, label, icon: Icon, exact }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={exact}
+              className={({ isActive }) =>
+                clsx(
+                  'flex min-w-[116px] items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em] transition-colors',
                   isActive
-                    ? 'bg-red-600 text-white'
-                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right side - could add user info, settings, etc. */}
-        <div className="flex items-center space-x-4">
-          {/* Connection status indicator */}
-          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span>Connected</span>
-          </div>
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/35'
+                    : isOverlay
+                      ? 'text-white/80 hover:bg-white/15 hover:text-white'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              <span>{label}</span>
+            </NavLink>
+          ))}
         </div>
       </nav>
     </header>
