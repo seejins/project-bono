@@ -12,6 +12,7 @@ import { PostSessionProcessor } from './services/PostSessionProcessor';
 import { RaceResultsEditor } from './services/RaceResultsEditor';
 import { setupRoutes } from './routes';
 import { setupSocketHandlers } from './socket';
+import { createPgPool } from './services/database/pool';
 import path from 'path';
 
 // Load .env file from backend directory
@@ -44,7 +45,8 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize services
-const databaseService = new DatabaseService();
+const pool = createPgPool();
+const databaseService = new DatabaseService(pool);
 const telemetryService = new TelemetryService();
 const sessionExportService = new SessionExportService(databaseService);
 const f123UDPProcessor = new F123UDPProcessor(databaseService, telemetryService);
@@ -124,6 +126,12 @@ process.on('SIGINT', () => {
   f123UDPProcessor.stop(); // Just clears state, doesn't stop UDP (handled by TelemetryService)
   server.close(() => {
     console.log('✅ Server closed');
-    process.exit(0);
+    pool.end().then(() => {
+      console.log('✅ Database pool closed');
+      process.exit(0);
+    }).catch((error) => {
+      console.error('❌ Error closing database pool:', error);
+      process.exit(1);
+    });
   });
 });

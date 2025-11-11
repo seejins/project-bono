@@ -23,6 +23,7 @@ export function setupRoutes(
     raceResultsEditor: RaceResultsEditor;
   }
 ) {
+  const repositories = services.databaseService.repositories;
   // Health check endpoint
   app.get('/health', (req, res) => {
     res.json({
@@ -124,16 +125,16 @@ export function setupRoutes(
   app.use('/api/upload', uploadRoutes(services.databaseService));
   
   // Seasons management routes
-  app.use('/api/seasons', seasonsRoutes(services.databaseService));
+  app.use('/api/seasons', seasonsRoutes(services.databaseService, repositories));
   
   // Drivers management routes
-  app.use('/api/drivers', driversRoutes(services.databaseService));
+  app.use('/api/drivers', driversRoutes(services.databaseService, repositories));
   
   // Tracks management routes
-  app.use('/api/tracks', tracksRoutes(services.databaseService));
+  app.use('/api/tracks', tracksRoutes(services.databaseService, repositories));
   
   // Session data routes (for local host app)
-  app.use('/api/sessions', sessionsRoutes(services.databaseService));
+  app.use('/api/sessions', sessionsRoutes(services.databaseService, repositories));
   
   // Race results and editing routes
   setupRacesRoutes(services.databaseService, services.raceResultsEditor, io);

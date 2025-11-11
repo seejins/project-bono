@@ -87,7 +87,7 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
       endDate: endDate || new Date().toISOString().split('T')[0],
       pointsSystem,
       fastestLapPoint,
-      isActive: false,
+      status: 'draft' as const,
       drivers: [],
       tracks: Array.from(new Set(events.map(e => e.trackId))),
       races: events.map(event => {

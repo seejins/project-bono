@@ -18,8 +18,10 @@ import type {
   CartesianGridProps,
 } from 'recharts';
 
+import { BRAND_COLORS, STATUS_COLORS } from '../../theme/colors';
+
 const AXIS_TICK_STYLE = {
-  fill: '#6b7280',
+  fill: BRAND_COLORS.mutedStrong,
   fontSize: 12,
 } as const;
 
@@ -71,19 +73,19 @@ export interface OverlayStyle {
 
 export const DEFAULT_OVERLAY_STYLES: Record<string, OverlayStyle> = {
   safetyCar: {
-    color: '#facc15',
+    color: STATUS_COLORS.warning,
     fillOpacity: 0.26,
   },
   virtualSafetyCar: {
-    color: '#c084fc',
+    color: STATUS_COLORS.purple,
     fillOpacity: 0.26,
   },
   yellowFlag: {
-    color: '#f97316',
+    color: STATUS_COLORS.amber,
     fillOpacity: 0.26,
   },
   rain: {
-    color: '#22d3ee',
+    color: STATUS_COLORS.cyan,
     fillOpacity: 0.26,
     pattern: 'rain',
   },
@@ -270,7 +272,7 @@ export function BaseLineChart<T extends Record<string, unknown>>({
             if (overlay.sortedStatuses.length === 1) {
               const status = overlay.sortedStatuses[0];
               const style =
-                resolvedOverlayStyles[status] ?? { color: '#9ca3af', fillOpacity: 0.26 };
+                resolvedOverlayStyles[status] ?? { color: STATUS_COLORS.neutral, fillOpacity: 0.26 };
 
               if (style.pattern) {
                 const sanitizedStatus = sanitizeForId(status);
@@ -480,7 +482,7 @@ const buildOverlayMeta = (
 
   const styles: Record<string, OverlayStyle> = {};
   statusSet.forEach((status) => {
-    const base = DEFAULT_OVERLAY_STYLES[status] ?? { color: '#9ca3af', fillOpacity: 0.26 };
+    const base = DEFAULT_OVERLAY_STYLES[status] ?? { color: STATUS_COLORS.neutral, fillOpacity: 0.26 };
     const override = overrides?.[status];
     styles[status] = {
       color: override?.color ?? base.color,
@@ -541,7 +543,7 @@ const buildOverlayMeta = (
   });
 
   combinationMap.forEach((statuses, comboKey) => {
-    const colors = statuses.map((status) => styles[status]?.color ?? '#9ca3af');
+    const colors = statuses.map((status) => styles[status]?.color ?? STATUS_COLORS.neutral);
     const segmentWidth = 12;
     const width = Math.max(segmentWidth * statuses.length, 6);
     const patternId = `${chartInstanceId}-${sanitizeForId(comboKey)}`;

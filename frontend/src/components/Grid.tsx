@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Trophy, Award, ChevronRight } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
+import { F123DataService } from '../services/F123DataService';
 
 interface Driver {
   id: string;
   name: string;
   team: string;
+  teamColorClass: string;
+  teamColorHex: string;
   number: number;
   seasonId: string;
   points: number;
@@ -66,10 +69,23 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
             console.warn(`Failed to load stats for driver ${participant.id}:`, statsResponse.statusText);
           }
           
+          const teamSource = participant.team && participant.team !== 'TBD' ? participant.team : undefined;
+          const canonicalTeam = teamSource
+            ? F123DataService.getTeamDisplayName(teamSource)
+            : 'TBD';
+          const teamColorClass = teamSource
+            ? F123DataService.getTeamColor(teamSource)
+            : 'text-gray-500 dark:text-gray-400';
+          const teamColorHex = teamSource
+            ? F123DataService.getTeamColorHex(teamSource)
+            : '#9CA3AF';
+
           return {
             id: participant.id,
             name: participant.name,
-            team: participant.team || 'TBD',
+            team: canonicalTeam,
+            teamColorClass,
+            teamColorHex,
             number: participant.number || (index + 1),
             seasonId: currentSeason.id,
             points: stats.points,
@@ -119,22 +135,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         return a.position - b.position;
     }
   });
-
-  const getTeamColor = (team: string) => {
-    const colors: { [key: string]: string } = {
-      'Mercedes': 'text-cyan-400',
-      'Red Bull Racing': 'text-blue-500',
-      'Ferrari': 'text-red-600',
-      'McLaren': 'text-orange-500',
-      'Aston Martin': 'text-green-500',
-      'Alpine': 'text-pink-500',
-      'RB': 'text-gray-400',
-      'Sauber': 'text-red-400',
-      'Haas': 'text-gray-500',
-      'Williams': 'text-blue-400'
-    };
-    return colors[team] || 'text-gray-500';
-  };
 
   const getPositionColor = (position: number) => {
     if (position === 1) return 'text-yellow-500';
@@ -218,7 +218,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{driver.name}</h3>
-                    <p className={`text-sm ${getTeamColor(driver.team)}`}>{driver.team}</p>
+                    <p className={`text-sm ${driver.teamColorClass}`}>{driver.team}</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -301,7 +301,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
                         </div>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getTeamColor(driver.team)}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${driver.teamColorClass}`}>
                       {driver.team}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900 dark:text-white">

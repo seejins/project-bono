@@ -4,6 +4,8 @@ import mediumTyreIcon from '../assets/tires/medium_tyre.svg';
 import hardTyreIcon from '../assets/tires/hard_tyre.svg';
 import intermediateTyreIcon from '../assets/tires/intermediate_tyre.svg';
 import wetTyreIcon from '../assets/tires/wet_tyre.svg';
+import { STATUS_COLORS } from '../theme/colors';
+import { findTeamByName, F123Team } from '../data/f123Teams';
 export interface F123SessionData {
   sessionType: number;
   sessionTypeName: string;
@@ -175,22 +177,29 @@ export class F123DataService {
   }
 
   /**
+   * Resolve canonical team information from known aliases.
+   */
+  static getTeamInfo(team?: string | null): F123Team | null {
+    return findTeamByName(team);
+  }
+
+  /**
+   * Ensure the displayed team name matches the canonical team label.
+   */
+  static getTeamDisplayName(team?: string | null): string {
+    if (!team) {
+      return 'Unknown Team';
+    }
+
+    const match = this.getTeamInfo(team);
+    return match?.name ?? team;
+  }
+
+  /**
    * Get team color class (Tailwind classes)
    */
   static getTeamColor(team: string): string {
-    const colors: { [key: string]: string } = {
-      'Mercedes': 'text-cyan-400',
-      'Red Bull Racing': 'text-blue-400',
-      'Ferrari': 'text-red-400',
-      'McLaren': 'text-orange-400',
-      'Aston Martin': 'text-green-400',
-      'Alpine': 'text-pink-400',
-      'RB': 'text-yellow-400',
-      'Sauber': 'text-gray-400',
-      'Haas': 'text-white',
-      'Williams': 'text-blue-300'
-    };
-    return colors[team] || 'text-gray-400';
+    return this.getTeamInfo(team)?.textClass ?? 'text-gray-400';
   }
 
   /**
@@ -200,72 +209,10 @@ export class F123DataService {
    */
   static getTeamColorHex(team: string): string {
     if (!team || team === 'Unknown Team') {
-      return '#9ca3af'; // Default gray
+      return STATUS_COLORS.neutral; // Default gray
     }
-    
-    // Normalize team name for matching (trim, lowercase)
-    const normalizedTeam = team.trim().toLowerCase();
-    
-    const colorMap: { [key: string]: string } = {
-      // Mercedes variations
-      'mercedes': '#00D2BE',
-      'mercedes-amg': '#00D2BE',
-      'mercedes amg': '#00D2BE',
-      
-      // Red Bull variations
-      'red bull racing': '#1E41FF',
-      'red bull': '#1E41FF',
-      'redbull': '#1E41FF',
-      'redbull racing': '#1E41FF',
-      
-      // Ferrari
-      'ferrari': '#DC143C',
-      
-      // McLaren
-      'mclaren': '#FF8700',
-      
-      // Aston Martin variations
-      'aston martin': '#006F62',
-      'aston-martin': '#006F62',
-      
-      // Alpine
-      'alpine': '#0090FF',
-      'alpine f1': '#0090FF',
-      
-      // RB variations
-      'rb': '#469BFF',
-      'rb f1': '#469BFF',
-      'racing bulls': '#469BFF',
-      
-      // Sauber variations
-      'sauber': '#9B0000',
-      'stake f1': '#9B0000',
-      'stake f1 team': '#9B0000',
-      
-      // Haas
-      'haas': '#FFFFFF',
-      'haas f1': '#FFFFFF',
-      
-      // Williams
-      'williams': '#005AFF',
-      'williams f1': '#005AFF',
-      
-      // Alfa Romeo - maroon color
-      'alfa romeo': '#900C3F',
-      'alfa-romeo': '#900C3F',
-      'alfa romeo f1': '#900C3F',
-      'alfa romeo racing': '#900C3F',
-      'alfaromeo': '#900C3F',
-      
-      // AlphaTauri - navy color
-      'alphatauri': '#0A1E2E',
-      'alpha tauri': '#0A1E2E',
-      'alpha-tauri': '#0A1E2E',
-      'alphatauri f1': '#0A1E2E',
-      'scuderia alphatauri': '#0A1E2E'
-    };
-    
-    return colorMap[normalizedTeam] || '#9ca3af'; // Default gray if not found
+
+    return this.getTeamInfo(team)?.color ?? STATUS_COLORS.neutral;
   }
 
   /**

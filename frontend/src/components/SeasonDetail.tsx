@@ -6,12 +6,15 @@ import { F123_TEAMS } from '../data/f123Teams';
 
 const TEAM_OPTIONS = F123_TEAMS.map((team) => team.name);
 
+type SeasonStatus = 'draft' | 'active' | 'completed';
+
 interface Season {
   id: string;
   name: string;
   year: number;
   startDate: string;
   endDate?: string;
+  status: SeasonStatus;
   isActive: number;
   createdAt: string;
   updatedAt: string;
@@ -57,14 +60,15 @@ interface Event {
 interface SeasonDetailProps {
   season: Season;
   onBack: () => void;
+  onSeasonUpdated?: (season: Season) => void;
 }
 
-export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) => {
+export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack, onSeasonUpdated }) => {
   const [members, setMembers] = useState<Member[]>([]);
   const [seasonDrivers, setSeasonDrivers] = useState<Member[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
-  const [localSeasonStatus, setLocalSeasonStatus] = useState(season.isActive);
+  const [localSeasonStatus, setLocalSeasonStatus] = useState<SeasonStatus>(season.status);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'drivers' | 'events'>('drivers');
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
@@ -142,6 +146,10 @@ const editTeamOptions = useMemo(() => {
     loadData();
   }, [season.id]);
 
+  useEffect(() => {
+    setLocalSeasonStatus(season.status);
+  }, [season.status]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -171,7 +179,16 @@ const editTeamOptions = useMemo(() => {
 
       if (seasonsRes.ok) {
         const seasonsData = await seasonsRes.json();
-        setSeasons(seasonsData.seasons || []);
+        const fetchedSeasons: Season[] = seasonsData.seasons || [];
+        setSeasons(fetchedSeasons);
+
+        if (onSeasonUpdated) {
+          const refreshed = fetchedSeasons.find((item) => item.id === season.id);
+          if (refreshed) {
+            onSeasonUpdated(refreshed);
+            setLocalSeasonStatus(refreshed.status);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading season data:', error);
@@ -450,51 +467,92 @@ const editTeamOptions = useMemo(() => {
     return types[sessionType as keyof typeof types] || 'Unknown';
   };
 
-  const handleSeasonStatusChange = async (newStatus: number) => {
+  const handleSeasonStatusChange = async (newStatus: SeasonStatus) => {
     try {
-      // If trying to activate this season, check if another season is already active
-      if (newStatus === 1) {
-        const activeSeasons = seasons.filter(s => s.isActive === 1 && s.id !== season.id);
-        
+      if (newStatus === 'active') {
+        const activeSeasons = seasons.filter((s) => s.status === 'active' && s.id !== season.id);
+
         if (activeSeasons.length > 0) {
           setConflictingSeason(activeSeasons[0]);
           setShowActivationWarning(true);
-          return; // Wait for user to dismiss warning
+          return;
         }
+
+        await activateSeason();
+        return;
       }
 
-      // Proceed with the status change (no conflict)
-      await performStatusChange(newStatus);
+      await updateSeasonStatus(newStatus);
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Failed to update season status');
     }
   };
 
-  const performStatusChange = async (newStatus: number) => {
+  const activateSeason = async () => {
+    try {
+      setStatus('loading');
+      setStatusMessage('Setting current season...');
+
+      const response = await apiPost(`/api/seasons/${season.id}/activate`);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update season status');
+      }
+
+      const data = await response.json();
+      const updatedSeason: Season | undefined = data?.season;
+
+      setStatus('success');
+      setStatusMessage('Season status updated successfully');
+
+      if (updatedSeason) {
+        setLocalSeasonStatus(updatedSeason.status);
+        onSeasonUpdated?.(updatedSeason);
+      } else {
+        setLocalSeasonStatus('active');
+      }
+
+      loadData();
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to update season status');
+    }
+  };
+
+  const updateSeasonStatus = async (newStatus: SeasonStatus) => {
+    if (newStatus === 'active') {
+      return;
+    }
+
     try {
       setStatus('loading');
       setStatusMessage('Updating season status...');
 
       const response = await apiPut(`/api/seasons/${season.id}`, {
-        isActive: newStatus
+        status: newStatus,
       });
 
-      if (response.ok) {
-        setStatus('success');
-        setStatusMessage('Season status updated successfully');
-        
-        // Update the local season status immediately
-        setLocalSeasonStatus(newStatus);
-        
-        // If this season is now active, reload all seasons to reflect the changes
-        if (newStatus === 1) {
-          loadData();
-        }
-      } else {
+      if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to update season status');
       }
+
+      const data = await response.json();
+      const updatedSeason: Season | undefined = data?.season;
+
+      setStatus('success');
+      setStatusMessage('Season status updated successfully');
+
+      if (updatedSeason) {
+        setLocalSeasonStatus(updatedSeason.status);
+        onSeasonUpdated?.(updatedSeason);
+      } else {
+        setLocalSeasonStatus(newStatus);
+      }
+
+      loadData();
     } catch (error) {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Failed to update season status');
@@ -547,12 +605,12 @@ const editTeamOptions = useMemo(() => {
           <label className="text-sm text-gray-700 dark:text-gray-300">Status:</label>
           <select
             value={localSeasonStatus}
-            onChange={(e) => handleSeasonStatusChange(parseInt(e.target.value))}
+            onChange={(e) => handleSeasonStatusChange(e.target.value as SeasonStatus)}
             className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-300 focus:ring-red-500 focus:border-red-500"
           >
-            <option value={0}>Draft</option>
-            <option value={1}>Active</option>
-            <option value={2}>Complete</option>
+            <option value="draft">Draft</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
           </select>
         </div>
       </div>

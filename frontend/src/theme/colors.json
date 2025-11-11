@@ -1,0 +1,34 @@
+{
+  "brand": {
+    "primary": "#E10600",
+    "accent": "#FF1E56",
+    "highlight": "#FFAC33",
+    "electric": "#3A86FF",
+    "purple": "#C92DD6",
+    "blue": "#0066CC",
+    "yellow": "#FFD700",
+    "surface": "#0F172A",
+    "surfaceDark": "#0B0F19",
+    "surfaceLight": "#111827",
+    "border": "#1F2937",
+    "foreground": "#F8FAFC",
+    "muted": "#94A3B8",
+    "mutedStrong": "#64748B",
+    "mutedSoft": "#CBD5F5"
+  },
+  "status": {
+    "info": "#2563EB",
+    "success": "#22C55E",
+    "warning": "#EAB308",
+    "danger": "#EF4444",
+    "neutral": "#9CA3AF",
+    "purple": "#A855F7",
+    "cyan": "#22D3EE",
+    "amber": "#F97316"
+  },
+  "gradients": {
+    "brandHero": "linear-gradient(135deg, #E10600 0%, #C92DD6 100%)",
+    "brandStripes": "linear-gradient(to right, #FF1E56, #FFAC33, #3A86FF)"
+  }
+}
+

@@ -1,3 +1,5 @@
+import { findTeamByName } from '../data/f123Teams';
+
 // Utility functions for mapping F1 23 UDP data to display format
 
 // Driver Status Mapping
@@ -111,19 +113,8 @@ export const calculatePositionChange = (gridPosition: number, currentPosition: n
 
 // Team Color Mapping
 export const getTeamColor = (teamName: string): string => {
-  const teamColors: { [key: string]: string } = {
-    'Mercedes': '#00D2BE',
-    'Ferrari': '#DC143C',
-    'Red Bull Racing': '#0600EF',
-    'Williams': '#005AFF',
-    'Aston Martin': '#006F62',
-    'Alpine': '#0090FF',
-    'Alpha Tauri': '#2B4562',
-    'Haas': '#FFFFFF',
-    'McLaren': '#FF8700',
-    'Alfa Romeo': '#900000',
-  };
-  return teamColors[teamName] || '#FFFFFF';
+  const team = findTeamByName(teamName);
+  return team?.color ?? '#FFFFFF';
 };
 
 // Driver Abbreviation

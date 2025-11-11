@@ -4,6 +4,7 @@ import { Trophy, ChevronDown } from 'lucide-react';
 import { apiGet } from '../utils/api';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
+import { STATUS_COLORS } from '../theme/colors';
 
 interface HeroSectionProps {
   onExplore: () => void;
@@ -55,9 +56,17 @@ const PODIUM_LABEL_MAP: Record<number, string> = {
 export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
   ({ onExplore }, ref) => {
     const { currentSeason } = useSeason();
-    const [raceLabel, setRaceLabel] = useState('Latest Grand Prix');
+    const [raceLabel, setRaceLabel] = useState('Season Championship');
+    const [seasonTag, setSeasonTag] = useState<string | null>(null);
     const [raceDate, setRaceDate] = useState<string | null>(null);
     const [podiumEntries, setPodiumEntries] = useState<PodiumEntry[]>([]);
+    const [previousRacePodium, setPreviousRacePodium] = useState<PodiumEntry[]>([]);
+    const [nextEvent, setNextEvent] = useState<EventSummary | null>(null);
+    const [previousEvent, setPreviousEvent] = useState<EventSummary | null>(null);
+    const [seasonSummary, setSeasonSummary] = useState<{ completed: number; total: number }>({
+      completed: 0,
+      total: 0,
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [heroContentVisible, setHeroContentVisible] = useState(false);
     const [cardsVisible, setCardsVisible] = useState(false);
@@ -79,9 +88,13 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     useEffect(() => {
       let isCancelled = false;
 
-      const fetchPodium = async () => {
+      const fetchHeroData = async () => {
         if (!currentSeason?.id) {
           setPodiumEntries([]);
+          setPreviousRacePodium([]);
+          setNextEvent(null);
+          setPreviousEvent(null);
+          setSeasonSummary({ completed: 0, total: 0 });
           setIsLoading(false);
           return;
         }
@@ -90,100 +103,128 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           setIsLoading(true);
           setError(null);
 
-          const eventsResponse = await apiGet(`/api/seasons/${currentSeason.id}/events`);
+          const [standingsResponse, eventsResponse] = await Promise.all([
+            apiGet(`/api/seasons/${currentSeason.id}/standings`),
+            apiGet(`/api/seasons/${currentSeason.id}/events`),
+          ]);
+
+          if (!standingsResponse.ok) {
+            throw new Error('Failed to load season standings');
+          }
+
+          const standingsPayload = await standingsResponse.json();
+          const standings: Array<{ position?: number; name: string; team?: string }> =
+            standingsPayload.standings || [];
+
+          const leaders = standings.slice(0, 3).map((driver, index) => {
+            const position = driver.position ?? index + 1;
+            const rawTeamName = driver.team || 'Unknown Team';
+            const teamName = F123DataService.getTeamDisplayName(rawTeamName);
+            return {
+              position,
+              driver: driver.name || `Driver ${position}`,
+              team: teamName,
+              teamColor: F123DataService.getTeamColorHex(rawTeamName),
+            };
+          });
+
+          setPodiumEntries(leaders);
+          setRaceLabel(currentSeason?.name || 'Season Championship');
+          setSeasonTag(currentSeason ? `Season ${currentSeason.year}` : null);
+          setRaceDate(null);
+
           if (!eventsResponse.ok) {
             throw new Error('Failed to load season events');
           }
 
           const eventsPayload = await eventsResponse.json();
           const events: EventSummary[] = eventsPayload.events || [];
+          const now = new Date();
 
-          const completedEvents = events.filter(
-            (event) => event.status === 'completed'
-          );
+          const completedEvents = events
+            .filter((event) => event.status === 'completed')
+            .sort((a, b) => {
+              const dateA = a.race_date || a.completed_at || a.updated_at || '';
+              const dateB = b.race_date || b.completed_at || b.updated_at || '';
+              return new Date(dateB).getTime() - new Date(dateA).getTime();
+            });
 
-          if (completedEvents.length === 0) {
-            if (!isCancelled) {
-              setRaceLabel('Next Grand Prix');
-              setRaceDate(null);
-              setPodiumEntries([]);
+          const upcomingEvents = events
+            .filter(
+              (event) =>
+                event.status === 'scheduled' &&
+                (!event.race_date || new Date(event.race_date).getTime() > now.getTime()),
+            )
+            .sort((a, b) => {
+              const dateA = a.race_date || '';
+              const dateB = b.race_date || '';
+              return new Date(dateA).getTime() - new Date(dateB).getTime();
+            });
+
+          const latestCompletedEvent = completedEvents[0] || null;
+          const nextScheduledEvent = upcomingEvents[0] || null;
+
+          setPreviousEvent(latestCompletedEvent);
+          setNextEvent(nextScheduledEvent);
+          setSeasonSummary({ completed: completedEvents.length, total: events.length });
+
+          if (latestCompletedEvent) {
+            const resultsResponse = await apiGet(`/api/races/${latestCompletedEvent.id}/results`);
+            if (resultsResponse.ok) {
+              const resultsPayload = await resultsResponse.json();
+              const raceSession =
+                (resultsPayload.sessions || []).find((session: any) => session.sessionType === 10) ??
+                (resultsPayload.sessions || [])[0];
+
+              if (raceSession?.results) {
+                const podium = (raceSession.results as RawDriverResult[])
+                  .map((driver) => {
+                    const rawPosition = driver.position ?? driver.race_position;
+                    const position = rawPosition != null ? Number(rawPosition) : null;
+                    if (!position || position > 3) return null;
+
+                    const driverName =
+                      driver.json_driver_name ||
+                      driver.driver_name ||
+                      driver.mapping_driver_name ||
+                      'Unknown Driver';
+
+                    const rawTeamName =
+                      driver.json_team_name ||
+                      driver.mapping_team_name ||
+                      driver.driver_team ||
+                      'Unknown Team';
+                    const teamName = F123DataService.getTeamDisplayName(rawTeamName);
+
+                    return {
+                      position,
+                      driver: driverName,
+                      team: teamName,
+                      teamColor: F123DataService.getTeamColorHex(rawTeamName),
+                    };
+                  })
+                  .filter((entry): entry is PodiumEntry => !!entry)
+                  .sort((a, b) => a.position - b.position);
+
+                setPreviousRacePodium(podium);
+              } else {
+                setPreviousRacePodium([]);
+              }
+            } else {
+              setPreviousRacePodium([]);
             }
-            return;
-          }
-
-          completedEvents.sort((a, b) => {
-            const dateA = a.race_date || a.completed_at || a.updated_at || '';
-            const dateB = b.race_date || b.completed_at || b.updated_at || '';
-            return new Date(dateB).getTime() - new Date(dateA).getTime();
-          });
-
-          const latestEvent = completedEvents[0];
-
-          if (!isCancelled) {
-            const trackLabel =
-              latestEvent.track_name ||
-              latestEvent.track?.name ||
-              latestEvent.name ||
-              'Latest Grand Prix';
-
-            setRaceLabel(trackLabel);
-            setRaceDate(latestEvent.race_date || null);
-          }
-
-          const resultsResponse = await apiGet(`/api/races/${latestEvent.id}/results`);
-          if (!resultsResponse.ok) {
-            throw new Error('Failed to load race results');
-          }
-
-          const resultsPayload = await resultsResponse.json();
-          const raceSession =
-            (resultsPayload.sessions || []).find((session: any) => session.sessionType === 10) ??
-            (resultsPayload.sessions || [])[0];
-
-          if (!raceSession?.results) {
-            if (!isCancelled) {
-              setPodiumEntries([]);
-            }
-            return;
-          }
-
-          const topThree = (raceSession.results as RawDriverResult[])
-            .map((driver) => {
-              const rawPosition = driver.position ?? driver.race_position;
-              const position = rawPosition != null ? Number(rawPosition) : null;
-
-              if (!position) return null;
-
-              const driverName =
-                driver.json_driver_name ||
-                driver.driver_name ||
-                driver.mapping_driver_name ||
-                'Unknown Driver';
-
-              const teamName =
-                driver.json_team_name ||
-                driver.mapping_team_name ||
-                driver.driver_team ||
-                'Unknown Team';
-
-              return {
-                position,
-                driver: driverName,
-                team: teamName,
-                teamColor: F123DataService.getTeamColorHex(teamName),
-              };
-            })
-            .filter((entry): entry is PodiumEntry => !!entry && entry.position <= 3)
-            .sort((a, b) => a.position - b.position);
-
-          if (!isCancelled) {
-            setPodiumEntries(topThree);
+          } else {
+            setPreviousRacePodium([]);
           }
         } catch (err) {
           if (!isCancelled) {
             console.error('Hero podium load error:', err);
             setError(err instanceof Error ? err.message : 'Unable to load race podium');
             setPodiumEntries([]);
+            setPreviousRacePodium([]);
+            setNextEvent(null);
+            setPreviousEvent(null);
+            setSeasonSummary({ completed: 0, total: 0 });
           }
         } finally {
           if (!isCancelled) {
@@ -192,7 +233,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         }
       };
 
-      fetchPodium();
+      fetchHeroData();
 
       return () => {
         isCancelled = true;
@@ -282,7 +323,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           position,
           driver: 'TBD',
           team: 'Awaiting Results',
-          teamColor: '#9ca3af',
+          teamColor: STATUS_COLORS.neutral,
         };
       });
     }, [podiumEntries]);
@@ -384,19 +425,87 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 cardsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
               )}
             >
-              {[1, 2, 3].map((item) => (
-                <article
-                  key={item}
-                  className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur"
-                >
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
-                    Placeholder {item}
-                  </h3>
-                  <p className="mt-3 text-sm text-white/75">
-                    Drop in highlight reels, tyre strategy callouts, or anything else you want to surface post-race. Replace this filler copy when you have the real story.
+              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
+                  Next Event
+                </h3>
+                {nextEvent ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-lg font-semibold text-white">
+                      {nextEvent.track_name || nextEvent.name || 'TBD'}
+                    </p>
+                    {nextEvent.race_date && (
+                      <p className="text-sm text-white/70">
+                        {new Date(nextEvent.race_date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    )}
+                    <p className="text-sm text-white/60">
+                      {nextEvent.status === 'scheduled' ? 'Scheduled' : nextEvent.status ?? 'Pending'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-white/70">No upcoming events scheduled.</p>
+                )}
+              </article>
+
+              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
+                  Last Race Podium
+                </h3>
+                {previousEvent ? (
+                  <p className="mt-2 text-sm text-white/70">
+                    {previousEvent.track_name || previousEvent.name || 'Previous Race'}
                   </p>
-                </article>
-              ))}
+                ) : null}
+                <ul className="mt-2 space-y-1.5">
+                  {previousRacePodium.length > 0 ? (
+                    previousRacePodium.map((entry) => (
+                      <li key={entry.position} className="flex items-center justify-between text-sm py-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex w-16 justify-center text-[11px] font-medium uppercase tracking-[0.3em] text-white/60">
+                            {PODIUM_LABEL_MAP[entry.position] ?? `${entry.position}TH`}
+                          </span>
+                          <span
+                            className="inline-block h-4 w-0.5 rounded-full"
+                            style={{ backgroundColor: entry.teamColor }}
+                          />
+                          <span className="text-xs font-medium text-white/80 leading-tight">
+                            {entry.driver}
+                          </span>
+                        </div>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-sm text-white/70">No completed race yet.</li>
+                  )}
+                </ul>
+              </article>
+
+              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
+                  Season Progress
+                </h3>
+                <div className="mt-4 space-y-2 text-sm text-white/75">
+                  <p>
+                    Completed Races:{' '}
+                    <span className="font-semibold text-white">{seasonSummary.completed}</span>
+                  </p>
+                  <p>
+                    Total Events:{' '}
+                    <span className="font-semibold text-white">{seasonSummary.total}</span>
+                  </p>
+                  <p>
+                    Remaining:{' '}
+                    <span className="font-semibold text-white">
+                      {Math.max(seasonSummary.total - seasonSummary.completed, 0)}
+                    </span>
+                  </p>
+                </div>
+              </article>
             </div>
           </div>
         </div>

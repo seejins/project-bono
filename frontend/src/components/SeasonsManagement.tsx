@@ -12,7 +12,7 @@ interface Season {
   startDate: string;
   endDate?: string;
   isActive: number;
-  status?: SeasonStatus;
+  status: SeasonStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,10 +57,10 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [selectedSeasonDetail, setSelectedSeasonDetail] = useState<Season | null>(null);
-  const [newSeason, setNewSeason] = useState<{ name: string; year: number; status: SeasonStatus }>({ 
+  const [newSeason, setNewSeason] = useState<{ name: string; year: number; setAsCurrent: boolean }>({ 
     name: '', 
     year: new Date().getFullYear(),
-    status: 'draft'
+    setAsCurrent: false
   });
   const [newEvent, setNewEvent] = useState({ 
     track_id: '',
@@ -101,7 +101,29 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
 
       if (seasonsRes.ok) {
         const seasonsData = await seasonsRes.json();
-        setSeasons(seasonsData.seasons || []);
+        const fetchedSeasons: Season[] = seasonsData.seasons || [];
+        setSeasons(fetchedSeasons);
+
+        if (selectedSeason) {
+          const refreshed = fetchedSeasons.find((s) => s.id === selectedSeason.id);
+          if (refreshed) {
+            setSelectedSeason(refreshed);
+          }
+        }
+
+        if (selectedSeasonDetail) {
+          const refreshedDetail = fetchedSeasons.find((s) => s.id === selectedSeasonDetail.id);
+          if (refreshedDetail) {
+            setSelectedSeasonDetail(refreshedDetail);
+          }
+        }
+
+        if (editingSeason) {
+          const refreshedEditing = fetchedSeasons.find((s) => s.id === editingSeason.id);
+          if (refreshedEditing) {
+            setEditingSeason(refreshedEditing);
+          }
+        }
       }
 
       if (tracksRes.ok) {
@@ -149,12 +171,12 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
     return types[sessionType as keyof typeof types] || 'Unknown';
   };
 
-  const getStatusColor = (isActive: number) => {
-    switch (isActive) {
-      case 1:
+  const getStatusColor = (status: SeasonStatus) => {
+    switch (status) {
+      case 'active':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 0:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+      case 'completed':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
     }
@@ -172,8 +194,15 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
     }
   };
 
-  const getStatusText = (isActive: number) => {
-    return isActive === 1 ? 'Active' : 'Draft';
+  const getStatusText = (status: SeasonStatus) => {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'completed':
+        return 'Completed';
+      default:
+        return 'Draft';
+    }
   };
 
   const handleAddSeason = async () => {
@@ -202,7 +231,8 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         name: newSeason.name.trim(),
         year: newSeason.year,
         startDate: new Date().toISOString().split('T')[0], // Today's date
-        status: newSeason.status
+        status: newSeason.setAsCurrent ? 'active' : 'draft',
+        setAsCurrent: newSeason.setAsCurrent,
       });
 
       if (response.ok) {
@@ -211,7 +241,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         setNewSeason({ 
           name: '', 
           year: new Date().getFullYear(),
-          status: 'draft'
+          setAsCurrent: false
         });
         setFormErrors({});
         setShowAddModal(false);
@@ -232,6 +262,25 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
 
   const handleBackFromDetail = () => {
     setSelectedSeasonDetail(null);
+    loadData();
+  };
+
+  const handleSeasonDetailUpdated = (updatedSeason: Season) => {
+    setSeasons((prevSeasons) =>
+      prevSeasons.map((season) => (season.id === updatedSeason.id ? { ...season, ...updatedSeason } : season)),
+    );
+
+    setSelectedSeason((prev) =>
+      prev && prev.id === updatedSeason.id ? { ...prev, ...updatedSeason } : prev,
+    );
+
+    setSelectedSeasonDetail((prev) =>
+      prev && prev.id === updatedSeason.id ? { ...prev, ...updatedSeason } : prev,
+    );
+
+    setEditingSeason((prev) =>
+      prev && prev.id === updatedSeason.id ? { ...prev, ...updatedSeason } : prev,
+    );
   };
 
   const handleUpdateSeason = async () => {
@@ -253,11 +302,16 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       setStatus('loading');
       setStatusMessage('Updating season...');
 
-      const response = await apiPut(`/api/seasons/${editingSeason.id}`, {
+      const payload: Record<string, any> = {
         name: editingSeason.name.trim(),
         year: editingSeason.year,
-        status: editingSeason.status ?? 'draft',
-      });
+      };
+
+      if (editingSeason.status === 'draft' || editingSeason.status === 'completed') {
+        payload.status = editingSeason.status;
+      }
+
+      const response = await apiPut(`/api/seasons/${editingSeason.id}`, payload);
 
       if (response.ok) {
         setStatus('success');
@@ -298,6 +352,47 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Failed to delete season');
     }
+  };
+
+  const handleSetCurrentSeason = async (seasonId: string) => {
+    try {
+      setStatus('loading');
+      setStatusMessage('Setting current season...');
+
+      const response = await apiPost(`/api/seasons/${seasonId}/activate`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to activate season');
+      }
+
+      const data = await response.json();
+      const updatedSeason = data.season as Season | undefined;
+
+      setStatus('success');
+      setStatusMessage(`${updatedSeason?.name || 'Season'} is now the current season`);
+
+      if (updatedSeason) {
+        handleSeasonDetailUpdated(updatedSeason);
+      }
+
+      await loadData();
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to activate season');
+    }
+  };
+
+  const handleEditStatusChange = (value: SeasonStatus) => {
+    if (!editingSeason) {
+      return;
+    }
+
+    if (value === 'active') {
+      handleSetCurrentSeason(editingSeason.id);
+      return;
+    }
+
+    setEditingSeason({ ...editingSeason, status: value });
   };
 
   const handleAddEvent = async () => {
@@ -458,6 +553,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       <SeasonDetail 
         season={selectedSeasonDetail} 
         onBack={handleBackFromDetail}
+        onSeasonUpdated={handleSeasonDetailUpdated}
       />
     );
   }
@@ -937,13 +1033,22 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                     <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                       <span>Year: {season.year}</span>
                       <span>Started: {new Date(season.startDate).toLocaleDateString()}</span>
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(season.isActive)}`}>
-                        {getStatusText(season.isActive)}
+                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(season.status)}`}>
+                        {getStatusText(season.status)}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                  {season.status !== 'active' && (
+                    <button
+                      onClick={() => handleSetCurrentSeason(season.id)}
+                      className="text-green-600 hover:text-green-700 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      <span>Set Current</span>
+                    </button>
+                  )}
                   <button 
                     onClick={() => handleDeleteSeason(season.id)}
                     className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
@@ -1030,17 +1135,20 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Status
+                  Current Season
                 </label>
-                <select
-                  value={newSeason.status}
-                  onChange={(e) => setNewSeason({ ...newSeason, status: e.target.value as 'active' | 'completed' | 'draft' })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                </select>
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="new-season-current"
+                    type="checkbox"
+                    checked={newSeason.setAsCurrent}
+                    onChange={(e) => setNewSeason({ ...newSeason, setAsCurrent: e.target.checked })}
+                    className="h-4 w-4 text-red-600 border-gray-300 dark:border-gray-600 rounded focus:ring-red-500"
+                  />
+                  <label htmlFor="new-season-current" className="text-sm text-gray-600 dark:text-gray-300">
+                    Set this season as the current season after creation
+                  </label>
+                </div>
               </div>
             </div>
             
@@ -1051,7 +1159,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                   setNewSeason({ 
                     name: '', 
                     year: new Date().getFullYear(),
-                    status: 'draft'
+                    setAsCurrent: false
                   });
                   clearStatus();
                 }}
@@ -1117,12 +1225,12 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                 </label>
                 <select
                   value={editingSeason.status ?? 'draft'}
-                  onChange={(e) => setEditingSeason({ ...editingSeason, status: e.target.value as 'active' | 'completed' | 'draft' })}
+                  onChange={(e) => handleEditStatusChange(e.target.value as SeasonStatus)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
                   <option value="draft">Draft</option>
-                  <option value="active">Active</option>
                   <option value="completed">Completed</option>
+                  <option value="active">Active (make current)</option>
                 </select>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import express from 'express';
-import { DatabaseService, MemberData } from '../services/DatabaseService';
+import { DatabaseService } from '../services/DatabaseService';
+import { MemberData } from '../services/database/types';
 
 export default function createMembersRoutes(dbService: DatabaseService) {
   const router = express.Router();

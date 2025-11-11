@@ -3,6 +3,7 @@ import { Trophy, Calendar, Award, Star, Zap } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
 import { PreviousRaceResultsComponent } from './PreviousRaceResults';
 import { PanelHeader } from './layout/PanelHeader';
+import { F123DataService } from '../services/F123DataService';
 
 interface Driver {
   id: string;
@@ -24,6 +25,13 @@ interface Race {
   status: string;
   winner?: string;
   fastestLap?: string;
+}
+
+interface PodiumEntry {
+  position: number;
+  driver: string;
+  team: string;
+  teamColor: string;
 }
 
 interface Achievement {
@@ -57,6 +65,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const [standings, setStandings] = useState<Driver[]>([]);
   const [nextRace, setNextRace] = useState<Race | null>(null);
   const [previousRace, setPreviousRace] = useState<Race | null>(null);
+  const [previousRacePodium, setPreviousRacePodium] = useState<PodiumEntry[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [stats, setStats] = useState<SeasonStats | null>(null);
   const [events, setEvents] = useState<any[]>([]);
@@ -107,7 +116,58 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         );
         
         setNextRace(upcomingRaces[0] || null);
-        setPreviousRace(completedRaces[0] || null);
+        const latestCompletedRace = completedRaces[0] || null;
+        setPreviousRace(latestCompletedRace);
+
+        if (latestCompletedRace) {
+          const resultsResponse = await fetch(`${apiUrl}/api/races/${latestCompletedRace.id}/results`);
+          if (resultsResponse.ok) {
+            const resultsPayload = await resultsResponse.json();
+            const raceSession =
+              (resultsPayload.sessions || []).find((session: any) => session.sessionType === 10) ??
+              (resultsPayload.sessions || [])[0];
+
+            if (raceSession?.results) {
+              const podium = (raceSession.results as any[])
+                .map((driver) => {
+                  const pos = Number(driver.position ?? driver.race_position ?? driver.finishPosition);
+                  if (!pos || pos > 3) {
+                    return null;
+                  }
+
+                  const driverName =
+                    driver.json_driver_name ||
+                    driver.driver_name ||
+                    driver.mapping_driver_name ||
+                    'Unknown Driver';
+
+                  const rawTeamName =
+                    driver.json_team_name ||
+                    driver.mapping_team_name ||
+                    driver.driver_team ||
+                    'Unknown Team';
+                  const teamName = F123DataService.getTeamDisplayName(rawTeamName);
+
+                  return {
+                    position: pos,
+                    driver: driverName,
+                    team: teamName,
+                    teamColor: F123DataService.getTeamColorHex(rawTeamName),
+                  };
+                })
+                .filter((entry): entry is PodiumEntry => entry != null)
+                .sort((a, b) => a.position - b.position);
+
+              setPreviousRacePodium(podium);
+            } else {
+              setPreviousRacePodium([]);
+            }
+          } else {
+            setPreviousRacePodium([]);
+          }
+        } else {
+          setPreviousRacePodium([]);
+        }
       }
       
       // Fetch season statistics (endpoint doesn't exist yet, handle 404 gracefully)
@@ -231,7 +291,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const primaryAction = onScheduleView ? (
     <button
       onClick={onScheduleView}
-      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#FF1E56] via-[#FFAC33] to-[#3A86FF] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[#FF1E56]/30 transition hover:shadow-[0_18px_40px_-24px_rgba(255,30,86,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FF1E56]"
+      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric px-5 py-2 text-sm font-semibold text-white shadow-brand-glow transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-accent"
     >
       <Calendar className="h-4 w-4" />
       View schedule

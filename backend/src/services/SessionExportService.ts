@@ -32,9 +32,8 @@ export interface SessionResult {
 export class SessionExportService {
   private dbService: DatabaseService;
 
-  constructor(dbService?: DatabaseService) {
-    // Use dependency injection if provided, otherwise create new instance (for backward compatibility)
-    this.dbService = dbService || new DatabaseService();
+  constructor(dbService: DatabaseService) {
+    this.dbService = dbService;
   }
 
   /**

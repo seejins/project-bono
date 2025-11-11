@@ -76,7 +76,7 @@
   }
   
   .driver-row.moving {
-    background-color: rgba(59, 130, 246, 0.1);
+    background-color: rgba(37, 99, 235, 0.12);
     transform: scale(1.02);
   }
   
@@ -110,10 +110,7 @@
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #E10600 0%, #C92DD6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    @apply bg-brand-hero bg-clip-text text-transparent;
   }
   
   .text-shadow-lg {

@@ -18,8 +18,10 @@ import type {
   CartesianGridProps,
 } from 'recharts';
 
+import { BRAND_COLORS } from '../../theme/colors';
+
 const AXIS_TICK_STYLE = {
-  fill: '#6b7280',
+  fill: BRAND_COLORS.mutedStrong,
   fontSize: 12,
 } as const;
 

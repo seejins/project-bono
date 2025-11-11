@@ -1,18 +1,37 @@
 import express from 'express';
 import { DatabaseService } from '../services/DatabaseService';
+import type { AppRepositories } from '../services/database/repositories';
+import type { SeasonData, SeasonStatus } from '../services/database/types';
 
-export default function createSeasonsRoutes(dbService: DatabaseService) {
+const normalizeSeasonStatus = (value: any): SeasonStatus | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const lowered = value.toLowerCase();
+  if (lowered === 'active' || lowered === 'draft' || lowered === 'completed') {
+    return lowered as SeasonStatus;
+  }
+
+  return undefined;
+};
+
+export default function createSeasonsRoutes(
+  _dbService: DatabaseService,
+  repositories: AppRepositories,
+) {
   const router = express.Router();
+  const { seasons, drivers, tracks, races } = repositories;
 
   // Get all seasons
   router.get('/', async (req, res) => {
     try {
-      await dbService.ensureInitialized();
-      const seasons = await dbService.getAllSeasons();
+      await seasons.ensureInitialized();
+      const seasonList = await seasons.getAllSeasons();
       
       res.json({
         success: true,
-        seasons
+        seasons: seasonList
       });
     } catch (error) {
       console.error('Get seasons error:', error);
@@ -23,11 +42,37 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
     }
   });
 
+  router.post('/:id/activate', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await seasons.ensureInitialized();
+
+      const season = await seasons.getSeasonById(id);
+      if (!season) {
+        return res.status(404).json({ error: 'Season not found' });
+      }
+
+      await seasons.setCurrentSeason(id);
+      const updatedSeason = await seasons.getSeasonById(id);
+
+      res.json({
+        success: true,
+        season: updatedSeason,
+      });
+    } catch (error) {
+      console.error('Activate season error:', error);
+      res.status(500).json({
+        error: 'Failed to activate season',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   // Get historic insights (league-wide statistics)
   router.get('/history/insights', async (req, res) => {
     try {
-      await dbService.ensureInitialized();
-      const insights = await dbService.getHistoricInsights();
+      await seasons.ensureInitialized();
+      const insights = await seasons.getHistoricInsights();
       
       res.json({
         success: true,
@@ -45,12 +90,12 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   // Get seasons for history (completed and active)
   router.get('/history', async (req, res) => {
     try {
-      await dbService.ensureInitialized();
-      const seasons = await dbService.getSeasonsForHistory();
+      await seasons.ensureInitialized();
+      const seasonHistory = await seasons.getSeasonsForHistory();
       
       res.json({
         success: true,
-        seasons
+        seasons: seasonHistory
       });
     } catch (error) {
       console.error('Get seasons history error:', error);
@@ -65,8 +110,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id/previous-race', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
-      const previousRace = await dbService.getPreviousRaceResults(id);
+      await seasons.ensureInitialized();
+      const previousRace = await seasons.getPreviousRaceResults(id);
       
       res.json({
         success: true,
@@ -85,8 +130,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
-      const season = await dbService.getSeasonById(id);
+      await seasons.ensureInitialized();
+      const season = await seasons.getSeasonById(id);
       
       if (!season) {
         return res.status(404).json({ 
@@ -107,36 +152,64 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
     }
   });
 
+  router.get('/:id/standings', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await seasons.ensureInitialized();
+
+      const standings = await drivers.getSeasonStandings(id);
+      res.json({ success: true, standings });
+    } catch (error) {
+      console.error('Season standings error:', error);
+      res.status(500).json({
+        error: 'Failed to load season standings',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   // Create a new season
   router.post('/', async (req, res) => {
     try {
-      const { name, year, startDate, endDate, pointsSystem, fastestLapPoint } = req.body;
+      const { name, year, startDate, endDate, status, isActive, setAsCurrent } = req.body;
       
       if (!name || !year) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      await dbService.ensureInitialized();
-      const seasonId = await dbService.createSeason({
+      await seasons.ensureInitialized();
+
+      const normalizedStatus = normalizeSeasonStatus(status);
+      const shouldActivate =
+        normalizedStatus === 'active' ||
+        isActive === 1 ||
+        isActive === true ||
+        setAsCurrent === true;
+
+      const seasonId = await seasons.createSeason({
         name,
         year: parseInt(year),
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
         endDate: endDate ? new Date(endDate).toISOString() : undefined,
-        isActive: false
+        status:
+          shouldActivate
+            ? 'active'
+            : normalizedStatus && normalizedStatus !== 'active'
+              ? normalizedStatus
+              : 'draft',
       });
+
+      if (shouldActivate) {
+        await seasons.setCurrentSeason(seasonId);
+      }
       
-      console.log('Created season ID:', seasonId);
-      
-      // Get the full season object
-      const season = await dbService.getSeasonById(seasonId);
-      console.log('Retrieved season:', season);
+      const season = await seasons.getSeasonById(seasonId);
       
       if (!season) {
-        console.error('Failed to retrieve season after creation');
         return res.status(500).json({ error: 'Failed to retrieve created season' });
       }
       
-      res.json({
+      res.status(201).json({
         success: true,
         season
       });
@@ -153,9 +226,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, year, startDate, endDate, pointsSystem, fastestLapPoint, isActive } = req.body;
+      const { name, year, startDate, endDate, status, isActive } = req.body;
       
-      // Only require name and year if they're being updated
       if (name !== undefined && !name) {
         return res.status(400).json({ error: 'Name cannot be empty' });
       }
@@ -163,22 +235,36 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
         return res.status(400).json({ error: 'Year must be a valid number' });
       }
 
-      await dbService.ensureInitialized();
-      
-      // If this season is being activated, deactivate all other seasons
-      if (isActive === 1) {
-        await dbService.deactivateAllOtherSeasons(id);
-      }
-      
-      await dbService.updateSeason(id, {
+      await seasons.ensureInitialized();
+
+      const normalizedStatus = normalizeSeasonStatus(status);
+      const shouldActivate =
+        normalizedStatus === 'active' || isActive === 1 || isActive === true;
+      const shouldDeactivate = isActive === 0 || normalizedStatus === 'draft';
+
+      const updatePayload: Partial<SeasonData> = {
         name,
         year: year !== undefined ? parseInt(year) : undefined,
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
         endDate: endDate ? new Date(endDate).toISOString() : undefined,
-        isActive: isActive !== undefined ? isActive : undefined
-      });
+      };
+
+      if (shouldActivate) {
+        await seasons.setCurrentSeason(id);
+      }
+
+      if (normalizedStatus && normalizedStatus !== 'active') {
+        updatePayload.status = normalizedStatus;
+      } else if (shouldDeactivate) {
+        updatePayload.status = 'draft';
+      }
+
+      const hasUpdates = Object.values(updatePayload).some((value) => value !== undefined);
+      if (hasUpdates) {
+        await seasons.updateSeason(id, updatePayload);
+      }
       
-      const season = await dbService.getSeasonById(id);
+      const season = await seasons.getSeasonById(id);
       if (!season) {
         return res.status(404).json({ 
           error: 'Season not found' 
@@ -202,8 +288,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
-      await dbService.deleteSeason(id);
+      await seasons.ensureInitialized();
+      await seasons.deleteSeason(id);
       
       res.json({
         success: true,
@@ -222,11 +308,11 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id/participants', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
+      await seasons.ensureInitialized();
       
       // Get participants and driver mappings
-      const participants = await dbService.getDriversBySeason(id);
-      const driverMappings = await dbService.getDriverMappings(id);
+      const participants = await drivers.getDriversBySeason(id);
+      const driverMappings = await drivers.getDriverMappings(id);
       
       // Merge team information from driver mappings
       const participantsWithTeams = participants.map(participant => {
@@ -261,17 +347,17 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
         return res.status(400).json({ error: 'Member ID is required' });
       }
 
-      await dbService.ensureInitialized();
-      await dbService.addDriverToSeason(id, driverId);
+      await seasons.ensureInitialized();
+      await drivers.addDriverToSeason(id, driverId);
 
       if (team !== undefined || number !== undefined) {
-        await dbService.updateSeasonParticipant(driverId, {
+        await drivers.updateSeasonParticipant(driverId, {
           team: typeof team === 'string' ? team.trim() || undefined : team,
           number: number !== undefined && number !== null ? Number(number) : undefined
         });
       }
 
-      const participant = await dbService.getDriverById(driverId);
+      const participant = await drivers.getDriverById(driverId);
 
       res.json({
         success: true,
@@ -291,8 +377,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.delete('/:id/participants/:driverId', async (req, res) => {
     try {
       const { id, driverId } = req.params;
-      await dbService.ensureInitialized();
-      await dbService.removeDriverFromSeason(id, driverId);
+      await seasons.ensureInitialized();
+      await drivers.removeDriverFromSeason(id, driverId);
       
       res.json({
         success: true,
@@ -313,18 +399,18 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       const { id, driverId } = req.params;
       const { team, number } = req.body;
       
-      await dbService.ensureInitialized();
+      await seasons.ensureInitialized();
 
       if (team === undefined && number === undefined) {
         return res.status(400).json({ error: 'No updates provided for season participant' });
       }
 
-      await dbService.updateSeasonParticipant(driverId, {
+      await drivers.updateSeasonParticipant(driverId, {
         team: typeof team === 'string' ? team.trim() : team,
         number: number !== undefined && number !== null ? Number(number) : undefined
       });
 
-      const participant = await dbService.getDriverById(driverId);
+      const participant = await drivers.getDriverById(driverId);
 
       res.json({
         success: true,
@@ -344,12 +430,12 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id/tracks', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
-      const tracks = await dbService.getTracksBySeason(id);
+      await seasons.ensureInitialized();
+      const seasonTracks = await tracks.getTracksBySeason(id);
       
       res.json({
         success: true,
-        tracks
+        tracks: seasonTracks
       });
     } catch (error) {
       console.error('Get season tracks error:', error);
@@ -370,8 +456,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
         return res.status(400).json({ error: 'Track name and country are required' });
       }
 
-      await dbService.ensureInitialized();
-      const trackId = await dbService.createTrackAndAddToSeason({
+      await seasons.ensureInitialized();
+      const trackId = await tracks.createTrackAndAddToSeason({
         name,
         country,
         circuitLength: length ? parseFloat(length) : 0,
@@ -395,8 +481,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.delete('/:id/tracks/:trackId', async (req, res) => {
     try {
       const { id, trackId } = req.params;
-      await dbService.ensureInitialized();
-      await dbService.removeTrackFromSeason(id, trackId);
+      await seasons.ensureInitialized();
+      await tracks.removeTrackFromSeason(id, trackId);
       
       res.json({
         success: true,
@@ -415,12 +501,12 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id/races', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
-      const races = await dbService.getRacesBySeason(id);
+      await seasons.ensureInitialized();
+      const seasonRaces = await races.getRacesBySeason(id);
       
       res.json({
         success: true,
-        races
+        races: seasonRaces
       });
     } catch (error) {
       console.error('Get season races error:', error);
@@ -441,8 +527,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
         return res.status(400).json({ error: 'Track is required' });
       }
 
-      await dbService.ensureInitialized();
-      const raceId = await dbService.addRaceToSeason({
+      await seasons.ensureInitialized();
+      const raceId = await races.addRaceToSeason({
         seasonId: id,
         trackId,
         raceDate: date ? new Date(date).toISOString() : new Date().toISOString(),
@@ -466,8 +552,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.delete('/:id/races/:raceId', async (req, res) => {
     try {
       const { id, raceId } = req.params;
-      await dbService.ensureInitialized();
-      await dbService.removeRaceFromSeason(raceId);
+      await seasons.ensureInitialized();
+      await races.removeRaceFromSeason(raceId);
       
       res.json({
         success: true,
@@ -486,9 +572,9 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.get('/:id/events', async (req, res) => {
     try {
       const { id } = req.params;
-      await dbService.ensureInitialized();
+      await seasons.ensureInitialized();
       
-      const events = await dbService.getEventsBySeason(id);
+      const events = await races.getEventsBySeason(id);
       
       res.json({
         success: true,
@@ -513,8 +599,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
         return res.status(400).json({ error: 'Track name is required' });
       }
 
-      await dbService.ensureInitialized();
-      const eventId = await dbService.addEventToSeason(id, {
+      await seasons.ensureInitialized();
+      const eventId = await races.addEventToSeason(id, {
         track_name,
         date: date || new Date().toISOString(), // Default to current date if not provided
         session_type: session_type || 10, // Default to Race
@@ -545,8 +631,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       const { id, eventId } = req.params;
       const updateData = req.body;
       
-      await dbService.ensureInitialized();
-      await dbService.updateEventInSeason(eventId, updateData);
+      await seasons.ensureInitialized();
+      await races.updateEventInSeason(eventId, updateData);
       
       res.json({
         success: true,
@@ -565,8 +651,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.delete('/:id/events/:eventId', async (req, res) => {
     try {
       const { id, eventId } = req.params;
-      await dbService.ensureInitialized();
-      await dbService.removeEventFromSeason(eventId);
+      await seasons.ensureInitialized();
+      await races.removeEventFromSeason(eventId);
       
       res.json({
         success: true,
@@ -584,8 +670,8 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   // Get active season
   router.get('/active', async (req, res) => {
     try {
-      await dbService.ensureInitialized();
-      const activeSeason = await dbService.getActiveSeason();
+      await seasons.ensureInitialized();
+      const activeSeason = await seasons.getActiveSeason();
       
       if (!activeSeason) {
         return res.status(404).json({ 

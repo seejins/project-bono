@@ -11,6 +11,7 @@ import { useStintAnalytics } from './DriverRaceAnalysis/hooks/useStintAnalytics'
 import { useRaceStats } from './DriverRaceAnalysis/hooks/useRaceStats';
 import { DriverRaceAnalysisProps, LapStatusType } from './DriverRaceAnalysis/types';
 import { formatSecondsValue, formatSecondsDifference, getCompoundKey, getCompoundDisplayName } from './DriverRaceAnalysis/utils';
+import { BRAND_COLORS, STATUS_COLORS } from '../theme/colors';
 
 type AnalyticsTab = 'overview' | 'pace' | 'strategy' | 'telemetry';
 
@@ -267,7 +268,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             <div key={String(entry.dataKey)} className="flex items-center gap-2 text-gray-700 dark:text-gray-200">
               <span
                 className="inline-flex h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: entry.color || '#2563eb' }}
+                style={{ backgroundColor: entry.color || STATUS_COLORS.info }}
               ></span>
               <span>{entry.name}: {formatted}</span>
             </div>
@@ -383,7 +384,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             : status === 'yellowFlag'
             ? 'Yellow Flag'
             : 'Rain',
-        color: DEFAULT_OVERLAY_STYLES[status]?.color ?? '#9ca3af',
+        color: DEFAULT_OVERLAY_STYLES[status]?.color ?? STATUS_COLORS.neutral,
         pattern: DEFAULT_OVERLAY_STYLES[status]?.pattern,
       })),
     [statusLegend]
@@ -972,13 +973,13 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                           {
                             dataKey: 'targetLapSeconds',
                             name: driver?.name || 'Driver',
-                            stroke: '#2563eb',
+                            stroke: STATUS_COLORS.info,
                             dot: false,
                           },
                           {
                             dataKey: 'comparisonLapSeconds',
                             name: comparisonDriverName || 'Comparison',
-                            stroke: '#ef4444',
+                            stroke: STATUS_COLORS.danger,
                             dot: false,
                           },
                         ]}
@@ -1025,13 +1026,13 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                           {
                             dataKey: 'deltaSeconds',
                             name: 'Δ time vs comparison',
-                            stroke: '#f97316',
+                            stroke: STATUS_COLORS.amber,
                             dot: false,
                           },
                         ]}
                         yTickFormatter={(value) => formatSecondsDifference(value as number)}
                         tooltipContent={<DeltaTooltipContent />}
-                        referenceLines={[{ y: 0, stroke: '#94a3b8', strokeDasharray: '4 4' }]}
+                        referenceLines={[{ y: 0, stroke: BRAND_COLORS.muted, strokeDasharray: '4 4' }]}
                         overlays={chartOverlays}
                         className="h-full"
                       />
@@ -1076,9 +1077,9 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                             ? [
                                 {
                                   y: averageLapSeconds,
-                                  stroke: '#9ca3af',
+                                stroke: STATUS_COLORS.neutral,
                                   strokeDasharray: '4 4',
-                                  label: { value: 'Avg', fill: '#6b7280', position: 'right' },
+                                label: { value: 'Avg', fill: BRAND_COLORS.mutedStrong, position: 'right' },
                                 },
                               ]
                             : undefined
@@ -1113,7 +1114,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                           {
                             dataKey: 'averageSeconds',
                             name: 'Average Lap',
-                            fill: '#2563eb',
+                            fill: STATUS_COLORS.info,
                             barSize: 32,
                             getFill: (entry: any) => entry.color,
                           },

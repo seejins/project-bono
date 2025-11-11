@@ -1,4 +1,5 @@
 import { F123DataService } from '../../services/F123DataService';
+import { BRAND_COLORS, STATUS_COLORS } from '../../theme/colors';
 
 export const sanitizeLapTimeMs = (value: any): number | null => {
   if (value === undefined || value === null) return null;
@@ -42,21 +43,21 @@ export const getTireCompoundHex = (compound?: string): string => {
   switch (normalized) {
     case 'S':
     case 'SOFT':
-      return '#ef4444';
+      return STATUS_COLORS.danger;
     case 'M':
     case 'MEDIUM':
-      return '#eab308';
+      return STATUS_COLORS.warning;
     case 'H':
     case 'HARD':
-      return '#94a3b8';
+      return STATUS_COLORS.neutral;
     case 'I':
     case 'INTERMEDIATE':
-      return '#22c55e';
+      return STATUS_COLORS.success;
     case 'W':
     case 'WET':
-      return '#2563eb';
+      return STATUS_COLORS.info;
     default:
-      return '#a855f7';
+      return STATUS_COLORS.purple ?? BRAND_COLORS.accent;
   }
 };
 

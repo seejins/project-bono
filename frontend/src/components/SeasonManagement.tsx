@@ -39,7 +39,7 @@ export interface Season {
   drivers: Driver[];
   tracks: Track[];
   races: Race[];
-  isActive: boolean;
+  status: 'draft' | 'active' | 'completed';
 }
 
 interface SeasonManagementProps {
@@ -116,7 +116,7 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
         <SeasonDetail 
           season={selectedSeason}
           onBack={() => setViewSelectedSeason(false)}
-          onUpdate={handleUpdateSeason}
+          onSeasonUpdated={handleUpdateSeason}
         />
       ) : (
         <>
@@ -145,7 +145,7 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-3 h-3 rounded-full ${season.isActive ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <div className={`w-3 h-3 rounded-full ${season.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{season.name}</h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400">

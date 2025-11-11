@@ -43,13 +43,13 @@ export function PanelHeader({
         />
       )}
 
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#FF1E56] via-[#FFAC33] to-[#3A86FF]" />
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric" />
 
       <div className="flex flex-col gap-6 sm:gap-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8">
           <div className="flex flex-1 items-start gap-4">
             {icon && (
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF1E56] to-[#3A86FF] text-white shadow-lg shadow-[#FF1E56]/30">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-accent to-brand-electric text-white shadow-brand-glow">
                 {icon}
               </div>
             )}
