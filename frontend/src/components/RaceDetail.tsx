@@ -1,17 +1,38 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
+import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
 import { getTireCompound } from '../utils/f123DataMapping';
 import { useAdmin } from '../contexts/AdminContext';
 
+type DriverPenalty = {
+  id: string;
+  driverSessionResultId: string;
+  seconds: number;
+  reason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  isPending?: boolean;
+  isRemovalPending?: boolean;
+};
+
+type PendingPenaltyAdd = {
+  id: string;
+  driverSessionResultId: string;
+  seconds: number;
+  reason: string;
+};
+
+type PendingPenaltyRemoval = {
+  penaltyId: string;
+  driverSessionResultId: string;
+};
+
 interface RaceDetailProps {
   raceId: string;
-  backHref?: string;
   onDriverSelect: (driverId: string, raceId: string, initialSessionType?: 'race' | 'qualifying' | 'practice') => void;
 }
 
-export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriverSelect }) => {
+export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }) => {
   const { isAuthenticated } = useAdmin();
   const [activeSession, setActiveSession] = useState<'practice' | 'qualifying' | 'race'>('race');
   const [raceData, setRaceData] = useState<any>(null);
@@ -24,9 +45,36 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
   const [selectedDriver, setSelectedDriver] = useState<F123DriverResult | null>(null);
   const [penaltySeconds, setPenaltySeconds] = useState<string>('5');
   const [penaltyReason, setPenaltyReason] = useState<string>('');
-  const [penaltyHistory, setPenaltyHistory] = useState<Record<string, any[]>>({}); // driverId -> penalty edits
-  const [pendingPenalties, setPendingPenalties] = useState<Array<{seconds: number, reason: string, id: string, driverSessionResultId: string}>>([]); // Temporary penalties to be added
-  const [pendingPenaltyRemovals, setPendingPenaltyRemovals] = useState<Array<{penaltyId: string, driverSessionResultId: string}>>([]); // Pending penalty removals
+  const [penaltiesByDriver, setPenaltiesByDriver] = useState<Record<string, DriverPenalty[]>>({});
+  const [pendingPenaltyAdds, setPendingPenaltyAdds] = useState<PendingPenaltyAdd[]>([]);
+  const [pendingPenaltyRemovals, setPendingPenaltyRemovals] = useState<PendingPenaltyRemoval[]>([]);
+
+  const normalizePenalties = useCallback((penalties: any, driverSessionResultId: string): DriverPenalty[] => {
+    let list = penalties;
+
+    if (typeof list === 'string') {
+      try {
+        list = JSON.parse(list);
+      } catch {
+        list = [];
+      }
+    }
+
+    if (!Array.isArray(list)) {
+      list = [];
+    }
+
+    return list
+      .map((penalty: any) => ({
+        id: penalty.id,
+        driverSessionResultId,
+        seconds: Number(penalty.seconds) || 0,
+        reason: penalty.reason ?? null,
+        createdAt: penalty.created_at || penalty.createdAt || new Date().toISOString(),
+        createdBy: penalty.created_by ?? penalty.createdBy ?? null
+      }))
+      .sort((a: DriverPenalty, b: DriverPenalty) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, []);
 
   useEffect(() => {
     fetchRaceData();
@@ -265,78 +313,136 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     updateDriversFromSessions();
   }, [updateDriversFromSessions]);
 
+  useEffect(() => {
+    if (!sessions || sessions.length === 0) {
+      setPenaltiesByDriver({});
+      return;
+    }
+
+    const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] :
+      activeSession === 'qualifying' ? [5, 6, 7, 8, 9] :
+      [10];
+
+    const matchingSessions = sessions.filter((s: any) => targetSessionType.includes(s.sessionType));
+    const session = matchingSessions.length > 0
+      ? matchingSessions.sort((a: any, b: any) => (b.sessionType || 0) - (a.sessionType || 0))[0]
+      : null;
+
+    if (!session || !session.results) {
+      setPenaltiesByDriver({});
+      return;
+    }
+
+    const map: Record<string, DriverPenalty[]> = {};
+    session.results.forEach((result: any) => {
+      const driverSessionResultId = result.id || result.driver_session_result_id;
+      if (!driverSessionResultId) {
+        return;
+      }
+
+      const penalties = result.penalty_details ?? result.penaltyDetails ?? [];
+      const normalizedPenalties = normalizePenalties(penalties, driverSessionResultId);
+
+      if (normalizedPenalties.length > 0) {
+        map[driverSessionResultId] = normalizedPenalties;
+      }
+    });
+
+    setPenaltiesByDriver(map);
+  }, [sessions, activeSession, normalizePenalties]);
+
+  const fetchSessionPenalties = useCallback(async () => {
+    if (!sessions || sessions.length === 0) return;
+
+    const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] :
+      activeSession === 'qualifying' ? [5, 6, 7, 8, 9] :
+      [10];
+
+    const matchingSessions = sessions.filter((s: any) => targetSessionType.includes(s.sessionType));
+    const session = matchingSessions.length > 0
+      ? matchingSessions.sort((a: any, b: any) => (b.sessionType || 0) - (a.sessionType || 0))[0]
+      : null;
+
+    const sessionId = session?.id || session?.sessionId;
+    if (!sessionId) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/races/sessions/${sessionId}/penalties`);
+
+      if (response.ok) {
+        const data = await response.json();
+        const penalties = Array.isArray(data.penalties) ? data.penalties : [];
+
+        const grouped: Record<string, any[]> = {};
+        penalties.forEach((penalty: any) => {
+          const driverSessionResultId = penalty.driver_session_result_id;
+          if (!driverSessionResultId) {
+            return;
+          }
+
+          if (!grouped[driverSessionResultId]) {
+            grouped[driverSessionResultId] = [];
+          }
+
+          grouped[driverSessionResultId].push(penalty);
+        });
+
+        const map: Record<string, DriverPenalty[]> = {};
+        Object.entries(grouped).forEach(([driverSessionResultId, rawPenalties]) => {
+          const normalized = normalizePenalties(rawPenalties, driverSessionResultId);
+          if (normalized.length > 0) {
+            map[driverSessionResultId] = normalized;
+          }
+        });
+
+        setPenaltiesByDriver(map);
+      }
+    } catch (error) {
+      console.error('Error fetching session penalties:', error);
+    }
+  }, [sessions, activeSession, normalizePenalties]);
+
+  const fetchDriverPenalties = useCallback(async (driverSessionResultId: string) => {
+    if (!driverSessionResultId) return;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/races/driver-results/${driverSessionResultId}/penalties`);
+
+      if (!response.ok) {
+        console.error('Failed to fetch driver penalties:', response.status, response.statusText);
+        return;
+      }
+
+      const data = await response.json();
+      const penalties = Array.isArray(data.penalties) ? data.penalties : [];
+      const normalized = normalizePenalties(penalties, driverSessionResultId);
+
+      setPenaltiesByDriver(prev => {
+        const updated = { ...prev };
+        if (normalized.length === 0) {
+          delete updated[driverSessionResultId];
+        } else {
+          updated[driverSessionResultId] = normalized;
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error fetching driver penalties:', error);
+    }
+  }, [normalizePenalties]);
+
   // Fetch penalty history when entering edit mode
   useEffect(() => {
     if (isEditing && sessions.length > 0) {
-      fetchPenaltyHistory();
-      setPendingPenalties([]);
+      fetchSessionPenalties();
+      setPendingPenaltyAdds([]);
       setPendingPenaltyRemovals([]);
-    } else {
-      setPenaltyHistory({});
     }
-  }, [isEditing, activeSession, sessions]);
+  }, [isEditing, activeSession, sessions, fetchSessionPenalties]);
 
   // Note: Removed redundant penalty history fetch when modal opens - already fetched when entering edit mode
-
-  const fetchPenaltyHistory = async () => {
-    if (!sessions || sessions.length === 0) return;
-    
-    const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] : 
-                              activeSession === 'qualifying' ? [5, 6, 7, 8, 9] : 
-                              [10];
-    
-    const matchingSessions = sessions.filter((s: any) => targetSessionType.includes(s.sessionType));
-    const session = matchingSessions.length > 0 
-      ? matchingSessions.sort((a: any, b: any) => (b.sessionType || 0) - (a.sessionType || 0))[0]
-      : null;
-    
-    const sessionId = session?.id || session?.sessionId;
-    if (!sessionId) return;
-    
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/races/sessions/${sessionId}/edit-history`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        const history = data.editHistory || [];
-        
-        // Filter only penalty-related edits and group by driver_session_result_id (UUID)
-        // Store penalties indexed by driver_session_result_id for efficient matching
-        const penaltyEdits: Record<string, any[]> = {};
-        const allPenalties: any[] = []; // Flat list for searching
-        
-        history.forEach((edit: any) => {
-          if (edit.edit_type === 'post_race_penalty' || edit.edit_type === 'post_race_penalty_removal') {
-            // Always add to flat list
-            allPenalties.push(edit);
-            
-            // Index by driver_session_result_id (UUID) - this is the primary key
-            if (edit.driver_session_result_id) {
-              if (!penaltyEdits[edit.driver_session_result_id]) {
-                penaltyEdits[edit.driver_session_result_id] = [];
-              }
-              penaltyEdits[edit.driver_session_result_id].push(edit);
-            }
-          }
-        });
-        
-        // Store flat list for searching
-        penaltyEdits['_all'] = allPenalties;
-        
-        console.log('📊 Fetched penalty history:', {
-          sessionId,
-          totalEdits: history.length,
-          penaltyEdits: Object.keys(penaltyEdits).length,
-          penaltyEditsByDriver: Object.keys(penaltyEdits).map(key => ({ driverId: key, count: penaltyEdits[key].length }))
-        });
-        
-        setPenaltyHistory(penaltyEdits);
-      }
-    } catch (error) {
-      console.error('Error fetching penalty history:', error);
-    }
-  };
 
   const fetchRaceData = async () => {
     try {
@@ -400,17 +506,32 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
 
   // Memoize penalty map for O(1) lookups instead of O(n) array iterations
   const penaltyMap = useMemo(() => {
-    const map = new Map<string, any[]>();
-    (penaltyHistory['_all'] || []).forEach((p: any) => {
-      if (p.driver_session_result_id && p.edit_type === 'post_race_penalty' && !p.is_reverted) {
-        if (!map.has(p.driver_session_result_id)) {
-          map.set(p.driver_session_result_id, []);
-        }
-        map.get(p.driver_session_result_id)!.push(p);
-      }
+    const map = new Map<string, DriverPenalty[]>();
+
+    Object.entries(penaltiesByDriver).forEach(([driverId, penalties]) => {
+      const cloned = penalties.map(penalty => ({
+        ...penalty,
+        isRemovalPending: pendingPenaltyRemovals.some(removal => removal.penaltyId === penalty.id)
+      }));
+      map.set(driverId, cloned);
     });
+
+    pendingPenaltyAdds.forEach(pending => {
+      const existing = map.get(pending.driverSessionResultId) ?? [];
+      const pendingPenalty: DriverPenalty = {
+        id: pending.id,
+        driverSessionResultId: pending.driverSessionResultId,
+        seconds: pending.seconds,
+        reason: pending.reason,
+        createdAt: new Date().toISOString(),
+        createdBy: 'pending',
+        isPending: true
+      };
+      map.set(pending.driverSessionResultId, [...existing, pendingPenalty]);
+    });
+
     return map;
-  }, [penaltyHistory]);
+  }, [penaltiesByDriver, pendingPenaltyAdds, pendingPenaltyRemovals]);
 
   // Memoize fastest sectors calculation (use reduce to avoid stack overflow with large arrays)
   // MUST be before any early returns to follow Rules of Hooks
@@ -448,24 +569,20 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     }
     
     // Second check: Use Map for O(1) lookup
-    if (penaltyMap.has(driverSessionResultId)) {
+    const penalties = penaltyMap.get(driverSessionResultId) || [];
+    if (penalties.some(p => !p.isRemovalPending)) {
       return true;
     }
     
-    // Third check: Check if this driver has pending penalties/removals
-    const matchingPendingPenalties = pendingPenalties.some(p => {
-      return p.driverSessionResultId === driverSessionResultId;
-    });
-    const matchingPendingRemovals = pendingPenaltyRemovals.some(r => {
-      return r.driverSessionResultId === driverSessionResultId;
-    });
+    // Third check: Pending additions
+    const matchingPendingAdd = pendingPenaltyAdds.some(p => p.driverSessionResultId === driverSessionResultId);
     
-    return matchingPendingPenalties || matchingPendingRemovals;
-  }, [penaltyMap, pendingPenalties, pendingPenaltyRemovals]);
+    return matchingPendingAdd;
+  }, [penaltyMap, pendingPenaltyAdds]);
 
   // Helper function to get all penalties for a driver (for modal display)
   // Uses driver_session_result_id (UUID) for direct matching with Map lookup
-  const getDriverPenalties = useCallback((driver: F123DriverResult): any[] => {
+  const getDriverPenalties = useCallback((driver: F123DriverResult): DriverPenalty[] => {
     const driverSessionResultId = getDriverSessionResultId(driver);
     
     if (!driverSessionResultId) return [];
@@ -473,11 +590,12 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     // Use Map for O(1) lookup instead of filtering array
     const matchingPenalties = penaltyMap.get(driverSessionResultId) || [];
     
-    // Filter out pending removals
-    return matchingPenalties.filter((p: any) => {
-      return !pendingPenaltyRemovals.some(removal => removal.penaltyId === p.id);
+    return [...matchingPenalties].sort((a, b) => {
+      const aDate = new Date(a.createdAt).getTime();
+      const bDate = new Date(b.createdAt).getTime();
+      return bDate - aDate;
     });
-  }, [penaltyMap, pendingPenaltyRemovals]);
+  }, [penaltyMap]);
 
   const getCurrentSession = () => {
     const currentSession = sessions.find(s => {
@@ -514,20 +632,20 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
       return;
     }
     
-    const newPenalty = {
+    const newPenalty: PendingPenaltyAdd = {
       seconds,
       reason: penaltyReason.trim(),
       id: `pending-${Date.now()}-${Math.random()}`,
       driverSessionResultId: driverSessionResultId  // UUID from driver_session_results.id
     };
     
-    setPendingPenalties([...pendingPenalties, newPenalty]);
+    setPendingPenaltyAdds([...pendingPenaltyAdds, newPenalty]);
     setPenaltySeconds('5');
     setPenaltyReason('');
   };
 
   const handleRemovePendingPenalty = (id: string) => {
-    setPendingPenalties(pendingPenalties.filter(p => p.id !== id));
+    setPendingPenaltyAdds(pendingPenaltyAdds.filter(p => p.id !== id));
   };
 
   const handleApplyPenalties = () => {
@@ -538,7 +656,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     setSelectedDriver(null);
     setPenaltySeconds('5');
     setPenaltyReason('');
-    // Note: pendingPenalties and pendingPenaltyRemovals are NOT cleared here
+    // Note: pendingPenaltyAdds and pendingPenaltyRemovals are NOT cleared here
     // They remain pending until Save or Cancel is clicked in edit mode
   };
 
@@ -547,7 +665,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
 
     try {
       // Apply all pending penalty additions (use driverSessionResultId)
-      for (const penalty of pendingPenalties) {
+      for (const penalty of pendingPenaltyAdds) {
         if (!penalty.driverSessionResultId) {
           console.warn('Skipping penalty with missing driverSessionResultId:', penalty);
           continue;
@@ -573,40 +691,20 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
 
       // Apply all pending penalty removals
       for (const removal of pendingPenaltyRemovals) {
-        // Find the penalty to remove - use _all array for searching
-        const allPenalties = penaltyHistory['_all'] || [];
-        const penalty = allPenalties.find((p: any) => p.id === removal.penaltyId);
-        
-        if (!penalty) {
-          console.warn(`Penalty ${removal.penaltyId} not found in history`);
+        if (!removal.penaltyId) {
+          console.warn('Skipping removal with missing penaltyId:', removal);
           continue;
         }
 
-        const penaltySeconds = penalty.new_value?.post_race_penalties - (penalty.old_value?.post_race_penalties || 0);
-        if (!penaltySeconds || penaltySeconds <= 0) {
-          console.warn(`Invalid penalty seconds for penalty ${removal.penaltyId}: ${penaltySeconds}`);
-          continue;
-        }
-        
         if (!removal.driverSessionResultId) {
           console.warn('Skipping removal with missing driverSessionResultId:', removal);
           continue;
         }
 
-        // Use driverSessionResultId from removal (already stored)
-        
-        console.log(`Removing penalty: ${removal.penaltyId}, driverSessionResultId: ${removal.driverSessionResultId}, seconds: ${penaltySeconds}`);
+        console.log(`Removing penalty: ${removal.penaltyId}, driverSessionResultId: ${removal.driverSessionResultId}`);
 
-        const response = await fetch(`${apiUrl}/api/races/driver-results/${removal.driverSessionResultId}/penalties`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            penaltySeconds,
-            reason: `Removed penalty: ${penalty.reason || 'No reason provided'}`,
-            editedBy: 'admin'
-          })
+        const response = await fetch(`${apiUrl}/api/races/driver-results/${removal.driverSessionResultId}/penalties/${removal.penaltyId}`, {
+          method: 'DELETE'
         });
 
         const data = await response.json();
@@ -616,10 +714,10 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
       }
 
       // Refresh all data
+      await fetchSessionPenalties();
       await fetchRaceData();
-      await fetchPenaltyHistory();
       setIsEditing(false);
-      setPendingPenalties([]);
+      setPendingPenaltyAdds([]);
       setPendingPenaltyRemovals([]);
     } catch (error) {
       console.error('Error saving changes:', error);
@@ -631,11 +729,11 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     // Discard ALL pending changes and reload original state
     // This ensures no changes are saved when Cancel is clicked
     console.log('Canceling edit mode - discarding all pending changes:', {
-      pendingPenalties: pendingPenalties.length,
+      pendingPenaltyAdds: pendingPenaltyAdds.length,
       pendingPenaltyRemovals: pendingPenaltyRemovals.length
     });
     
-    setPendingPenalties([]);
+    setPendingPenaltyAdds([]);
     setPendingPenaltyRemovals([]);
     setPenaltyModalOpen(false);
     setSelectedDriver(null);
@@ -645,18 +743,23 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
     
     // Reload data to get original state (this will overwrite any local changes)
     await fetchRaceData();
-    await fetchPenaltyHistory();
+    await fetchSessionPenalties();
     
     console.log('Edit mode cancelled - all pending changes discarded');
   };
 
-  const handleRemovePenaltyById = (driver: F123DriverResult, penalty: any) => {
+  const handleRemovePenaltyById = (driver: F123DriverResult, penalty: DriverPenalty) => {
     // Add to pending removals instead of applying immediately
     // Use driver_session_result_id (UUID) for matching
     const driverSessionResultId = getDriverSessionResultId(driver);
     
     if (!driverSessionResultId) {
       console.warn('Cannot remove penalty - missing driverSessionResultId');
+      return;
+    }
+
+    if (penalty.isPending) {
+      setPendingPenaltyAdds(pendingPenaltyAdds.filter(p => p.id !== penalty.id));
       return;
     }
     
@@ -678,76 +781,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
       driverSessionResultId: driverSessionResultId,
       totalPending: pendingPenaltyRemovals.length + 1
     });
-    
-    // Remove from displayed penalty history (optimistic update)
-    const updatedHistory = { ...penaltyHistory };
-    if (updatedHistory[driverSessionResultId]) {
-      updatedHistory[driverSessionResultId] = updatedHistory[driverSessionResultId].filter((p: any) => p.id !== penalty.id);
-      setPenaltyHistory(updatedHistory);
-    }
-  };
-
-  const handleRemovePenalty = async () => {
-    if (!selectedDriver || !penaltySeconds || !penaltyReason.trim()) {
-      alert('Please enter penalty seconds and reason');
-      return;
-    }
-
-    const seconds = parseFloat(penaltySeconds);
-    if (isNaN(seconds) || seconds <= 0) {
-      alert('Penalty seconds must be a positive number');
-      return;
-    }
-
-    // Check if removing more than current post-race penalty
-    const currentPostRacePenalty = (selectedDriver as any).postRacePenalties || 0;
-    if (seconds > currentPostRacePenalty) {
-      alert(`Cannot remove ${seconds}s penalty. Current post-race penalty is only ${currentPostRacePenalty}s.`);
-      return;
-    }
-
-    const sessionId = getCurrentSession();
-    
-    if (!sessionId) {
-      console.error('Session not found. Sessions:', sessions);
-      console.error('Active session:', activeSession);
-      alert('Session not found. Please ensure the session has been completed.');
-      return;
-    }
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/races/sessions/${sessionId}/penalties`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          driverId: (selectedDriver as any).driver_session_result_id || (selectedDriver as any).driver_id || selectedDriver.id,
-          penaltySeconds: seconds,
-          reason: penaltyReason.trim(),
-          editedBy: 'admin' // TODO: Get actual admin username
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Refresh race data to show updated penalties and positions
-        await fetchRaceData();
-        setPenaltyModalOpen(false);
-        setSelectedDriver(null);
-        setPenaltySeconds('5');
-        setPenaltyReason('');
-      } else {
-        const errorMessage = data.error || data.details || 'Failed to remove penalty';
-        console.error('Penalty error:', { status: response.status, data });
-        alert(errorMessage);
-      }
-    } catch (error) {
-      console.error('Error removing penalty:', error);
-      alert(`Failed to remove penalty: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
   };
 
   if (loading) {
@@ -777,25 +810,11 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
   return (
     <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        {backHref ? (
-          <Link 
-            to={backHref} 
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2 text-base font-medium"
-          >
-            <ArrowLeft className="w-6 h-6" />
-            <span>Back</span>
-          </Link>
-        ) : (
-          <div className="w-10" />
+      <div className="mb-6 text-center">
+        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{raceData.trackName || 'Race'}</h1>
+        {raceData.track?.name && (
+          <p className="text-lg text-gray-600 dark:text-gray-400 mt-1">{raceData.track.name}</p>
         )}
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{raceData.trackName || 'Race'}</h1>
-          {raceData.track?.name && (
-            <p className="text-lg text-gray-600 dark:text-gray-400 mt-1">{raceData.track.name}</p>
-          )}
-        </div>
-        <div className="w-10"></div>
       </div>
 
       {/* Race Info */}
@@ -1136,11 +1155,16 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
                                     setSelectedDriver(driver);
                                     setPenaltySeconds('5');
                                     setPenaltyReason('');
-                                    setPendingPenalties([]);
+                                    setPendingPenaltyAdds([]);
                                     setPendingPenaltyRemovals([]);
                                     setPenaltyModalOpen(true);
                                     // Refresh penalty history when opening modal
-                                    await fetchPenaltyHistory();
+                                    const driverSessionResultId = getDriverSessionResultId(driver);
+                                    if (driverSessionResultId) {
+                                      await fetchDriverPenalties(driverSessionResultId);
+                                    } else {
+                                      await fetchSessionPenalties();
+                                    }
                                   }}
                                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${buttonColor}`}
                                 >
@@ -1267,7 +1291,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
       {/* Penalty Modal */}
       {penaltyModalOpen && selectedDriver && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="modal-overlay"
           onClick={(e) => {
             // Close modal if clicking the backdrop
             // Don't clear pending changes - user might want to continue editing
@@ -1276,13 +1300,13 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
               setSelectedDriver(null);
               setPenaltySeconds('5');
               setPenaltyReason('');
-              // Note: pendingPenalties and pendingPenaltyRemovals are NOT cleared
+              // Note: pendingPenaltyAdds and pendingPenaltyRemovals are NOT cleared
               // They remain pending until Save or Cancel is clicked in edit mode
             }
           }}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4"
+            className="modal-panel max-w-md p-6 mx-4"
             onClick={(e) => e.stopPropagation()} // Prevent backdrop click from closing
           >
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
@@ -1291,96 +1315,83 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
             
             {/* Existing Penalties List */}
             {(() => {
-              // Use helper function to get penalties for this driver
-              const existingPenalties = getDriverPenalties(selectedDriver);
-              
-              // Debug log
-              const driverId = (selectedDriver as any).driver_id;
-              const currentDriverPosition = (selectedDriver as any).racePosition || (selectedDriver as any).qualifyingPosition || (selectedDriver as any).practicePosition;
-              console.log('🔍 Penalty Modal Debug:', {
-                driverSessionResultId: getDriverSessionResultId(selectedDriver), // UUID primary key
-                userId: (selectedDriver as any).user_id, // User mapping (may be null)
-                jsonDriverId: (selectedDriver as any).json_driver_id, // In-game driver ID
-                currentDriverPosition,
-                penaltyHistoryKeys: Object.keys(penaltyHistory),
-                totalPenaltiesInHistory: penaltyHistory['_all']?.length || 0,
-                penaltiesForDriver: getDriverSessionResultId(selectedDriver) ? (penaltyHistory[getDriverSessionResultId(selectedDriver)!] || []).length : 0,
-                existingPenaltiesCount: existingPenalties.length,
-                existingPenalties: existingPenalties.map(p => ({ 
-                  id: p.id, 
-                  driver_session_result_id: p.driver_session_result_id,
-                  storedPosition: p.old_value?.position,
-                  currentPosition: p.new_value?.position,
-                  seconds: p.new_value?.post_race_penalties - (p.old_value?.post_race_penalties || 0), 
-                  reason: p.reason 
-                })),
-                selectedDriver: {
-                  id: selectedDriver.id,
-                  driver_session_result_id: (selectedDriver as any).driver_session_result_id,
-                  user_id: (selectedDriver as any).user_id,
-                  json_driver_id: (selectedDriver as any).json_driver_id,
-                  currentPosition: currentDriverPosition
-                }
-              });
+              const driverSessionResultId = getDriverSessionResultId(selectedDriver);
+              const penalties = getDriverPenalties(selectedDriver);
+              const committedPenalties = penalties.filter((penalty: DriverPenalty) => !penalty.isPending);
+              const pendingAddsForDriver = pendingPenaltyAdds.filter(p => p.driverSessionResultId === driverSessionResultId);
               
               return (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Existing Penalties
-                  </label>
-                  {existingPenalties.length > 0 ? (
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {existingPenalties.map((penalty: any, index: number) => {
-                        const penaltySeconds = penalty.new_value?.post_race_penalties - (penalty.old_value?.post_race_penalties || 0);
-                        return (
-                          <div key={penalty.id || index} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded border border-red-200 dark:border-red-800">
-                            <span className="text-sm text-red-700 dark:text-red-300 font-medium">
-                              {penaltySeconds > 0 ? `+${penaltySeconds}s` : `${penaltySeconds}s`} - {penalty.reason || 'No reason'}
-                            </span>
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Active Penalties
+                    </label>
+                    {committedPenalties.length > 0 ? (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {committedPenalties.map((penalty) => (
+                          <div
+                            key={penalty.id}
+                            className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded border border-red-200 dark:border-red-800"
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                                {penalty.seconds > 0 ? `+${penalty.seconds}s` : `${penalty.seconds}s`}
+                                <span className="font-normal">
+                                  {penalty.reason ? ` – ${penalty.reason}` : ' – No reason provided'}
+                                </span>
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                Added {new Date(penalty.createdAt).toLocaleString()} {penalty.createdBy ? `by ${penalty.createdBy}` : ''}
+                              </span>
+                              {penalty.isRemovalPending && (
+                                <span className="mt-1 inline-flex items-center w-fit rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                                  Removal pending
+                                </span>
+                              )}
+                            </div>
                             <button
                               onClick={() => {
                                 handleRemovePenaltyById(selectedDriver, penalty);
                               }}
-                              className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40 rounded p-1 transition-colors"
-                              title="Remove penalty"
+                              className={`text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/40 rounded p-1 transition-colors ${penalty.isRemovalPending ? 'opacity-60' : ''}`}
+                              title={penalty.isRemovalPending ? 'Undo removal' : 'Mark for removal'}
                             >
                               <X size={16} />
                             </button>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No existing post-race penalties</p>
+                    )}
+                  </div>
+
+                  {pendingAddsForDriver.length > 0 && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Pending Additions
+                      </label>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {pendingAddsForDriver.map((penalty) => (
+                          <div key={penalty.id} className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
+                            <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                              +{penalty.seconds}s – {penalty.reason}
+                            </span>
+                            <button
+                              onClick={() => handleRemovePendingPenalty(penalty.id)}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded p-1 transition-colors"
+                              title="Remove from pending"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No existing post-race penalties</p>
                   )}
-                </div>
+                </>
               );
             })()}
-            
-            {/* Pending Penalties List */}
-            {pendingPenalties.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Pending Penalties
-                </label>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {pendingPenalties.map((penalty) => (
-                    <div key={penalty.id} className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
-                      <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-                        {penalty.seconds}s - {penalty.reason}
-                      </span>
-                      <button
-                        onClick={() => handleRemovePendingPenalty(penalty.id)}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded p-1 transition-colors"
-                        title="Remove from pending"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             
             {/* Add New Penalty Form */}
             <div className="space-y-4 mb-4">
@@ -1432,7 +1443,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
                   
                   if (driverSessionResultId) {
                     // Remove pending penalties for this driver
-                    setPendingPenalties(pendingPenalties.filter(p => {
+                    setPendingPenaltyAdds(pendingPenaltyAdds.filter(p => {
                       return p.driverSessionResultId !== driverSessionResultId;
                     }));
                     
@@ -1451,7 +1462,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, backHref, onDriv
               >
                 Cancel
               </button>
-              {(pendingPenalties.length > 0 || pendingPenaltyRemovals.some(r => {
+              {(pendingPenaltyAdds.length > 0 || pendingPenaltyRemovals.some(r => {
                 const driverSessionResultId = getDriverSessionResultId(selectedDriver);
                 return driverSessionResultId && r.driverSessionResultId === driverSessionResultId;
               })) && (

@@ -55,7 +55,7 @@ class SessionExportService {
             status: 'completed'
         };
         // Get or create track
-        const track = await this.dbService.findOrCreateTrack(sessionData.trackName);
+        const trackId = await this.dbService.findOrCreateTrack(sessionData.trackName);
         // Get current active season
         const seasons = await this.dbService.getAllSeasons();
         const activeSeason = seasons.find(s => s.isActive) || seasons[0];
@@ -65,7 +65,7 @@ class SessionExportService {
         // Create race in database
         const raceId = await this.dbService.createRace({
             seasonId: activeSeason.id,
-            trackId: track.id,
+            trackId,
             raceDate: sessionData.sessionEndTime.toISOString(),
             status: 'completed'
         });
@@ -81,15 +81,15 @@ class SessionExportService {
             teamName: driver.teamName,
             carNumber: driver.carNumber,
             position: driver.carPosition,
-            lapTime: driver.lapTime,
-            sector1Time: driver.sector1Time,
-            sector2Time: driver.sector2Time,
-            sector3Time: driver.sector3Time,
-            bestLapTime: driver.bestLapTime,
+            lapTime: driver.lapTime ?? 0,
+            sector1Time: driver.sector1Time ?? 0,
+            sector2Time: driver.sector2Time ?? 0,
+            sector3Time: driver.sector3Time ?? 0,
+            bestLapTime: driver.bestLapTime ?? driver.lapTime ?? 0,
             gapToPole: 0, // Will be calculated later
-            penalties: driver.penalties,
-            warnings: driver.warnings,
-            dnfReason: driver.penalties > 0 ? 'Penalty' : undefined,
+            penalties: driver.penalties ?? 0,
+            warnings: driver.warnings ?? 0,
+            dnfReason: (driver.penalties ?? 0) > 0 ? 'Penalty' : undefined,
             dataSource: 'UDP'
         }));
     }
@@ -258,7 +258,7 @@ class SessionExportService {
             // Get statistics from driver_session_results for all race sessions in this race
             const statsResult = await this.dbService.query(`
         SELECT 
-          COUNT(DISTINCT dsr.member_id) as total_drivers,
+          COUNT(DISTINCT dsr.driver_id) as total_drivers,
           COUNT(DISTINCT dsr.id) as total_results,
           AVG(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as average_lap_time,
           MIN(CASE WHEN dsr.best_lap_time_ms > 0 THEN dsr.best_lap_time_ms ELSE NULL END)::INTEGER as fastest_lap,

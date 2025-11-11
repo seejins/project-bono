@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Plus, Edit, Trash2, Users, Calendar, Trophy, Flag } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 import { F123_TRACKS, F123Track } from '../data/f123Tracks';
+import { F123_TEAMS } from '../data/f123Teams';
+
+const TEAM_OPTIONS = F123_TEAMS.map((team) => team.name);
 
 interface Season {
   id: string;
@@ -17,8 +20,13 @@ interface Season {
 interface Member {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   steam_id?: string;
-  isActive: number;
+  team?: string;
+  number?: number;
+  seasonId?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,11 +70,55 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [showEditEventModal, setShowEditEventModal] = useState(false);
+  const initialParticipantForm = { memberId: '', team: '', number: '' };
+  const [newParticipant, setNewParticipant] = useState(initialParticipantForm);
+  const [newParticipantErrors, setNewParticipantErrors] = useState<{ memberId?: string; team?: string }>({});
+  const [showEditParticipantModal, setShowEditParticipantModal] = useState(false);
+  const [editingParticipant, setEditingParticipant] = useState<Member | null>(null);
+  const [editParticipantForm, setEditParticipantForm] = useState({ team: '', number: '' });
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [showActivationWarning, setShowActivationWarning] = useState(false);
   const [conflictingSeason, setConflictingSeason] = useState<any>(null);
+const teamOptions = useMemo(() => TEAM_OPTIONS, []);
+const editTeamOptions = useMemo(() => {
+  if (!editingParticipant?.team) {
+    return teamOptions;
+  }
+
+  const currentTeam = editingParticipant.team;
+  if (teamOptions.includes(currentTeam)) {
+    return teamOptions;
+  }
+
+  return [...teamOptions, currentTeam];
+}, [teamOptions, editingParticipant]);
+
+  const getMemberDisplayName = (member: Member) => {
+    const parts = [member.firstName, member.lastName].filter(
+      (part) => !!part && part.trim().length > 0
+    ) as string[];
+    if (parts.length > 0) {
+      return parts.join(' ');
+    }
+    return member.name;
+  };
+
+  const getMemberInitials = (member: Member) => {
+    const parts = [member.firstName, member.lastName].filter(
+      (part) => !!part && part.trim().length > 0
+    ) as string[];
+    if (parts.length > 0) {
+      return parts.map((part) => part.charAt(0)).join('').toUpperCase();
+    }
+    return member.name
+      .split(' ')
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase();
+  };
 
   const [newEvent, setNewEvent] = useState({
     track_id: '',
@@ -128,27 +180,90 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
     }
   };
 
-  const handleAddDriver = async (driverId: string) => {
+  const handleAddDriver = async () => {
+    const errors: { memberId?: string; team?: string } = {};
+
+    if (!newParticipant.memberId) {
+      errors.memberId = 'Select a league member';
+    }
+
+    if (!newParticipant.team.trim()) {
+      errors.team = 'Team is required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setNewParticipantErrors(errors);
+      return;
+    }
+
     try {
       setStatus('loading');
-      setStatusMessage('Adding driver to season...');
+      setStatusMessage('Adding member to season...');
+      setNewParticipantErrors({});
 
       const response = await apiPost(`/api/seasons/${season.id}/participants`, {
-        driverId
+        driverId: newParticipant.memberId,
+        team: newParticipant.team.trim(),
+        number: newParticipant.number ? parseInt(newParticipant.number, 10) : undefined
       });
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Driver added to season successfully');
+      setStatusMessage('Driver added to season successfully');
         setShowAddDriverModal(false);
+        setNewParticipant(initialParticipantForm);
         loadData(); // Reload the data
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to add driver to season');
+        throw new Error(error.message || 'Failed to add member to season');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to add driver to season');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to add member to season');
+    }
+  };
+
+  const handleEditParticipant = (participant: Member) => {
+    setEditingParticipant(participant);
+    setEditParticipantForm({
+      team: participant.team || '',
+      number: participant.number != null ? String(participant.number) : ''
+    });
+    setShowEditParticipantModal(true);
+  };
+
+  const handleUpdateParticipant = async () => {
+    if (!editingParticipant) return;
+
+    try {
+      setStatus('loading');
+      setStatusMessage('Updating season member...');
+
+      const trimmedTeam = editParticipantForm.team.trim();
+      const numberValue = editParticipantForm.number.trim();
+
+      const response = await apiPut(
+        `/api/seasons/${season.id}/participants/${editingParticipant.id}`,
+        {
+          team: trimmedTeam,
+          number: numberValue !== '' ? parseInt(numberValue, 10) : undefined
+        }
+      );
+
+      if (response.ok) {
+        setStatus('success');
+        setStatusMessage('Season member updated successfully');
+        setShowEditParticipantModal(false);
+        setEditingParticipant(null);
+        setEditParticipantForm({ team: '', number: '' });
+        loadData();
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update season member');
+      }
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to update season member');
     }
   };
 
@@ -292,27 +407,27 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
   };
 
   const handleRemoveDriver = async (driverId: string) => {
-    if (!confirm('Are you sure you want to remove this driver from the season?')) {
+    if (!confirm('Are you sure you want to remove this member from the season?')) {
       return;
     }
 
     try {
       setStatus('loading');
-      setStatusMessage('Removing driver from season...');
+      setStatusMessage('Removing member from season...');
 
       const response = await apiDelete(`/api/seasons/${season.id}/participants/${driverId}`);
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Driver removed from season successfully');
+      setStatusMessage('Driver removed from season successfully');
         loadData(); // Reload the data
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to remove driver from season');
+        throw new Error(error.message || 'Failed to remove member from season');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to remove driver from season');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to remove member from season');
     }
   };
 
@@ -462,7 +577,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
               ? 'bg-red-600 text-white'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
-            >
+        >
           <Users className="w-4 h-4" />
           <span>Drivers ({seasonDrivers.length})</span>
             </button>
@@ -479,13 +594,17 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
                 </button>
               </div>
 
-          {/* Drivers Tab */}
+        {/* Drivers Tab */}
           {activeTab === 'drivers' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Season Drivers</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Season Drivers</h3>
                 <button
-              onClick={() => setShowAddDriverModal(true)}
+                  onClick={() => {
+                    setNewParticipant(initialParticipantForm);
+                    setNewParticipantErrors({});
+                    setShowAddDriverModal(true);
+                  }}
                   className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
                 >
                   <Plus className="w-4 h-4" />
@@ -501,23 +620,35 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
                         <span className="text-white font-semibold text-sm">
-                          {driver.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                          {getMemberInitials(driver)}
                         </span>
                         </div>
                         <div>
-                        <p className="text-gray-900 dark:text-white font-medium">{driver.name}</p>
+                        <p className="text-gray-900 dark:text-white font-medium">{getMemberDisplayName(driver)}</p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {driver.team ? `${driver.team}${driver.number ? ` • #${driver.number}` : ''}` : 'Team not set'}
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                           Steam ID: {driver.steam_id || 'Not set'}
                         </p>
                       </div>
                     </div>
-                        <button 
-                      onClick={() => handleRemoveDriver(driver.id)}
-                      className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Remove</span>
-                        </button>
+                    <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleEditParticipant(driver)}
+                        className="text-gray-400 hover:text-blue-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
+                      >
+                        <Edit className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleRemoveDriver(driver.id)}
+                        className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove</span>
+                      </button>
+                    </div>
                       </div>
                     </div>
                   ))}
@@ -526,7 +657,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
               <p>No drivers added to this season yet</p>
-              <p className="text-sm">Add drivers to start building your season</p>
+              <p className="text-sm">Add drivers to start building your season roster</p>
             </div>
           )}
             </div>
@@ -551,7 +682,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
               {events.map((event) => (
                 <div 
                   key={event.id} 
-                  className="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer z-10"
+                  className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                   onClick={() => handleEditEvent(event)}
                 >
                   <div className="flex items-center space-x-3 flex-1">
@@ -597,41 +728,166 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
 
       {/* Add Driver Modal */}
       {showAddDriverModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver to Season</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Select Member
+                  Select League Member *
                 </label>
                 <select
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700"
+                  value={newParticipant.memberId}
                   onChange={(e) => {
-                    if (e.target.value) {
-                      handleAddDriver(e.target.value);
+                    setNewParticipant({ ...newParticipant, memberId: e.target.value });
+                    if (newParticipantErrors.memberId) {
+                      setNewParticipantErrors({ ...newParticipantErrors, memberId: undefined });
                     }
                   }}
                 >
-                  <option value="">Choose a member...</option>
+                  <option value="">Choose a league member...</option>
                   {members
                     .filter(member => !seasonDrivers.some(driver => driver.id === member.id))
                     .map((member) => (
                       <option key={member.id} value={member.id}>
-                        {member.name} {member.steam_id ? `(${member.steam_id})` : ''}
+                        {getMemberDisplayName(member)} {member.steam_id ? `(${member.steam_id})` : ''}
                       </option>
                   ))}
                 </select>
+                {newParticipantErrors.memberId && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{newParticipantErrors.memberId}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Team *
+                </label>
+                <select
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    newParticipantErrors.team
+                      ? 'border-red-500 focus:ring-red-500'
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
+                  value={newParticipant.team}
+                  onChange={(e) => {
+                    setNewParticipant({ ...newParticipant, team: e.target.value });
+                    if (newParticipantErrors.team) {
+                      setNewParticipantErrors({ ...newParticipantErrors, team: undefined });
+                    }
+                  }}
+                >
+                  <option value="">Select a team</option>
+                  {teamOptions.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </select>
+                {newParticipantErrors.team && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{newParticipantErrors.team}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Car Number
+                </label>
+                <input
+                  type="number"
+                  value={newParticipant.number}
+                  onChange={(e) => setNewParticipant({ ...newParticipant, number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Optional"
+                  min="0"
+                />
               </div>
             </div>
 
             <div className="flex space-x-3 mt-6">
               <button
-                onClick={() => setShowAddDriverModal(false)}
+                onClick={() => {
+                  setShowAddDriverModal(false);
+                  setNewParticipant(initialParticipantForm);
+                  setNewParticipantErrors({});
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleAddDriver}
+                disabled={status === 'loading'}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+              >
+                {status === 'loading' ? 'Adding...' : 'Add Driver'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Driver Modal */}
+      {showEditParticipantModal && editingParticipant && (
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              Edit {getMemberDisplayName(editingParticipant)}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Team
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  value={editParticipantForm.team}
+                  onChange={(e) => setEditParticipantForm({ ...editParticipantForm, team: e.target.value })}
+                >
+                  <option value="">Select a team</option>
+                  {editTeamOptions.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Car Number
+                </label>
+                <input
+                  type="number"
+                  value={editParticipantForm.number}
+                  onChange={(e) => setEditParticipantForm({ ...editParticipantForm, number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Optional"
+                  min="0"
+                />
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditParticipantModal(false);
+                  setEditingParticipant(null);
+                  setEditParticipantForm({ team: '', number: '' });
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateParticipant}
+                disabled={status === 'loading'}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+              >
+                {status === 'loading' ? 'Updating...' : 'Update Driver'}
               </button>
             </div>
           </div>
@@ -640,8 +896,8 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
 
       {/* Add Event Modal */}
       {showAddEventModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Event to {season.name}</h3>
             
             <div className="space-y-4">
@@ -737,8 +993,8 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
 
       {/* Edit Event Modal */}
       {showEditEventModal && editingEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Event</h3>
             
             <div className="space-y-4">
@@ -835,8 +1091,8 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack }) =>
 
       {/* Activation Warning Modal */}
       {showActivationWarning && conflictingSeason && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Season Already Active</h3>
             
             <div className="mb-4">

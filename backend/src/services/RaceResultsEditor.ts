@@ -9,22 +9,22 @@ export class RaceResultsEditor {
     console.log('✏️ RaceResultsEditor initialized');
   }
 
-  // Add penalty with history tracking
-  async addPenalty(sessionResultId: string, driverId: string, penaltyPoints: number, reason: string, editedBy: string): Promise<void> {
+  // Add penalty entry for a driver session result
+  async addPenalty(driverSessionResultId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void> {
     try {
-      await this.dbService.addPenalty(sessionResultId, driverId, penaltyPoints, reason, editedBy);
-      console.log(`✅ Added ${penaltyPoints} penalty points to driver ${driverId} in session ${sessionResultId}`);
+      const penalty = await this.dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
+      console.log(`✅ Added ${penalty.seconds} second penalty to driver session result ${driverSessionResultId}`);
     } catch (error) {
       console.error('❌ Error adding penalty:', error);
       throw error;
     }
   }
 
-  // Remove penalty with history tracking
-  async removePenalty(sessionResultId: string, driverId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void> {
+  // Remove penalty entry
+  async removePenalty(driverSessionResultId: string, penaltyId: string): Promise<void> {
     try {
-      await this.dbService.removePenalty(sessionResultId, driverId, penaltySeconds, reason, editedBy);
-      console.log(`✅ Removed ${penaltySeconds} penalty seconds from driver ${driverId} in session ${sessionResultId}`);
+      await this.dbService.removePenalty(driverSessionResultId, penaltyId);
+      console.log(`✅ Removed penalty ${penaltyId} from driver session result ${driverSessionResultId}`);
     } catch (error) {
       console.error('❌ Error removing penalty:', error);
       throw error;
@@ -182,12 +182,6 @@ export class RaceResultsEditor {
       
       // Validate based on edit type
       switch (editType) {
-        case 'penalty':
-          if (!data.penaltyPoints || data.penaltyPoints <= 0) {
-            throw new Error('Penalty points must be positive');
-          }
-          break;
-          
         case 'position_change':
           if (!data.newPosition || data.newPosition < 1) {
             throw new Error('Position must be 1 or higher');

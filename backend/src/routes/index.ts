@@ -130,7 +130,7 @@ export function setupRoutes(
   app.use('/api/drivers', driversRoutes(services.databaseService));
   
   // Tracks management routes
-  app.use('/api/tracks', tracksRoutes);
+  app.use('/api/tracks', tracksRoutes(services.databaseService));
   
   // Session data routes (for local host app)
   app.use('/api/sessions', sessionsRoutes(services.databaseService));

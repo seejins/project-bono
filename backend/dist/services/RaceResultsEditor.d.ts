@@ -2,7 +2,8 @@ import { DatabaseService } from './DatabaseService';
 export declare class RaceResultsEditor {
     private dbService;
     constructor(dbService: DatabaseService);
-    addPenalty(sessionResultId: string, driverId: string, penaltyPoints: number, reason: string, editedBy: string): Promise<void>;
+    addPenalty(driverSessionResultId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void>;
+    removePenalty(driverSessionResultId: string, penaltyId: string): Promise<void>;
     changePosition(sessionResultId: string, driverId: string, newPosition: number, reason: string, editedBy: string): Promise<void>;
     disqualifyDriver(sessionResultId: string, driverId: string, reason: string, editedBy: string): Promise<void>;
     resetDriverToOriginal(sessionResultId: string, driverId: string): Promise<void>;

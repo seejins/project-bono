@@ -280,10 +280,10 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
                           {result.position}
                         </span>
                         {result.pole_position && (
-                          <Shield className="h-4 w-4 text-yellow-500 ml-1" title="Pole Position" />
+                          <Shield className="h-4 w-4 text-yellow-500 ml-1" aria-label="Pole Position" />
                         )}
                         {result.fastest_lap && (
-                          <Trophy className="h-4 w-4 text-purple-500 ml-1" title="Fastest Lap" />
+                          <Trophy className="h-4 w-4 text-purple-500 ml-1" aria-label="Fastest Lap" />
                         )}
                       </div>
                     </td>
@@ -393,8 +393,8 @@ const EditDriverModal: React.FC<EditDriverModalProps> = ({ driverId, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+    <div className="modal-overlay">
+      <div className="modal-panel max-w-md p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Driver Result</h3>
         
         <div className="flex space-x-1 mb-4">
@@ -493,8 +493,8 @@ interface EditHistoryModalProps {
 
 const EditHistoryModal: React.FC<EditHistoryModalProps> = ({ editHistory, onClose }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-4xl mx-4 p-6 max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Edit History</h3>
           <button

@@ -200,25 +200,6 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const upcomingEventsCount = Math.max(totalEvents - completedEventsCount, 0);
   const driverCount = standings.length;
 
-  const statusStyles: Record<string, string> = {
-    active: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-600 dark:border-emerald-400/30 dark:text-emerald-300',
-    completed: 'border-sky-400/40 bg-sky-500/10 text-sky-600 dark:border-sky-400/30 dark:text-sky-300',
-    draft: 'border-slate-400/40 bg-slate-500/10 text-slate-600 dark:border-slate-500/30 dark:text-slate-200',
-    scheduled: 'border-amber-400/40 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-300',
-    upcoming: 'border-amber-400/40 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-300',
-  };
-
-  const seasonStatus = (currentSeason?.status || 'draft').toLowerCase();
-
-  const metaBadge = (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusStyles[seasonStatus] ?? statusStyles.scheduled}`}
-    >
-      <span className="h-2 w-2 rounded-full bg-current" />
-      {seasonStatus}
-    </span>
-  );
-
   const headerSecondaryActions: ReactNode[] = [];
 
   if (previousRace) {
@@ -283,13 +264,15 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     <div className="max-w-[2048px] mx-auto space-y-6">
       <PanelHeader
         icon={<Calendar className="h-6 w-6" />}
-        title={currentSeason?.name || 'Season Overview'}
-        subtitle={currentSeason ? `Season ${currentSeason.year}` : undefined}
-        description={overviewDescription}
-        metaBadge={metaBadge}
+        title="Season Dashboard"
+        subtitle={overviewDescription}
         primaryAction={primaryAction}
         secondaryActions={headerSecondaryActions}
-        breadcrumbs={<span>Season Panel</span>}
+        breadcrumbs={
+          <span className="uppercase tracking-[0.3em] text-white/60">
+            {currentSeason?.name || 'Season Overview'}
+          </span>
+        }
       />
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

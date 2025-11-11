@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Trophy } from 'lucide-react';
+import { Trophy, ChevronDown } from 'lucide-react';
 import { apiGet } from '../utils/api';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
@@ -62,6 +62,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     const [heroContentVisible, setHeroContentVisible] = useState(false);
     const [cardsVisible, setCardsVisible] = useState(false);
     const [buttonVisible, setButtonVisible] = useState(false);
+    const [scrollCueVisible, setScrollCueVisible] = useState(false);
+    const [videoRevealed, setVideoRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const HERO_DELAY_MS = 350;
@@ -198,10 +200,22 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     }, [currentSeason?.id]);
 
     useEffect(() => {
+      if (!isLoading) {
+        const frame = requestAnimationFrame(() => {
+          setVideoRevealed(true);
+        });
+        return () => cancelAnimationFrame(frame);
+      }
+
+      setVideoRevealed(false);
+    }, [isLoading]);
+
+    useEffect(() => {
       let frame: number | null = null;
       let heroTimeout: number | null = null;
       let cardsTimeout: number | null = null;
       let buttonTimeout: number | null = null;
+      let scrollCueTimeout: number | null = null;
 
       if (!isLoading) {
         frame = requestAnimationFrame(() => {
@@ -213,12 +227,16 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
             buttonTimeout = window.setTimeout(() => {
               setButtonVisible(true);
             }, PODIUM_BUTTON_DELAY_MS);
+            scrollCueTimeout = window.setTimeout(() => {
+              setScrollCueVisible(true);
+            }, PODIUM_TOTAL_DURATION_MS + 500);
           }, HERO_DELAY_MS);
         });
       } else {
         setHeroContentVisible(false);
         setCardsVisible(false);
         setButtonVisible(false);
+        setScrollCueVisible(false);
       }
 
       return () => {
@@ -233,6 +251,9 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         }
         if (buttonTimeout !== null) {
           window.clearTimeout(buttonTimeout);
+        }
+        if (scrollCueTimeout !== null) {
+          window.clearTimeout(scrollCueTimeout);
         }
       };
     }, [isLoading]);
@@ -280,6 +301,12 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           loop
           playsInline
         />
+        <div
+          className={clsx(
+            'absolute inset-0 bg-black transition-opacity duration-700 ease-out',
+            videoRevealed ? 'opacity-0' : 'opacity-100'
+          )}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/60 to-black/20" />
 
         <div className="relative z-10 flex h-full justify-center">
@@ -292,7 +319,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 )}
               >
                 <div>
-                  <h1 className="text-2xl font-semibold uppercase tracking-[0.35em] text-white/90 sm:text-3xl">
+                  <h1 className="text-lg font-semibold uppercase tracking-[0.35em] text-white/90 sm:text-xl">
                     {raceLabel}
                   </h1>
                   {formattedRaceDate && (
@@ -372,6 +399,24 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
               ))}
             </div>
           </div>
+        </div>
+
+        <div
+          className={clsx(
+            'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center transition-all duration-[1300ms] ease-out',
+            scrollCueVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+          )}
+        >
+          <button
+            onClick={onExplore}
+            disabled={isLoading}
+            className="pointer-events-auto flex flex-col items-center gap-2 text-white/60 transition hover:text-white/80"
+          >
+            <span className="text-xs uppercase tracking-[0.35em]">Scroll for more</span>
+            <span className="animate-bounce text-white/80">
+              <ChevronDown className="h-5 w-5" />
+            </span>
+          </button>
         </div>
       </section>
     );

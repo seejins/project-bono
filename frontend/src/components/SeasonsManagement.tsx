@@ -3,6 +3,8 @@ import { Calendar, Plus, Trash2, CheckCircle, AlertCircle, X, Trophy, ArrowLeft,
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 import { SeasonDetail } from './SeasonDetail';
 
+type SeasonStatus = 'draft' | 'active' | 'completed';
+
 interface Season {
   id: string;
   name: string;
@@ -10,6 +12,7 @@ interface Season {
   startDate: string;
   endDate?: string;
   isActive: number;
+  status?: SeasonStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,9 +57,10 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [selectedSeasonDetail, setSelectedSeasonDetail] = useState<Season | null>(null);
-  const [newSeason, setNewSeason] = useState({ 
+  const [newSeason, setNewSeason] = useState<{ name: string; year: number; status: SeasonStatus }>({ 
     name: '', 
-    year: new Date().getFullYear()
+    year: new Date().getFullYear(),
+    status: 'draft'
   });
   const [newEvent, setNewEvent] = useState({ 
     track_id: '',
@@ -156,6 +160,18 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
     }
   };
 
+  const getEventStatusColor = (eventStatus: Event['status']) => {
+    switch (eventStatus) {
+      case 'completed':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      case 'scheduled':
+      default:
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+    }
+  };
+
   const getStatusText = (isActive: number) => {
     return isActive === 1 ? 'Active' : 'Draft';
   };
@@ -186,6 +202,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         name: newSeason.name.trim(),
         year: newSeason.year,
         startDate: new Date().toISOString().split('T')[0], // Today's date
+        status: newSeason.status
       });
 
       if (response.ok) {
@@ -193,7 +210,8 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         setStatusMessage('Season created successfully');
         setNewSeason({ 
           name: '', 
-          year: new Date().getFullYear()
+          year: new Date().getFullYear(),
+          status: 'draft'
         });
         setFormErrors({});
         setShowAddModal(false);
@@ -238,7 +256,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       const response = await apiPut(`/api/seasons/${editingSeason.id}`, {
         name: editingSeason.name.trim(),
         year: editingSeason.year,
-        status: editingSeason.status,
+        status: editingSeason.status ?? 'draft',
       });
 
       if (response.ok) {
@@ -499,9 +517,9 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                 const track = tracks.find(t => t.id === event.track_id);
                 
                 return (
-                  <div 
-                    key={event.id} 
-                    className="relative flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer z-10"
+                <div 
+                  key={event.id} 
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer"
                     onClick={() => handleEditEvent(event)}
                   >
                     <div className="flex items-center space-x-4 flex-1">
@@ -514,7 +532,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                         </p>
                         <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                           <span>Type: {getSessionTypeName(Number(event.session_type) || 0)}</span>
-                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
+                          <span className={`px-2 py-1 rounded-full text-xs ${getEventStatusColor(event.status)}`}>
                             {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                           </span>
                         </div>
@@ -545,11 +563,11 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         {/* Add Event Modal */}
         {showAddEventModal && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="modal-overlay"
             onClick={() => setShowAddEventModal(false)}
           >
             <div 
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              className="modal-panel max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Event to {selectedSeason.name}</h3>
@@ -710,11 +728,11 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         {/* Edit Event Modal */}
         {showEditEventModal && editingEvent && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="modal-overlay"
             onClick={() => setShowEditEventModal(false)}
           >
             <div 
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              className="modal-panel max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Event</h3>
@@ -909,7 +927,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         {seasons.length > 0 ? (
           <div className="flex flex-col gap-3">
             {seasons.map((season) => (
-              <div key={season.id} className="relative flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer z-10" onClick={() => handleSeasonClick(season)}>
+              <div key={season.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer" onClick={() => handleSeasonClick(season)}>
                 <div className="flex items-center space-x-4 flex-1">
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white">
                     <Trophy className="w-6 h-6" />
@@ -949,11 +967,11 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       {/* Add Season Modal */}
       {showAddModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="modal-overlay"
           onClick={() => setShowAddModal(false)}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            className="modal-panel max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Season</h3>
@@ -1056,11 +1074,11 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       {/* Edit Season Modal */}
       {showEditModal && editingSeason && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="modal-overlay"
           onClick={() => setShowEditModal(false)}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            className="modal-panel max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Season</h3>
@@ -1098,7 +1116,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                   Status
                 </label>
                 <select
-                  value={editingSeason.status}
+                  value={editingSeason.status ?? 'draft'}
                   onChange={(e) => setEditingSeason({ ...editingSeason, status: e.target.value as 'active' | 'completed' | 'draft' })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 >

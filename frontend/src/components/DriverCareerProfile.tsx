@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Trophy, Zap, TrendingUp, Calendar, Flag, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Trophy, Zap, TrendingUp, Calendar, Flag, Loader2 } from 'lucide-react';
 import { MemberCareerProfile, MemberCareerStats, RaceHistoryEntry } from '../types';
 import { apiGet } from '../utils/api';
 
 interface DriverCareerProfileProps {
   memberId: string; // Keep for backward compatibility, but treat as driverId
-  backHref?: string;
   onRaceSelect?: (raceId: string) => void;
 }
 
 export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = ({ 
   memberId, 
-  backHref, 
   onRaceSelect 
 }) => {
   const driverId = memberId; // Treat memberId as driverId
@@ -133,15 +130,6 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
     return (
       <div className="text-center py-12">
         <p className="text-red-500 text-xl">{error || 'Driver not found'}</p>
-        {backHref && (
-          <Link 
-            to={backHref}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Go Back
-          </Link>
-        )}
       </div>
     );
   }
@@ -158,20 +146,8 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
     <div className="p-6 bg-gray-100 dark:bg-gray-900 min-h-screen">
       <div className="max-w-[2048px] mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          {backHref ? (
-            <Link
-              to={backHref}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to History</span>
-            </Link>
-          ) : (
-            <div className="w-10" />
-          )}
+        <div className="mb-6 text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{member.name} - Career Profile</h1>
-          <div className="w-10"></div>
         </div>
 
         {/* Tab Navigation */}

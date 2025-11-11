@@ -2,11 +2,18 @@ import { DatabaseService } from './DatabaseService';
 import { Server } from 'socket.io';
 export declare class RaceJSONImportService {
     private dbService;
-    private raceResultsProcessor;
     private io;
     constructor(dbService: DatabaseService, io: Server);
     /**
+     * Validate JSON file structure
+     */
+    validateJSONFile(filePath: string): Promise<{
+        valid: boolean;
+        errors?: string[];
+    }>;
+    /**
      * Import race JSON file
+     * Processes F1 23 JSON session files and stores them in the database
      */
     importRaceJSON(filePath: string, seasonId: string, raceId?: string): Promise<{
         raceId: string;
@@ -14,24 +21,8 @@ export declare class RaceJSONImportService {
         importedCount: number;
     }>;
     /**
-     * Transform parsed data to database format
+     * Check if lap time is the fastest in the session
      */
-    private transformToDatabaseFormat;
-    /**
-     * Import multiple JSON files (for batch processing)
-     */
-    importMultipleJSONFiles(filePaths: string[], seasonId: string): Promise<Array<{
-        file: string;
-        success: boolean;
-        raceId?: string;
-        error?: string;
-    }>>;
-    /**
-     * Validate JSON file before import
-     */
-    validateJSONFile(filePath: string): Promise<{
-        valid: boolean;
-        errors: string[];
-    }>;
+    private isFastestLap;
 }
 //# sourceMappingURL=RaceJSONImportService.d.ts.map

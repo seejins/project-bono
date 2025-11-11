@@ -29,6 +29,9 @@ export interface DriverData {
   isActive?: boolean;
 }
 
+export type Member = Driver;
+export type MemberData = DriverData;
+
 export interface Season {
   id: string;
   name: string;
@@ -107,17 +110,31 @@ export interface DriverMappingData {
 }
 
 export interface SessionResult {
-  driverId: string;
+  driverId?: string | null;
   driverName: string;
-  teamName: string;
-  carNumber: number;
-  position: number;
-  lapTime: number;
-  sector1Time: number;
-  sector2Time: number;
-  sector3Time: number;
-  fastestLap: boolean;
-  createdAt: string;
+  teamName?: string | null;
+  carNumber?: number | null;
+  position?: number | null;
+  lapTime?: number | null;
+  sector1Time?: number | null;
+  sector2Time?: number | null;
+  sector3Time?: number | null;
+  bestLapTime?: number | null;
+  gapToPole?: number | null;
+  fastestLap?: boolean | null;
+  polePosition?: boolean | null;
+  penalties?: number | null;
+  warnings?: number | null;
+  dnfReason?: string | null;
+  points?: number | null;
+  lapTimes?: Array<{
+    lapNumber?: number;
+    lapTime?: number;
+    sector1Time?: number;
+    sector2Time?: number;
+    sector3Time?: number;
+  }>;
+  dataSource?: 'UDP' | 'FILE_UPLOAD' | 'MANUAL';
 }
 
 export class DatabaseService {
@@ -373,6 +390,7 @@ export class DatabaseService {
           sector2_time_ms INTEGER,
           sector3_time_ms INTEGER,
           total_race_time_ms INTEGER,
+          base_race_time_ms INTEGER,
           penalties INTEGER DEFAULT 0, -- In-race penalty time in seconds (from JSON/UDP)
           post_race_penalties INTEGER DEFAULT 0, -- Post-race penalty time in seconds (admin edits)
           warnings INTEGER DEFAULT 0,
@@ -383,12 +401,26 @@ export class DatabaseService {
           fastest_lap BOOLEAN DEFAULT FALSE,
           pole_position BOOLEAN DEFAULT FALSE,
           additional_data JSONB, -- Store car-damage, track-position, current-lap, top-speed-kmph, is-player, telemetry-settings, etc.
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         
         -- Create indexes for JSON driver columns
         CREATE INDEX IF NOT EXISTS idx_driver_session_results_json_driver_id ON driver_session_results(json_driver_id);
         CREATE INDEX IF NOT EXISTS idx_driver_session_results_json_driver_name ON driver_session_results(json_driver_name);
+
+        -- Driver penalties table (post-race penalties applied by admins)
+        CREATE TABLE IF NOT EXISTS driver_penalties (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          driver_session_result_id UUID NOT NULL REFERENCES driver_session_results(id) ON DELETE CASCADE,
+          seconds INTEGER NOT NULL CHECK (seconds > 0),
+          reason TEXT,
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          created_by TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_driver_penalties_driver_session_result_id
+          ON driver_penalties(driver_session_result_id);
 
         -- Race Edit History Table (for audit trail and reset capability)
         CREATE TABLE IF NOT EXISTS race_edit_history (
@@ -566,6 +598,13 @@ export class DatabaseService {
       // Migration: Add post_race_penalties column
       await this.runMigration('add_post_race_penalties', async () => {
         await this.addColumnIfNotExists('driver_session_results', 'post_race_penalties', 'INTEGER DEFAULT 0');
+        await this.addColumnIfNotExists('driver_session_results', 'base_race_time_ms', 'INTEGER');
+        await this.addColumnIfNotExists('driver_session_results', 'updated_at', 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()');
+      });
+
+      // Migration: Ensure base race time column exists even if earlier migration already ran
+      await this.runMigration('add_base_race_time_ms_to_driver_session_results', async () => {
+        await this.addColumnIfNotExists('driver_session_results', 'base_race_time_ms', 'INTEGER');
       });
       
       // Migration: Allow NULL for driver_id in race_edit_history and change to ON DELETE SET NULL
@@ -1232,8 +1271,8 @@ export class DatabaseService {
     const now = new Date().toISOString();
     
     await this.db.query(
-      `INSERT INTO f123_driver_mappings (id, season_id, f123_driver_id, f123_driver_name, f123_driver_number, f123_team_name, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO f123_driver_mappings (id, season_id, f123_driver_id, f123_driver_name, f123_driver_number, f123_team_name, your_driver_id, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         id, 
         data.seasonId, 
@@ -1241,7 +1280,8 @@ export class DatabaseService {
         data.f123DriverName, 
         data.f123DriverNumber || null, 
         data.f123TeamName || null, 
-        now, 
+        data.yourDriverId || null,
+        now,
         now
       ]
     );
@@ -1282,6 +1322,10 @@ export class DatabaseService {
       updates.push(`f123_team_name = $${paramCount++}`);
       values.push(data.f123TeamName);
     }
+    if (data.yourDriverId !== undefined) {
+      updates.push(`your_driver_id = $${paramCount++}`);
+      values.push(data.yourDriverId || null);
+    }
 
     updates.push(`updated_at = $${paramCount++}`);
     values.push(now);
@@ -1298,34 +1342,81 @@ export class DatabaseService {
   }
 
   // Session Results operations
-  async importSessionResults(raceId: string, results: SessionResult[]): Promise<void> {
+  async importSessionResults(
+    raceId: string,
+    results: SessionResult[]
+  ): Promise<{ resultsCount: number; lapTimesCount: number }> {
     const now = new Date().toISOString();
     
     // Delete existing results for this race
     await this.db.query('DELETE FROM f123_session_results WHERE race_id = $1', [raceId]);
     
+    let lapTimesCount = 0;
+
     // Insert new results
     for (const result of results) {
+      const driverId =
+        (result.driverId && String(result.driverId)) ||
+        (result.driverName ? result.driverName : uuidv4());
+      const teamName = result.teamName ?? 'Unknown Team';
+      const carNumber =
+        result.carNumber !== undefined && result.carNumber !== null
+          ? result.carNumber
+          : 0;
+      const position =
+        result.position !== undefined && result.position !== null
+          ? result.position
+          : 0;
+      const lapTime =
+        result.lapTime !== undefined && result.lapTime !== null
+          ? result.lapTime
+          : null;
+      const sector1 =
+        result.sector1Time !== undefined && result.sector1Time !== null
+          ? result.sector1Time
+          : null;
+      const sector2 =
+        result.sector2Time !== undefined && result.sector2Time !== null
+          ? result.sector2Time
+          : null;
+      const sector3 =
+        result.sector3Time !== undefined && result.sector3Time !== null
+          ? result.sector3Time
+          : null;
+      const bestLap =
+        result.bestLapTime !== undefined && result.bestLapTime !== null
+          ? result.bestLapTime
+          : lapTime;
+
       await this.db.query(
         `INSERT INTO f123_session_results (id, race_id, driver_id, driver_name, team_name, car_number, position, lap_time, sector1_time, sector2_time, sector3_time, best_lap_time, created_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           uuidv4(),
           raceId,
-          result.driverId,
+          driverId,
           result.driverName,
-          result.teamName,
-          result.carNumber,
-          result.position,
-          result.lapTime,
-          result.sector1Time,
-          result.sector2Time,
-          result.sector3Time,
-          (result as any).bestLapTime || null,
+          teamName,
+          carNumber,
+          position,
+          lapTime,
+          sector1,
+          sector2,
+          sector3,
+          bestLap,
           now
         ]
       );
+
+      if (Array.isArray(result.lapTimes)) {
+        lapTimesCount += result.lapTimes.length;
+      }
     }
+
+    return {
+      resultsCount: results.length,
+      lapTimesCount
+    };
   }
 
   async getSessionResultsByRace(raceId: string): Promise<SessionResult[]> {
@@ -1486,8 +1577,69 @@ export class DatabaseService {
     return this.getDriverMappingsBySeason(seasonId);
   }
 
-  async importRaceResults(raceId: string, results: SessionResult[]): Promise<void> {
-    return this.importSessionResults(raceId, results);
+  async importRaceResults(
+    raceId: string,
+    data: SessionResult[] | { results?: any[] }
+  ): Promise<{ resultsCount: number; lapTimesCount: number }> {
+    const rawResults = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+    if (!Array.isArray(rawResults) || rawResults.length === 0) {
+      return { resultsCount: 0, lapTimesCount: 0 };
+    }
+
+    const normalizedResults: SessionResult[] = rawResults.map((result: any) => {
+      const lapTimes = Array.isArray(result.lapTimes || result.lap_times)
+        ? (result.lapTimes || result.lap_times)
+        : undefined;
+
+      return {
+        driverId:
+          result.driverId ??
+          result.yourDriverId ??
+          (typeof result.driverName === 'string' ? result.driverName : null),
+        driverName: result.driverName ?? result.name ?? 'Unknown Driver',
+        teamName: result.teamName ?? result.team ?? null,
+        carNumber:
+          result.carNumber ??
+          result.driverNumber ??
+          (typeof result.car_number === 'number' ? result.car_number : null),
+        position:
+          result.position ??
+          result.finalPosition ??
+          (typeof result.finishPosition === 'number'
+            ? result.finishPosition
+            : null),
+        lapTime: result.lapTime ?? result.bestLapTime ?? null,
+        sector1Time: result.sector1Time ?? null,
+        sector2Time: result.sector2Time ?? null,
+        sector3Time: result.sector3Time ?? null,
+        bestLapTime: result.bestLapTime ?? null,
+        gapToPole: result.gapToPole ?? null,
+        penalties: result.penalties ?? null,
+        warnings: result.warnings ?? null,
+        dnfReason: result.dnfReason ?? null,
+        fastestLap:
+          typeof result.fastestLap === 'boolean'
+            ? result.fastestLap
+            : result.fastest_lap ?? false,
+        polePosition:
+          typeof result.polePosition === 'boolean'
+            ? result.polePosition
+            : result.pole_position ?? false,
+        points:
+          typeof result.points === 'number'
+            ? result.points
+            : result.pointsEarned ?? null,
+        lapTimes,
+        dataSource: result.dataSource ?? 'FILE_UPLOAD'
+      };
+    });
+
+    return this.importSessionResults(raceId, normalizedResults);
   }
 
   async deactivateAllOtherSeasons(currentSeasonId: string): Promise<void> {
@@ -1512,6 +1664,39 @@ export class DatabaseService {
     );
     
     return result.rows.map(row => this.transformDriverToCamelCase(row));
+  }
+
+  // Member operations map to driver operations for league-wide participants
+  async getAllMembers(): Promise<Member[]> {
+    return this.getAllDrivers();
+  }
+
+  async createMember(data: MemberData): Promise<string> {
+    return this.createDriver(data);
+  }
+
+  async getMemberById(id: string): Promise<Member | null> {
+    return this.getDriverById(id);
+  }
+
+  async updateMember(id: string, data: Partial<MemberData>): Promise<void> {
+    await this.updateDriver(id, data);
+  }
+
+  async deleteMember(id: string): Promise<void> {
+    await this.deleteDriver(id);
+  }
+
+  async getMemberCareerProfile(memberId: string): Promise<any> {
+    return this.getDriverCareerProfile(memberId);
+  }
+
+  async getMemberSeasonStats(memberId: string, seasonId: string): Promise<any> {
+    return this.getDriverSeasonStats(memberId, seasonId);
+  }
+
+  async getMemberRaceHistory(memberId: string, seasonId?: string): Promise<any[]> {
+    return this.getDriverRaceHistory(memberId, seasonId);
   }
 
   async createDriver(data: DriverData): Promise<string> {
@@ -1852,7 +2037,7 @@ export class DatabaseService {
   async removeDriverFromSeason(seasonId: string, driverId: string): Promise<void> {
     console.log(`Removing driver ${driverId} from season ${seasonId}`);
     
-    // Check if driver exists in this season
+    // Ensure the driver is currently linked to this season
     const driver = await this.db.query(
       'SELECT id, name FROM drivers WHERE id = $1 AND season_id = $2',
       [driverId, seasonId]
@@ -1862,13 +2047,64 @@ export class DatabaseService {
       throw new Error(`Driver with ID ${driverId} not found in season ${seasonId}`);
     }
     
-    // Remove driver from season
+    // Detach driver from the season but keep the driver record intact
     await this.db.query(
-      'DELETE FROM drivers WHERE id = $1 AND season_id = $2',
+      `UPDATE drivers
+       SET season_id = NULL,
+           team = NULL,
+           number = NULL,
+           updated_at = NOW()
+       WHERE id = $1 AND season_id = $2`,
       [driverId, seasonId]
     );
     
+    // Clear any driver mapping associations for this season
+    await this.db.query(
+      `UPDATE f123_driver_mappings
+       SET your_driver_id = NULL,
+           updated_at = NOW()
+       WHERE season_id = $1 AND your_driver_id = $2`,
+      [seasonId, driverId]
+    );
+    
     console.log(`✅ Driver ${driver.rows[0].name} removed from season ${seasonId}`);
+  }
+
+  async updateSeasonParticipant(driverId: string, data: { team?: string; number?: number }): Promise<void> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (data.team !== undefined) {
+      updates.push(`team = $${paramIndex++}`);
+      const normalizedTeam =
+        typeof data.team === 'string'
+          ? data.team.trim() || null
+          : data.team ?? null;
+      values.push(normalizedTeam);
+    }
+
+    if (data.number !== undefined) {
+      updates.push(`number = $${paramIndex++}`);
+      const normalizedNumber =
+        data.number === undefined || data.number === null || Number.isNaN(data.number)
+          ? null
+          : data.number;
+      values.push(normalizedNumber);
+    }
+
+    if (updates.length === 0) {
+      return;
+    }
+
+    updates.push(`updated_at = $${paramIndex++}`);
+    values.push(new Date().toISOString());
+    values.push(driverId);
+
+    await this.db.query(
+      `UPDATE drivers SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    );
   }
 
   async getTracksBySeason(seasonId: string): Promise<Track[]> {
@@ -2209,9 +2445,9 @@ export class DatabaseService {
           id, session_result_id, user_id, json_driver_id, json_driver_name, json_team_name, json_car_number,
           position, grid_position, points,
           num_laps, best_lap_time_ms, sector1_time_ms, sector2_time_ms, sector3_time_ms,
-          total_race_time_ms, penalties, post_race_penalties, warnings, num_unserved_drive_through_pens,
-          num_unserved_stop_go_pens, result_status, dnf_reason, fastest_lap, pole_position, additional_data, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+          total_race_time_ms, base_race_time_ms, penalties, post_race_penalties, warnings, num_unserved_drive_through_pens,
+          num_unserved_stop_go_pens, result_status, dnf_reason, fastest_lap, pole_position, additional_data, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
         [
           driverSessionResultId, sessionResultId, result.user_id, 
           result.json_driver_id || null,
@@ -2221,10 +2457,10 @@ export class DatabaseService {
           result.position,
           result.grid_position, result.points, result.num_laps, result.best_lap_time_ms,
           result.sector1_time_ms, result.sector2_time_ms, result.sector3_time_ms,
-          result.total_race_time_ms, result.penalties, result.post_race_penalties || 0, result.warnings,
+          result.total_race_time_ms, result.total_race_time_ms, result.penalties, result.post_race_penalties || 0, result.warnings,
           result.num_unserved_drive_through_pens, result.num_unserved_stop_go_pens,
           result.result_status, result.dnf_reason, result.fastest_lap, result.pole_position,
-          result.additional_data ? JSON.stringify(result.additional_data) : null, now
+          result.additional_data ? JSON.stringify(result.additional_data) : null, now, now
         ]
       );
       
@@ -2379,6 +2615,47 @@ export class DatabaseService {
     // Also extract driver names from additional_data JSONB if available
     // Note: dsr.* includes all columns from driver_session_results, so we get position, points, times, etc.
     // OPTIMIZED: Use LEFT JOIN LATERAL instead of correlated subqueries to avoid N+1 query problem
+    const lapTimesSelect = includeLapTimes ? `,
+        COALESCE(lap_times_summary.lap_times, '[]'::json) AS lap_times` : '';
+    const lapTimesJoin = includeLapTimes ? `
+       LEFT JOIN LATERAL (
+         SELECT 
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'lap_number', lt.lap_number,
+                 'lap_time_ms', lt.lap_time_ms,
+                 'sector1_ms', lt.sector1_ms,
+                 'sector2_ms', lt.sector2_ms,
+                 'sector3_ms', lt.sector3_ms,
+                 'sector1_time_minutes', lt.sector1_time_minutes,
+                 'sector2_time_minutes', lt.sector2_time_minutes,
+                 'sector3_time_minutes', lt.sector3_time_minutes,
+                 'lap_valid_bit_flags', lt.lap_valid_bit_flags,
+                 'tire_compound', lt.tire_compound,
+                 'track_position', lt.track_position,
+                 'tire_age_laps', lt.tire_age_laps,
+                 'top_speed_kmph', lt.top_speed_kmph,
+                 'max_safety_car_status', lt.max_safety_car_status,
+                 'vehicle_fia_flags', lt.vehicle_fia_flags,
+                 'pit_stop', lt.pit_stop,
+                 'ers_store_energy', lt.ers_store_energy,
+                 'ers_deployed_this_lap', lt.ers_deployed_this_lap,
+                 'ers_deploy_mode', lt.ers_deploy_mode,
+                 'fuel_in_tank', lt.fuel_in_tank,
+                 'fuel_remaining_laps', lt.fuel_remaining_laps,
+                 'gap_to_leader_ms', lt.gap_to_leader_ms,
+                 'gap_to_position_ahead_ms', lt.gap_to_position_ahead_ms,
+                 'car_damage_data', lt.car_damage_data,
+                 'tyre_sets_data', lt.tyre_sets_data
+               ) ORDER BY lt.lap_number
+             ),
+             '[]'::json
+           ) AS lap_times
+         FROM lap_times lt
+         WHERE lt.driver_session_result_id = dsr.id
+       ) lap_times_summary ON true` : '';
+
     const result = await this.db.query(
       `SELECT 
         dsr.id,
@@ -2397,6 +2674,7 @@ export class DatabaseService {
         dsr.sector2_time_ms,
         dsr.sector3_time_ms,
         dsr.total_race_time_ms,
+        dsr.base_race_time_ms,
         dsr.penalties,
         dsr.post_race_penalties,
         dsr.warnings,
@@ -2414,40 +2692,8 @@ export class DatabaseService {
         fdm.f123_team_name as mapping_team_name,
         fdm.f123_driver_name as mapping_driver_name,
         fdm.f123_driver_number as mapping_driver_number,
-        penalty_info.penalty_reason,
-        penalty_info.all_penalty_reasons${includeLapTimes ? `,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'lap_number', lt.lap_number,
-              'lap_time_ms', lt.lap_time_ms,
-              'sector1_ms', lt.sector1_ms,
-              'sector2_ms', lt.sector2_ms,
-              'sector3_ms', lt.sector3_ms,
-              'sector1_time_minutes', lt.sector1_time_minutes,
-              'sector2_time_minutes', lt.sector2_time_minutes,
-              'sector3_time_minutes', lt.sector3_time_minutes,
-              'lap_valid_bit_flags', lt.lap_valid_bit_flags,
-              'tire_compound', lt.tire_compound,
-              'track_position', lt.track_position,
-              'tire_age_laps', lt.tire_age_laps,
-              'top_speed_kmph', lt.top_speed_kmph,
-              'max_safety_car_status', lt.max_safety_car_status,
-              'vehicle_fia_flags', lt.vehicle_fia_flags,
-              'pit_stop', lt.pit_stop,
-              'ers_store_energy', lt.ers_store_energy,
-              'ers_deployed_this_lap', lt.ers_deployed_this_lap,
-              'ers_deploy_mode', lt.ers_deploy_mode,
-              'fuel_in_tank', lt.fuel_in_tank,
-              'fuel_remaining_laps', lt.fuel_remaining_laps,
-              'gap_to_leader_ms', lt.gap_to_leader_ms,
-              'gap_to_position_ahead_ms', lt.gap_to_position_ahead_ms,
-              'car_damage_data', lt.car_damage_data,
-              'tyre_sets_data', lt.tyre_sets_data
-            ) ORDER BY lt.lap_number
-          ) FILTER (WHERE lt.id IS NOT NULL),
-          '[]'::json
-        ) as lap_times` : ''}
+        penalty_summary.penalty_details,
+        penalty_summary.total_post_race_penalties${lapTimesSelect}
        FROM driver_session_results dsr
        LEFT JOIN drivers d ON dsr.user_id = d.id
        LEFT JOIN f123_driver_mappings fdm ON (
@@ -2459,22 +2705,24 @@ export class DatabaseService {
        )
        LEFT JOIN LATERAL (
          SELECT 
-           (SELECT reh.reason 
-            FROM race_edit_history reh 
-            WHERE reh.driver_session_result_id = dsr.id
-              AND reh.edit_type IN ('penalty', 'post_race_penalty', 'post_race_penalty_removal')
-              AND reh.is_reverted = false
-            ORDER BY reh.created_at DESC 
-            LIMIT 1) as penalty_reason,
-           (SELECT string_agg(reh.reason, ' | ' ORDER BY reh.created_at DESC)
-            FROM race_edit_history reh 
-            WHERE reh.driver_session_result_id = dsr.id
-              AND reh.edit_type IN ('penalty', 'post_race_penalty', 'post_race_penalty_removal')
-              AND reh.is_reverted = false) as all_penalty_reasons
-       ) penalty_info ON true${includeLapTimes ? `
-       LEFT JOIN lap_times lt ON lt.driver_session_result_id = dsr.id` : ''}
+           COALESCE(SUM(dp.seconds), 0) AS total_post_race_penalties,
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'id', dp.id,
+                 'driver_session_result_id', dp.driver_session_result_id,
+                 'seconds', dp.seconds,
+                 'reason', dp.reason,
+                 'created_at', dp.created_at,
+                 'created_by', dp.created_by
+               ) ORDER BY dp.created_at DESC
+             ) FILTER (WHERE dp.id IS NOT NULL),
+             '[]'::json
+           ) AS penalty_details
+        FROM driver_penalties dp
+        WHERE dp.driver_session_result_id = dsr.id
+       ) penalty_summary ON true${lapTimesJoin}
        WHERE dsr.session_result_id = $1
-       ${includeLapTimes ? 'GROUP BY dsr.id, d.name, d.team, d.number, fdm.f123_team_name, fdm.f123_driver_name, fdm.f123_driver_number, penalty_info.penalty_reason, penalty_info.all_penalty_reasons' : ''}
        ORDER BY dsr.position ASC NULLS LAST`,
       [sessionResultId, raceId]
     );
@@ -2515,6 +2763,32 @@ export class DatabaseService {
       // Set additional_data as a plain object
       transformed.additional_data = additionalData;
       transformed.additionalData = additionalData;  // Also add camelCase alias
+      
+      // Normalize penalty details JSON
+      let penaltyDetails = row.penalty_details;
+      if (penaltyDetails === null || penaltyDetails === undefined) {
+        penaltyDetails = [];
+      } else if (typeof penaltyDetails === 'string') {
+        try {
+          penaltyDetails = JSON.parse(penaltyDetails);
+        } catch (e) {
+          console.warn('Failed to parse penalty_details:', e);
+          penaltyDetails = [];
+        }
+      }
+      transformed.penalty_details = penaltyDetails;
+      transformed.penaltyDetails = penaltyDetails;
+      transformed.total_post_race_penalties = row.total_post_race_penalties != null ? Number(row.total_post_race_penalties) : 0;
+      if (Array.isArray(penaltyDetails) && penaltyDetails.length > 0) {
+        const reasons = penaltyDetails
+          .map((penalty: any) => penalty.reason)
+          .filter((reason: any) => typeof reason === 'string' && reason.trim().length > 0);
+        transformed.penalty_reason = penaltyDetails[0]?.reason ?? null;
+        transformed.all_penalty_reasons = reasons.length > 0 ? reasons.join(' | ') : null;
+      } else {
+        transformed.penalty_reason = null;
+        transformed.all_penalty_reasons = null;
+      }
       
       // Parse lap_times if included (it's already JSON from the query, but ensure it's an array)
       if (includeLapTimes && row.lap_times) {
@@ -2611,143 +2885,144 @@ export class DatabaseService {
 
   // Race results editing methods
   
-  // Add post-race penalty with history tracking (preserves original in-race penalties)
-  // Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
-  async addPenalty(driverSessionResultId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void> {
+  private async recalculateDriverPostRacePenalties(driverSessionResultId: string): Promise<{ sessionResultId: string }> {
     const now = new Date().toISOString();
 
-    // Get current values - direct UUID lookup (fast, indexed)
     const current = await this.db.query(
-      `SELECT id, session_result_id, penalties, post_race_penalties, total_race_time_ms, position, user_id
-       FROM driver_session_results 
+      `SELECT session_result_id, total_race_time_ms, base_race_time_ms
+       FROM driver_session_results
        WHERE id = $1`,
       [driverSessionResultId]
     );
-    
+
     if (!current.rows[0]) {
       throw new Error(`Driver session result not found: ${driverSessionResultId}`);
     }
-    
+
     const sessionResultId = current.rows[0].session_result_id;
-    const inRacePenalties = current.rows[0].penalties || 0; // Original in-race penalties (preserved)
-    const oldPostRacePenalties = current.rows[0].post_race_penalties || 0; // Current post-race penalties
-    const oldTotalTime = current.rows[0].total_race_time_ms || 0;
-    const oldPosition = current.rows[0].position;
-    const logUserId = current.rows[0].user_id || null;  // Tournament participant/user (NULL until mapped)
-    
-    // Add to post-race penalties (don't modify original in-race penalties)
-    const newPostRacePenalties = oldPostRacePenalties + penaltySeconds;
-    
-    // Convert penalty seconds to milliseconds and add to total time
-    // Note: total_race_time_ms from JSON already includes in-race penalties, so we just add post-race penalty
-    const penaltyMs = penaltySeconds * 1000;
-    const newTotalTime = oldTotalTime + penaltyMs;
-    
-    // Update the result with new post-race penalty and adjusted total time (preserve original penalties)
-    await this.db.query(
-      `UPDATE driver_session_results 
-       SET post_race_penalties = $1, total_race_time_ms = $2 
-       WHERE id = $3`,
-      [newPostRacePenalties, newTotalTime, driverSessionResultId]
-    );
-    
-    // Recalculate positions for all drivers in this session based on adjusted total times
-    await this.recalculatePositions(sessionResultId);
-    
-    // Get the new position after recalculation
-    const updated = await this.db.query(
-      'SELECT position FROM driver_session_results WHERE id = $1',
+    let baseRaceTimeMs = current.rows[0].base_race_time_ms;
+    const currentTotalRaceTimeMs = current.rows[0].total_race_time_ms || 0;
+
+    if (baseRaceTimeMs == null) {
+      baseRaceTimeMs = currentTotalRaceTimeMs;
+      await this.db.query(
+        `UPDATE driver_session_results
+         SET base_race_time_ms = $1
+         WHERE id = $2`,
+        [baseRaceTimeMs, driverSessionResultId]
+      );
+    }
+
+    const penaltySum = await this.db.query(
+      `SELECT COALESCE(SUM(seconds), 0) AS total_seconds
+       FROM driver_penalties
+       WHERE driver_session_result_id = $1`,
       [driverSessionResultId]
     );
-    const newPosition = updated.rows[0]?.position || oldPosition;
-    
-    // Log the edit - store driver_session_result_id directly (no JSONB matching needed)
+
+    const totalPenaltySeconds = Number(penaltySum.rows[0]?.total_seconds || 0);
+    const newTotalRaceTimeMs = baseRaceTimeMs + totalPenaltySeconds * 1000;
+
     await this.db.query(
-      `INSERT INTO race_edit_history (id, session_result_id, driver_session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        uuidv4(), sessionResultId, driverSessionResultId, logUserId, 'post_race_penalty',
-        { 
-          post_race_penalties: oldPostRacePenalties, 
-          total_race_time_ms: oldTotalTime, 
-          position: oldPosition 
-        }, 
-        { 
-          post_race_penalties: newPostRacePenalties, 
-          total_race_time_ms: newTotalTime, 
-          position: newPosition 
-        },
-        reason, editedBy, now
-      ]
+      `UPDATE driver_session_results
+       SET post_race_penalties = $1,
+           total_race_time_ms = $2,
+           updated_at = $3
+       WHERE id = $4`,
+      [totalPenaltySeconds, newTotalRaceTimeMs, now, driverSessionResultId]
     );
+
+    return { sessionResultId };
   }
 
-  // Remove post-race penalty (subtract penalty time and recalculate positions, preserves original in-race penalties)
-  // Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
-  async removePenalty(driverSessionResultId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<void> {
-    const now = new Date().toISOString();
+  // Retrieve penalties for a specific driver session result
+  async getPenaltiesForDriverResult(driverSessionResultId: string): Promise<Array<{
+    id: string;
+    driver_session_result_id: string;
+    seconds: number;
+    reason: string | null;
+    created_at: string;
+    created_by: string | null;
+  }>> {
+    const result = await this.db.query(
+      `SELECT id, driver_session_result_id, seconds, reason, created_at, created_by
+       FROM driver_penalties
+       WHERE driver_session_result_id = $1
+       ORDER BY created_at DESC`,
+      [driverSessionResultId]
+    );
 
-    // Get current values - direct UUID lookup (fast, indexed)
-    const current = await this.db.query(
-      `SELECT id, session_result_id, penalties, post_race_penalties, total_race_time_ms, position, user_id
-       FROM driver_session_results 
-       WHERE id = $1`,
-      [driverSessionResultId]
+    return result.rows;
+  }
+
+  // Retrieve penalties for all drivers in a session
+  async getPenaltiesForSession(sessionResultId: string): Promise<Array<{
+    id: string;
+    driver_session_result_id: string;
+    seconds: number;
+    reason: string | null;
+    created_at: string;
+    created_by: string | null;
+  }>> {
+    const result = await this.db.query(
+      `SELECT dp.id,
+              dp.driver_session_result_id,
+              dp.seconds,
+              dp.reason,
+              dp.created_at,
+              dp.created_by
+       FROM driver_penalties dp
+       INNER JOIN driver_session_results dsr ON dsr.id = dp.driver_session_result_id
+       WHERE dsr.session_result_id = $1
+       ORDER BY dp.created_at DESC`,
+      [sessionResultId]
     );
-    
-    if (!current.rows[0]) {
-      throw new Error(`Driver session result not found: ${driverSessionResultId}`);
+
+    return result.rows;
+  }
+
+  // Add post-race penalty (stored as individual penalty entries)
+  async addPenalty(driverSessionResultId: string, penaltySeconds: number, reason: string, editedBy: string): Promise<{
+    id: string;
+    driver_session_result_id: string;
+    seconds: number;
+    reason: string | null;
+    created_at: string;
+    created_by: string | null;
+  }> {
+    const normalizedSeconds = Math.round(penaltySeconds);
+    if (!Number.isFinite(normalizedSeconds) || normalizedSeconds <= 0) {
+      throw new Error('Penalty seconds must be a positive number');
     }
-    
-    const sessionResultId = current.rows[0].session_result_id;
-    const inRacePenalties = current.rows[0].penalties || 0; // Original in-race penalties (preserved)
-    const oldPostRacePenalties = current.rows[0].post_race_penalties || 0; // Current post-race penalties
-    const oldTotalTime = current.rows[0].total_race_time_ms || 0;
-    const oldPosition = current.rows[0].position;
-    const logUserId = current.rows[0].user_id || null;  // Tournament participant/user (NULL until mapped)
-    
-    // Ensure we don't go below 0
-    const newPostRacePenalties = Math.max(0, oldPostRacePenalties - penaltySeconds);
-    const penaltyMs = penaltySeconds * 1000;
-    const newTotalTime = Math.max(0, oldTotalTime - penaltyMs);
-    
-    // Update the result with reduced post-race penalty and adjusted total time (preserve original penalties)
-    await this.db.query(
-      `UPDATE driver_session_results 
-       SET post_race_penalties = $1, total_race_time_ms = $2 
-       WHERE id = $3`,
-      [newPostRacePenalties, newTotalTime, driverSessionResultId]
+
+    const insertResult = await this.db.query(
+      `INSERT INTO driver_penalties (id, driver_session_result_id, seconds, reason, created_by)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4)
+       RETURNING id, driver_session_result_id, seconds, reason, created_at, created_by`,
+      [driverSessionResultId, normalizedSeconds, reason || null, editedBy || null]
     );
-    
-    // Recalculate positions for all drivers in this session based on adjusted total times
+
+    const { sessionResultId } = await this.recalculateDriverPostRacePenalties(driverSessionResultId);
     await this.recalculatePositions(sessionResultId);
-    
-    // Get the new position after recalculation
-    const updated = await this.db.query(
-      'SELECT position FROM driver_session_results WHERE id = $1',
-      [driverSessionResultId]
+
+    return insertResult.rows[0];
+  }
+
+  // Remove a specific post-race penalty entry
+  async removePenalty(driverSessionResultId: string, penaltyId: string): Promise<void> {
+    const deleted = await this.db.query(
+      `DELETE FROM driver_penalties
+       WHERE id = $1 AND driver_session_result_id = $2
+       RETURNING driver_session_result_id`,
+      [penaltyId, driverSessionResultId]
     );
-    const newPosition = updated.rows[0]?.position || oldPosition;
-    
-    // Log the edit - store driver_session_result_id directly (no JSONB matching needed)
-    await this.db.query(
-      `INSERT INTO race_edit_history (id, session_result_id, driver_session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        uuidv4(), sessionResultId, driverSessionResultId, logUserId, 'post_race_penalty_removal',
-        { 
-          post_race_penalties: oldPostRacePenalties, 
-          total_race_time_ms: oldTotalTime, 
-          position: oldPosition 
-        }, 
-        { 
-          post_race_penalties: newPostRacePenalties, 
-          total_race_time_ms: newTotalTime, 
-          position: newPosition 
-        },
-        reason, editedBy, now
-      ]
-    );
+
+    if (deleted.rows.length === 0) {
+      throw new Error(`Penalty ${penaltyId} not found for driver session result ${driverSessionResultId}`);
+    }
+
+    const { sessionResultId } = await this.recalculateDriverPostRacePenalties(driverSessionResultId);
+    await this.recalculatePositions(sessionResultId);
   }
 
   // Recalculate positions for all drivers in a session based on total_race_time_ms

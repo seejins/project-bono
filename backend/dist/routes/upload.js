@@ -66,10 +66,10 @@ function createUploadRoutes(dbService) {
             let targetRaceId = raceId;
             if (!targetRaceId) {
                 // Create new race
-                const track = await dbService.findOrCreateTrack(sessionData.trackName);
+                const trackId = await dbService.findOrCreateTrack(sessionData.trackName);
                 targetRaceId = await dbService.createRace({
                     seasonId,
-                    trackId: track.id,
+                    trackId,
                     raceDate: new Date(sessionData.date).toISOString(),
                     status: 'completed'
                 });
@@ -106,8 +106,8 @@ function createUploadRoutes(dbService) {
                 success: true,
                 message: 'Session data imported successfully',
                 raceId: targetRaceId,
-                importedResults: importResult.resultsCount,
-                importedLapTimes: importResult.lapTimesCount
+                importedResults: importResult?.resultsCount ?? (sessionData.results?.length ?? 0),
+                importedLapTimes: importResult?.lapTimesCount ?? 0
             });
         }
         catch (error) {
@@ -156,7 +156,7 @@ function createUploadRoutes(dbService) {
                 f123DriverName,
                 f123DriverNumber: f123DriverNumber || undefined,
                 f123TeamName: undefined,
-                memberId: yourDriverId
+                yourDriverId
             });
             res.json({
                 success: true,
@@ -196,8 +196,8 @@ function createUploadRoutes(dbService) {
             res.json({
                 success: true,
                 message: 'Session data imported successfully',
-                importedResults: importResult.resultsCount,
-                importedLapTimes: importResult.lapTimesCount
+                importedResults: importResult?.resultsCount ?? mappedResults.length,
+                importedLapTimes: importResult?.lapTimesCount ?? 0
             });
         }
         catch (error) {

@@ -3,7 +3,6 @@ import { F123DriverResult } from '../../services/F123DataService';
 export interface DriverRaceAnalysisProps {
   driverId: string;
   raceId: string;
-  backHref?: string;
   initialSessionType?: 'race' | 'qualifying' | 'practice';
 }
 

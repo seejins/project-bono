@@ -255,23 +255,33 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
   router.post('/:id/participants', async (req, res) => {
     try {
       const { id } = req.params;
-      const { driverId } = req.body;
+      const { driverId, team, number } = req.body;
       
       if (!driverId) {
-        return res.status(400).json({ error: 'Driver ID is required' });
+        return res.status(400).json({ error: 'Member ID is required' });
       }
 
       await dbService.ensureInitialized();
       await dbService.addDriverToSeason(id, driverId);
-      
+
+      if (team !== undefined || number !== undefined) {
+        await dbService.updateSeasonParticipant(driverId, {
+          team: typeof team === 'string' ? team.trim() || undefined : team,
+          number: number !== undefined && number !== null ? Number(number) : undefined
+        });
+      }
+
+      const participant = await dbService.getDriverById(driverId);
+
       res.json({
         success: true,
-        message: 'Driver added to season successfully'
+        message: 'Member added to season successfully',
+        participant
       });
     } catch (error) {
-      console.error('Add driver to season error:', error);
+      console.error('Add member to season error:', error);
       res.status(500).json({ 
-        error: 'Failed to add driver to season',
+        error: 'Failed to add member to season',
         details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
@@ -304,13 +314,22 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       const { team, number } = req.body;
       
       await dbService.ensureInitialized();
-      
-      // For now, we'll just return success since we don't have a specific update method
-      // In a real implementation, you'd update the participant's team/number in the database
-      
+
+      if (team === undefined && number === undefined) {
+        return res.status(400).json({ error: 'No updates provided for season participant' });
+      }
+
+      await dbService.updateSeasonParticipant(driverId, {
+        team: typeof team === 'string' ? team.trim() : team,
+        number: number !== undefined && number !== null ? Number(number) : undefined
+      });
+
+      const participant = await dbService.getDriverById(driverId);
+
       res.json({
         success: true,
-        message: 'Participant updated successfully'
+        message: 'Participant updated successfully',
+        participant
       });
     } catch (error) {
       console.error('Update participant error:', error);
@@ -352,16 +371,16 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       }
 
       await dbService.ensureInitialized();
-      const track = await dbService.createTrackAndAddToSeason(id, {
+      const trackId = await dbService.createTrackAndAddToSeason({
         name,
         country,
         circuitLength: length ? parseFloat(length) : 0,
         laps: laps ? parseInt(laps) : 0
-      });
+      }, id);
       
       res.json({
         success: true,
-        track
+        trackId
       });
     } catch (error) {
       console.error('Add track to season error:', error);
@@ -423,7 +442,7 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
       }
 
       await dbService.ensureInitialized();
-      const raceId = await dbService.addRaceToSeason(id, {
+      const raceId = await dbService.addRaceToSeason({
         seasonId: id,
         trackId,
         raceDate: date ? new Date(date).toISOString() : new Date().toISOString(),
@@ -448,7 +467,7 @@ export default function createSeasonsRoutes(dbService: DatabaseService) {
     try {
       const { id, raceId } = req.params;
       await dbService.ensureInitialized();
-      await dbService.removeRaceFromSeason(id, raceId);
+      await dbService.removeRaceFromSeason(raceId);
       
       res.json({
         success: true,

@@ -341,8 +341,8 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
 
       {/* Add Event Modal */}
       {showAddEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Event</h3>
             
             <div className="space-y-4">

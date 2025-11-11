@@ -16,11 +16,11 @@ function createSessionsRoutes(dbService) {
             }
             await dbService.ensureInitialized();
             // Find or create track
-            const track = await dbService.findOrCreateTrack(sessionData.trackName);
+            const trackId = await dbService.findOrCreateTrack(sessionData.trackName);
             // Create race
             const raceId = await dbService.createRace({
                 seasonId,
-                trackId: track.id,
+                trackId,
                 raceDate: new Date(sessionData.date).toISOString(),
                 status: 'completed'
             });
@@ -32,7 +32,7 @@ function createSessionsRoutes(dbService) {
                     m.f123DriverNumber === result.driverNumber);
                 return {
                     ...result,
-                    yourDriverId: mapping?.memberId || null
+                    yourDriverId: mapping?.yourDriverId || null
                 };
             });
             // Import race results
@@ -44,8 +44,8 @@ function createSessionsRoutes(dbService) {
                 success: true,
                 message: 'Session data uploaded successfully',
                 raceId,
-                importedResults: importResult.resultsCount,
-                importedLapTimes: importResult.lapTimesCount
+                importedResults: importResult?.resultsCount ?? mappedResults.length,
+                importedLapTimes: importResult?.lapTimesCount ?? 0
             });
         }
         catch (error) {

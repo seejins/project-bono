@@ -40,7 +40,7 @@ exports.setupRoutes = setupRoutes;
 const upload_1 = __importDefault(require("./upload"));
 const seasons_1 = __importDefault(require("./seasons"));
 const sessions_1 = __importDefault(require("./sessions"));
-const members_1 = __importDefault(require("./members"));
+const drivers_1 = __importDefault(require("./drivers"));
 const tracks_1 = __importDefault(require("./tracks"));
 const races_1 = __importStar(require("./races"));
 function setupRoutes(app, io, services) {
@@ -126,12 +126,12 @@ function setupRoutes(app, io, services) {
             res.status(500).json({ error: 'Failed to get session results' });
         }
     });
-    // Get UDP lap history for a member
-    app.get('/api/f123-udp/lap-history/:memberId', async (req, res) => {
+    // Get UDP lap history for a driver
+    app.get('/api/f123-udp/lap-history/:driverId', async (req, res) => {
         try {
-            const { memberId } = req.params;
+            const { driverId } = req.params;
             const { sessionUid } = req.query;
-            const lapHistory = await services.databaseService.getUDPLapHistory();
+            const lapHistory = await services.databaseService.getUDPLapHistory(driverId);
             res.json({ lapHistory });
         }
         catch (error) {
@@ -142,10 +142,10 @@ function setupRoutes(app, io, services) {
     app.use('/api/upload', (0, upload_1.default)(services.databaseService));
     // Seasons management routes
     app.use('/api/seasons', (0, seasons_1.default)(services.databaseService));
-    // Members management routes
-    app.use('/api/members', (0, members_1.default)(services.databaseService));
+    // Drivers management routes
+    app.use('/api/drivers', (0, drivers_1.default)(services.databaseService));
     // Tracks management routes
-    app.use('/api/tracks', tracks_1.default);
+    app.use('/api/tracks', (0, tracks_1.default)(services.databaseService));
     // Session data routes (for local host app)
     app.use('/api/sessions', (0, sessions_1.default)(services.databaseService));
     // Race results and editing routes

@@ -257,6 +257,19 @@ CREATE INDEX idx_f123_udp_participants_member ON f123_udp_participants(member_id
 CREATE INDEX idx_f123_udp_participants_session_uid ON f123_udp_participants(session_uid);
 CREATE INDEX idx_f123_udp_participants_vehicle_index ON f123_udp_participants(vehicle_index);
 
+-- Driver penalties table (post-race penalties applied administratively)
+CREATE TABLE IF NOT EXISTS driver_penalties (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_session_result_id UUID NOT NULL REFERENCES driver_session_results(id) ON DELETE CASCADE,
+  seconds INTEGER NOT NULL CHECK (seconds > 0),
+  reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  created_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_driver_penalties_driver_session_result_id
+  ON driver_penalties(driver_session_result_id);
+
 -- Insert default tracks
 INSERT INTO tracks (name, country, length_km) VALUES
 ('Bahrain International Circuit', 'Bahrain', 5.412),

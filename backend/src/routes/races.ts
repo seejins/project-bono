@@ -148,6 +148,52 @@ router.get('/sessions/:sessionId/edit-history', async (req, res) => {
   }
 });
 
+// Get penalties for a specific driver session result
+router.get('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
+  try {
+    const { driverSessionResultId } = req.params;
+
+    await dbService.ensureInitialized();
+
+    const penalties = await dbService.getPenaltiesForDriverResult(driverSessionResultId);
+
+    res.json({
+      success: true,
+      driverSessionResultId,
+      penalties
+    });
+  } catch (error) {
+    console.error('Get driver penalties error:', error);
+    res.status(500).json({
+      error: 'Failed to get driver penalties',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get penalties for an entire session
+router.get('/sessions/:sessionId/penalties', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    await dbService.ensureInitialized();
+
+    const penalties = await dbService.getPenaltiesForSession(sessionId);
+
+    res.json({
+      success: true,
+      sessionId,
+      penalties
+    });
+  } catch (error) {
+    console.error('Get session penalties error:', error);
+    res.status(500).json({
+      error: 'Failed to get session penalties',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Add penalty to a driver (penaltySeconds is in seconds, e.g., 5 for a 5-second penalty)
 // Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
 router.post('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
@@ -155,13 +201,19 @@ router.post('/driver-results/:driverSessionResultId/penalties', async (req, res)
     const { driverSessionResultId } = req.params;
     const { penaltySeconds, reason, editedBy } = req.body;
     
-    if (!penaltySeconds || !reason || !editedBy) {
+    if (penaltySeconds == null || penaltySeconds === '') {
+      return res.status(400).json({
+        error: 'Missing required field: penaltySeconds (in seconds)'
+      });
+    }
+
+    if (!reason || !editedBy) {
       return res.status(400).json({ 
-        error: 'Missing required fields: penaltySeconds (in seconds), reason, editedBy' 
+        error: 'Missing required fields: reason, editedBy' 
       });
     }
     
-    if (penaltySeconds <= 0) {
+    if (Number(penaltySeconds) <= 0) {
       return res.status(400).json({ 
         error: 'Penalty seconds must be greater than 0' 
       });
@@ -169,11 +221,12 @@ router.post('/driver-results/:driverSessionResultId/penalties', async (req, res)
     
     await dbService.ensureInitialized();
     
-    await dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
+    const penalty = await dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
     
     res.json({
       success: true,
-      message: `Added ${penaltySeconds} second penalty`
+      message: `Added ${penalty.seconds} second penalty`,
+      penalty
     });
   } catch (error) {
     console.error('Add penalty error:', error);
@@ -184,32 +237,25 @@ router.post('/driver-results/:driverSessionResultId/penalties', async (req, res)
   }
 });
 
-// Remove penalty from a driver (penaltySeconds is in seconds)
+// Remove penalty from a driver (requires penaltyId from driver_penalties)
 // Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
-router.delete('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
+router.delete('/driver-results/:driverSessionResultId/penalties/:penaltyId', async (req, res) => {
   try {
-    const { driverSessionResultId } = req.params;
-    const { penaltySeconds, reason, editedBy } = req.body;
-    
-    if (!penaltySeconds || !reason || !editedBy) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: penaltySeconds (in seconds), reason, editedBy' 
-      });
-    }
-    
-    if (penaltySeconds <= 0) {
-      return res.status(400).json({ 
-        error: 'Penalty seconds must be greater than 0' 
+    const { driverSessionResultId, penaltyId } = req.params;
+
+    if (!penaltyId) {
+      return res.status(400).json({
+        error: 'Missing required path parameter: penaltyId'
       });
     }
     
     await dbService.ensureInitialized();
     
-    await dbService.removePenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
+    await dbService.removePenalty(driverSessionResultId, penaltyId);
     
     res.json({
       success: true,
-      message: `Removed ${penaltySeconds} second penalty`
+      message: `Removed penalty ${penaltyId}`
     });
   } catch (error) {
     console.error('Remove penalty error:', error);

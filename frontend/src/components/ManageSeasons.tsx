@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Users, Calendar, MapPin, Trash2, Edit, ChevronDown, ChevronRight, Flag } from 'lucide-react';
 import { apiGet, apiPost, apiCall } from '../utils/api';
 import { useSeason } from '../contexts/SeasonContext';
 import { SeasonDetail } from './SeasonDetail';
+import { F123_TEAMS } from '../data/f123Teams';
 
 interface Season {
   id: string;
@@ -217,16 +218,21 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
   };
 
   const handleAddDriver = async () => {
-    if (!newDriver.name || !selectedSeason) {
-      alert('Please enter driver name and select a season');
+    const driverName = (newDriver.name || '').trim();
+    const driverTeam = (newDriver.team || '').trim();
+
+    if (!driverName || !driverTeam || !selectedSeason) {
+      alert('Please enter driver name, team, and select a season');
       return;
     }
 
     try {
+      const parsedNumber = parseInt(newDriver.number, 10);
+
       const response = await apiPost(`/api/seasons/${selectedSeason.id}/drivers`, {
-        name: newDriver.name,
-        team: newDriver.team || 'No Team',
-        number: parseInt(newDriver.number) || 0
+        name: driverName,
+        team: driverTeam,
+        number: Number.isNaN(parsedNumber) ? 0 : parsedNumber
       });
 
       const data = await response.json();
@@ -281,6 +287,12 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
       alert('Failed to add event');
     }
   };
+
+  const isAddDriverFormValid =
+    (newDriver.name || '').trim().length > 0 &&
+    (newDriver.team || '').trim().length > 0;
+
+  const teamOptions = useMemo(() => F123_TEAMS, []);
 
   const handleRemoveDriver = async (driverId: string) => {
     if (!confirm('Are you sure you want to remove this driver?')) return;
@@ -389,8 +401,8 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
 
       {/* Create Season Modal */}
       {showCreateSeason && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Create New Season</h3>
             
             <div className="space-y-4">
@@ -466,8 +478,8 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
 
       {/* Add Driver Modal */}
       {showAddDriver && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver</h3>
             
             <div className="space-y-4">
@@ -486,15 +498,21 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Team
+                  Team *
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newDriver.team}
                   onChange={(e) => setNewDriver({ ...newDriver, team: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="e.g., Mercedes"
-                />
+                  required
+                >
+                  <option value="">Select a team</option>
+                  {teamOptions.map((team) => (
+                    <option key={team.id} value={team.name}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               
               <div>
@@ -520,7 +538,12 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
               </button>
               <button
                 onClick={handleAddDriver}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                disabled={!isAddDriverFormValid}
+                className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                  isAddDriverFormValid
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-red-300 text-white cursor-not-allowed opacity-70'
+                }`}
               >
                 Add Driver
               </button>
@@ -531,8 +554,8 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
 
       {/* Add Event Modal */}
       {showAddEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Event</h3>
             
             <div className="space-y-4">

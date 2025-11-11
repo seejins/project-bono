@@ -98,6 +98,14 @@
   .tire-indicator {
     transition: all 0.3s ease-in-out;
   }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-6 min-h-screen overflow-y-auto;
+  }
+  
+  .modal-panel {
+    @apply w-full bg-white dark:bg-gray-800 rounded-xl shadow-xl;
+  }
 }
 
 @layer utilities {

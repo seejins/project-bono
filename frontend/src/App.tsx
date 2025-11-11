@@ -215,7 +215,7 @@ function DriverSeasonStatsPage() {
 
   return (
     <PageTransition>
-      <DriverSeasonStats driverId={driverId} backHref="/grid" />
+      <DriverSeasonStats driverId={driverId} />
     </PageTransition>
   );
 }
@@ -245,7 +245,6 @@ function DriverCareerProfilePage() {
     <PageTransition>
       <DriverCareerProfileComponent
         memberId={driverId}
-        backHref="/history"
         onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
       />
     </PageTransition>
@@ -288,7 +287,6 @@ function RaceDetailPage() {
     <PageTransition>
       <RaceDetail
         raceId={raceId}
-        backHref="/races"
         onDriverSelect={(driverId, race, initialSessionType) =>
           navigate(`/races/${race}/driver/${driverId}${initialSessionType ? `?session=${initialSessionType}` : ''}`)
         }
@@ -314,7 +312,6 @@ function DriverRaceAnalysisPage() {
         raceId={raceId}
         driverId={driverId}
         initialSessionType={initialSessionType}
-        backHref={`/races/${raceId}`}
       />
     </PageTransition>
   );

@@ -9,6 +9,7 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const RaceJSONImportService_1 = require("../services/RaceJSONImportService");
+const F123JSONParser_1 = require("../services/F123JSONParser");
 const router = (0, express_1.Router)();
 // Configure multer for file uploads
 const storage = multer_1.default.diskStorage({
@@ -55,10 +56,15 @@ router.get('/:raceId/results', async (req, res) => {
     try {
         const { raceId } = req.params;
         await dbService.ensureInitialized();
+        console.log(`🔍 Fetching results for race: ${raceId}`);
         // Get all completed sessions for this race
         const sessions = await dbService.getCompletedSessions(raceId);
+        console.log(`📊 Found ${sessions.length} sessions for race ${raceId}`);
         const results = await Promise.all(sessions.map(async (session) => {
-            const driverResults = await dbService.getDriverSessionResults(session.id);
+            console.log(`🔍 Fetching driver results for session ${session.id} (${session.sessionName})`);
+            // Include lap times for all sessions (they'll be empty arrays if no lap data exists)
+            const driverResults = await dbService.getDriverSessionResults(session.id, true);
+            console.log(`📊 Session ${session.id} has ${driverResults.length} driver results`);
             return {
                 sessionId: session.id,
                 sessionType: session.sessionType,
@@ -67,6 +73,7 @@ router.get('/:raceId/results', async (req, res) => {
                 results: driverResults
             };
         }));
+        console.log(`✅ Returning ${results.length} sessions with total ${results.reduce((sum, s) => sum + s.results.length, 0)} driver results`);
         res.json({
             success: true,
             raceId,
@@ -121,32 +128,104 @@ router.get('/sessions/:sessionId/edit-history', async (req, res) => {
         });
     }
 });
-// Add penalty to a driver
-router.post('/sessions/:sessionId/penalties', async (req, res) => {
+// Get penalties for a specific driver session result
+router.get('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
+    try {
+        const { driverSessionResultId } = req.params;
+        await dbService.ensureInitialized();
+        const penalties = await dbService.getPenaltiesForDriverResult(driverSessionResultId);
+        res.json({
+            success: true,
+            driverSessionResultId,
+            penalties
+        });
+    }
+    catch (error) {
+        console.error('Get driver penalties error:', error);
+        res.status(500).json({
+            error: 'Failed to get driver penalties',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// Get penalties for an entire session
+router.get('/sessions/:sessionId/penalties', async (req, res) => {
     try {
         const { sessionId } = req.params;
-        const { driverId, penaltyPoints, reason, editedBy } = req.body;
-        if (!driverId || !penaltyPoints || !reason || !editedBy) {
+        await dbService.ensureInitialized();
+        const penalties = await dbService.getPenaltiesForSession(sessionId);
+        res.json({
+            success: true,
+            sessionId,
+            penalties
+        });
+    }
+    catch (error) {
+        console.error('Get session penalties error:', error);
+        res.status(500).json({
+            error: 'Failed to get session penalties',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// Add penalty to a driver (penaltySeconds is in seconds, e.g., 5 for a 5-second penalty)
+// Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
+router.post('/driver-results/:driverSessionResultId/penalties', async (req, res) => {
+    try {
+        const { driverSessionResultId } = req.params;
+        const { penaltySeconds, reason, editedBy } = req.body;
+        if (penaltySeconds == null || penaltySeconds === '') {
             return res.status(400).json({
-                error: 'Missing required fields: driverId, penaltyPoints, reason, editedBy'
+                error: 'Missing required field: penaltySeconds (in seconds)'
+            });
+        }
+        if (!reason || !editedBy) {
+            return res.status(400).json({
+                error: 'Missing required fields: reason, editedBy'
+            });
+        }
+        if (Number(penaltySeconds) <= 0) {
+            return res.status(400).json({
+                error: 'Penalty seconds must be greater than 0'
             });
         }
         await dbService.ensureInitialized();
-        // Validate the edit
-        const isValid = await raceResultsEditor.validateEdit(sessionId, 'penalty', { penaltyPoints });
-        if (!isValid) {
-            return res.status(400).json({ error: 'Invalid penalty data' });
-        }
-        await raceResultsEditor.addPenalty(sessionId, driverId, penaltyPoints, reason, editedBy);
+        const penalty = await dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
         res.json({
             success: true,
-            message: `Added ${penaltyPoints} penalty points to driver ${driverId}`
+            message: `Added ${penalty.seconds} second penalty`,
+            penalty
         });
     }
     catch (error) {
         console.error('Add penalty error:', error);
         res.status(500).json({
             error: 'Failed to add penalty',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// Remove penalty from a driver (requires penaltyId from driver_penalties)
+// Uses driverSessionResultId (UUID) for direct lookup - no JSONB queries needed
+router.delete('/driver-results/:driverSessionResultId/penalties/:penaltyId', async (req, res) => {
+    try {
+        const { driverSessionResultId, penaltyId } = req.params;
+        if (!penaltyId) {
+            return res.status(400).json({
+                error: 'Missing required path parameter: penaltyId'
+            });
+        }
+        await dbService.ensureInitialized();
+        await dbService.removePenalty(driverSessionResultId, penaltyId);
+        res.json({
+            success: true,
+            message: `Removed penalty ${penaltyId}`
+        });
+    }
+    catch (error) {
+        console.error('Remove penalty error:', error);
+        res.status(500).json({
+            error: 'Failed to remove penalty',
             details: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -369,7 +448,133 @@ router.post('/admin/orphaned-sessions/:orphanedId/ignore', async (req, res) => {
         });
     }
 });
-// Import race JSON file
+// Import multiple race JSON files (groups by track)
+router.post('/import-json-batch', upload.array('raceFiles', 10), async (req, res) => {
+    try {
+        const files = req.files;
+        if (!files || files.length === 0) {
+            return res.status(400).json({ error: 'No files uploaded' });
+        }
+        const { seasonId } = req.body;
+        if (!seasonId) {
+            // Clean up uploaded files
+            files.forEach(file => {
+                if (fs_1.default.existsSync(file.path)) {
+                    fs_1.default.unlinkSync(file.path);
+                }
+            });
+            return res.status(400).json({ error: 'Season ID is required' });
+        }
+        await dbService.ensureInitialized();
+        // Parse all files to determine track grouping
+        const fileData = [];
+        for (const file of files) {
+            try {
+                const validation = await raceJSONImportService.validateJSONFile(file.path);
+                if (!validation.valid) {
+                    fileData.push({
+                        file,
+                        trackName: 'Unknown',
+                        sessionType: 0,
+                        sessionTypeName: 'Unknown'
+                    });
+                    continue;
+                }
+                // Quick parse to get track name and session type
+                const parsedData = F123JSONParser_1.F123JSONParser.parseSessionFile(file.path);
+                fileData.push({
+                    file,
+                    trackName: parsedData.sessionInfo.trackName,
+                    sessionType: parsedData.sessionInfo.sessionType,
+                    sessionTypeName: parsedData.sessionInfo.sessionTypeName
+                });
+            }
+            catch (error) {
+                console.error(`Error parsing file ${file.originalname}:`, error);
+                fileData.push({
+                    file,
+                    trackName: 'Unknown',
+                    sessionType: 0,
+                    sessionTypeName: 'Unknown'
+                });
+            }
+        }
+        // Group files by track name (case-insensitive)
+        const trackGroups = new Map();
+        fileData.forEach(data => {
+            const trackKey = data.trackName.toLowerCase().trim();
+            if (!trackGroups.has(trackKey)) {
+                trackGroups.set(trackKey, []);
+            }
+            trackGroups.get(trackKey).push(data);
+        });
+        // Process each track group
+        const results = [];
+        let groupRaceId = null;
+        for (const [trackName, groupFiles] of trackGroups.entries()) {
+            let raceId = null;
+            // Process files in order (practice -> qualifying -> race)
+            const sortedFiles = groupFiles.sort((a, b) => {
+                // Sort by session type: practice (1-4) < qualifying (5-9) < race (10-11)
+                return a.sessionType - b.sessionType;
+            });
+            for (const fileData of sortedFiles) {
+                try {
+                    // Use the same raceId for all files in the group
+                    const result = await raceJSONImportService.importRaceJSON(fileData.file.path, seasonId, raceId || undefined);
+                    if (!raceId) {
+                        raceId = result.raceId;
+                        groupRaceId = raceId;
+                    }
+                    results.push({
+                        file: fileData.file.originalname,
+                        success: true,
+                        importedCount: result.importedCount,
+                        sessionType: fileData.sessionTypeName
+                    });
+                    // Clean up file
+                    if (fs_1.default.existsSync(fileData.file.path)) {
+                        fs_1.default.unlinkSync(fileData.file.path);
+                    }
+                }
+                catch (error) {
+                    results.push({
+                        file: fileData.file.originalname,
+                        success: false,
+                        error: error instanceof Error ? error.message : 'Unknown error'
+                    });
+                    // Clean up file
+                    if (fs_1.default.existsSync(fileData.file.path)) {
+                        fs_1.default.unlinkSync(fileData.file.path);
+                    }
+                }
+            }
+        }
+        res.json({
+            success: true,
+            message: `Processed ${files.length} file(s)`,
+            raceId: groupRaceId,
+            results
+        });
+    }
+    catch (error) {
+        console.error('Import race JSON batch error:', error);
+        // Clean up any remaining files
+        if (req.files) {
+            const files = req.files;
+            files.forEach(file => {
+                if (fs_1.default.existsSync(file.path)) {
+                    fs_1.default.unlinkSync(file.path);
+                }
+            });
+        }
+        res.status(500).json({
+            error: 'Failed to import race JSON files',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// Import race JSON file (single file - kept for backward compatibility)
 router.post('/import-json', upload.single('raceFile'), async (req, res) => {
     try {
         if (!req.file) {
@@ -456,6 +661,30 @@ router.post('/import-json-path', async (req, res) => {
         console.error('Import race JSON from path error:', error);
         res.status(500).json({
             error: 'Failed to import race JSON',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// Get a single race by ID (must be last to avoid conflicts with other routes)
+router.get('/:raceId', async (req, res) => {
+    try {
+        const { raceId } = req.params;
+        await dbService.ensureInitialized();
+        const race = await dbService.getRaceById(raceId);
+        if (!race) {
+            return res.status(404).json({
+                error: 'Race not found'
+            });
+        }
+        res.json({
+            success: true,
+            race
+        });
+    }
+    catch (error) {
+        console.error('Get race error:', error);
+        res.status(500).json({
+            error: 'Failed to get race',
             details: error instanceof Error ? error.message : 'Unknown error'
         });
     }

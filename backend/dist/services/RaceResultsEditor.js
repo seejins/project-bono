@@ -7,14 +7,25 @@ class RaceResultsEditor {
         this.dbService = dbService;
         console.log('✏️ RaceResultsEditor initialized');
     }
-    // Add penalty with history tracking
-    async addPenalty(sessionResultId, driverId, penaltyPoints, reason, editedBy) {
+    // Add penalty entry for a driver session result
+    async addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy) {
         try {
-            await this.dbService.addPenalty(sessionResultId, driverId, penaltyPoints, reason, editedBy);
-            console.log(`✅ Added ${penaltyPoints} penalty points to driver ${driverId} in session ${sessionResultId}`);
+            const penalty = await this.dbService.addPenalty(driverSessionResultId, penaltySeconds, reason, editedBy);
+            console.log(`✅ Added ${penalty.seconds} second penalty to driver session result ${driverSessionResultId}`);
         }
         catch (error) {
             console.error('❌ Error adding penalty:', error);
+            throw error;
+        }
+    }
+    // Remove penalty entry
+    async removePenalty(driverSessionResultId, penaltyId) {
+        try {
+            await this.dbService.removePenalty(driverSessionResultId, penaltyId);
+            console.log(`✅ Removed penalty ${penaltyId} from driver session result ${driverSessionResultId}`);
+        }
+        catch (error) {
+            console.error('❌ Error removing penalty:', error);
             throw error;
         }
     }
@@ -143,11 +154,6 @@ class RaceResultsEditor {
             }
             // Validate based on edit type
             switch (editType) {
-                case 'penalty':
-                    if (!data.penaltyPoints || data.penaltyPoints <= 0) {
-                        throw new Error('Penalty points must be positive');
-                    }
-                    break;
                 case 'position_change':
                     if (!data.newPosition || data.newPosition < 1) {
                         throw new Error('Position must be 1 or higher');
@@ -199,7 +205,7 @@ class RaceResultsEditor {
             // Clear current results
             await this.dbService.query('DELETE FROM driver_session_results WHERE session_result_id = $1', [sessionResultId]);
             // Restore from backup
-            await this.dbService.storeDriverSessionResults(sessionResultId, backupData);
+            await this.dbService.storeDriverSessionResults(sessionResultId, backupData); // Return value not needed here
             console.log(`🔄 Restored session ${sessionResultId} from backup ${backupId}`);
         }
         catch (error) {

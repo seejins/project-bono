@@ -16,12 +16,12 @@ export default function createSessionsRoutes(dbService: DatabaseService) {
       await dbService.ensureInitialized();
       
       // Find or create track
-      const track = await dbService.findOrCreateTrack(sessionData.trackName);
+      const trackId = await dbService.findOrCreateTrack(sessionData.trackName);
       
       // Create race
       const raceId = await dbService.createRace({
         seasonId,
-        trackId: track.id,
+        trackId,
         raceDate: new Date(sessionData.date).toISOString(),
         status: 'completed'
       });
@@ -38,7 +38,7 @@ export default function createSessionsRoutes(dbService: DatabaseService) {
         
         return {
           ...result,
-          yourDriverId: mapping?.memberId || null
+          yourDriverId: mapping?.yourDriverId || null
         };
       });
 
@@ -52,8 +52,8 @@ export default function createSessionsRoutes(dbService: DatabaseService) {
         success: true,
         message: 'Session data uploaded successfully',
         raceId,
-        importedResults: importResult.resultsCount,
-        importedLapTimes: importResult.lapTimesCount
+        importedResults: importResult?.resultsCount ?? mappedResults.length,
+        importedLapTimes: importResult?.lapTimesCount ?? 0
       });
     } catch (error) {
       console.error('Session upload error:', error);

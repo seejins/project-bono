@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, BarChart3, TrendingUp, Activity, Award, Clock, Target, Zap, Flag, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, Activity, Award, Clock, Target, Zap, Flag, AlertTriangle } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from './charts/ChartCard';
 import { BaseLineChart, DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
@@ -15,7 +14,7 @@ import { formatSecondsValue, formatSecondsDifference, getCompoundKey, getCompoun
 
 type AnalyticsTab = 'overview' | 'pace' | 'strategy' | 'telemetry';
 
-export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, backHref, initialSessionType }) => {
+export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, initialSessionType }) => {
   const { raceData, sessions, defaultSessionId, loading, error } = useDriverRaceData(driverId, raceId);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const hasAppliedInitialSession = useRef(false);
@@ -487,20 +486,8 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   return (
     <div className="max-w-[2048px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        {backHref ? (
-          <Link
-            to={backHref}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center space-x-2"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back</span>
-          </Link>
-        ) : (
-          <div className="w-10" />
-        )}
+      <div className="mb-6 text-center">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Driver Race Analysis</h1>
-        <div className="w-10"></div>
       </div>
 
       {/* Driver & Race Info */}

@@ -48,7 +48,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         // Transform participants to Driver format with real stats from API
         const driversWithStats = await Promise.all(data.participants.map(async (participant: any, index: number) => {
           // Fetch real stats for this driver
-          const statsResponse = await fetch(`${apiUrl}/api/members/${participant.id}/season-stats?seasonId=${currentSeason.id}`);
+          const statsResponse = await fetch(`${apiUrl}/api/drivers/${participant.id}/seasons/${currentSeason.id}/stats`);
           let stats = {
             points: 0,
             wins: 0,
@@ -58,10 +58,12 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
             averageFinish: 0,
             consistency: 0
           };
-          
+
           if (statsResponse.ok) {
             const statsData = await statsResponse.json();
             stats = statsData.stats || stats;
+          } else if (statsResponse.status !== 404) {
+            console.warn(`Failed to load stats for driver ${participant.id}:`, statsResponse.statusText);
           }
           
           return {

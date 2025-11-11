@@ -17,7 +17,17 @@ const PostSessionProcessor_1 = require("./services/PostSessionProcessor");
 const RaceResultsEditor_1 = require("./services/RaceResultsEditor");
 const routes_1 = require("./routes");
 const socket_1 = require("./socket");
-dotenv_1.default.config();
+const path_1 = __importDefault(require("path"));
+// Load .env file from backend directory
+dotenv_1.default.config({ path: path_1.default.join(__dirname, '../.env') });
+// Debug: Log database configuration
+console.log('🔍 Database Config:', {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || '5432',
+    database: process.env.DB_NAME || 'f1_race_engineer_dev',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD ? '***' : '(empty)'
+});
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(server, {

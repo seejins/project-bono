@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit, Trash2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Users, Plus, Trash2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 
 interface Driver {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   steam_id?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,11 +23,11 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
-  const [newDriver, setNewDriver] = useState({ name: '', steam_id: '' });
+  const [newDriver, setNewDriver] = useState({ firstName: '', lastName: '', steam_id: '' });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
-  const [formErrors, setFormErrors] = useState<{name?: string, steam_id?: string}>({});
-  const [editFormErrors, setEditFormErrors] = useState<{name?: string, steam_id?: string}>({});
+  const [formErrors, setFormErrors] = useState<{ firstName?: string; lastName?: string; steam_id?: string }>({});
+  const [editFormErrors, setEditFormErrors] = useState<{ firstName?: string; lastName?: string; steam_id?: string }>({});
 
   // Load drivers on component mount
   useEffect(() => {
@@ -39,12 +42,12 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
         const data = await response.json();
         setDrivers(data.drivers || []);
       } else {
-        throw new Error('Failed to load drivers');
+        throw new Error('Failed to load members');
       }
     } catch (error) {
-      console.error('Error loading drivers:', error);
+      console.error('Error loading members:', error);
       setStatus('error');
-      setStatusMessage('Failed to load drivers');
+      setStatusMessage('Failed to load members');
     } finally {
       setLoading(false);
     }
@@ -62,11 +65,49 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
     return cleaned;
   };
 
+  const getDisplayName = (driver: Pick<Driver, 'firstName' | 'lastName' | 'name'>) => {
+    const parts = [driver.firstName, driver.lastName].filter((part) => !!part && part.trim().length > 0);
+    if (parts.length > 0) {
+      return parts.join(' ');
+    }
+    return driver.name;
+  };
+
+  const splitName = (driver: Driver) => {
+    if (driver.firstName || driver.lastName) {
+      return {
+        firstName: driver.firstName || '',
+        lastName: driver.lastName || ''
+      };
+    }
+
+    const fullName = (driver.name || '').trim();
+    if (!fullName) {
+      return { firstName: '', lastName: '' };
+    }
+
+    const parts = fullName.split(/\s+/);
+    const firstName = parts.shift() || '';
+    const lastName = parts.join(' ');
+
+    return {
+      firstName,
+      lastName
+    };
+  };
+
   const handleAddDriver = async () => {
-    const errors: {name?: string, steam_id?: string} = {};
-    
-    if (!newDriver.name.trim()) {
-      errors.name = 'Name is required';
+    const errors: { firstName?: string; lastName?: string; steam_id?: string } = {};
+
+    const firstName = newDriver.firstName.trim();
+    const lastName = newDriver.lastName.trim();
+
+    if (!firstName) {
+      errors.firstName = 'First name is required';
+    }
+
+    if (!lastName) {
+      errors.lastName = 'Last name is required';
     }
 
     if (newDriver.steam_id && !validateSteamId(newDriver.steam_id)) {
@@ -82,42 +123,56 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
 
     try {
       setStatus('loading');
-      setStatusMessage('Adding driver...');
+      setStatusMessage('Adding member...');
 
       const response = await apiPost('/api/drivers', {
-        name: newDriver.name.trim(),
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`.trim(),
         steam_id: newDriver.steam_id ? formatSteamId(newDriver.steam_id) : undefined,
       });
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Driver added successfully');
-        setNewDriver({ name: '', steam_id: '' });
+        setStatusMessage('Member added successfully');
+        setNewDriver({ firstName: '', lastName: '', steam_id: '' });
         setFormErrors({});
         setShowAddModal(false);
         loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to add driver');
+        throw new Error(error.message || 'Failed to add member');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to add driver');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to add member');
     }
   };
 
   const handleEditDriver = (driver: Driver) => {
-    setEditingDriver(driver);
+    const { firstName, lastName } = splitName(driver);
+    setEditingDriver({
+      ...driver,
+      firstName,
+      lastName
+    });
     setShowEditModal(true);
   };
 
   const handleUpdateDriver = async () => {
     if (!editingDriver) return;
 
-    const errors: {name?: string, steam_id?: string} = {};
-    
-    if (!editingDriver.name.trim()) {
-      errors.name = 'Name is required';
+    const errors: { firstName?: string; lastName?: string; steam_id?: string } = {};
+
+    const firstName = editingDriver.firstName?.trim() || '';
+    const lastName = editingDriver.lastName?.trim() || '';
+
+    if (!firstName) {
+      errors.firstName = 'First name is required';
+    }
+
+    if (!lastName) {
+      errors.lastName = 'Last name is required';
     }
 
     if (editingDriver.steam_id && !validateSteamId(editingDriver.steam_id)) {
@@ -133,52 +188,54 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
 
     try {
       setStatus('loading');
-      setStatusMessage('Updating driver...');
+      setStatusMessage('Updating member...');
 
       const response = await apiPut(`/api/drivers/${editingDriver.id}`, {
-        name: editingDriver.name.trim(),
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`.trim(),
         steam_id: editingDriver.steam_id ? formatSteamId(editingDriver.steam_id) : undefined,
       });
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Driver updated successfully');
+        setStatusMessage('Member updated successfully');
         setEditFormErrors({});
         setShowEditModal(false);
         setEditingDriver(null);
         loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to update driver');
+        throw new Error(error.message || 'Failed to update member');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to update driver');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to update member');
     }
   };
 
   const handleDeleteDriver = async (driverId: string) => {
-    if (!confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this member? This action cannot be undone.')) {
       return;
     }
 
     try {
       setStatus('loading');
-      setStatusMessage('Deleting driver...');
+      setStatusMessage('Deleting member...');
 
       const response = await apiDelete(`/api/drivers/${driverId}`);
 
       if (response.ok) {
         setStatus('success');
-        setStatusMessage('Driver deleted successfully');
+        setStatusMessage('Member deleted successfully');
         loadDrivers(); // Reload the list
       } else {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to delete driver');
+        throw new Error(error.message || 'Failed to delete member');
       }
     } catch (error) {
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to delete driver');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to delete member');
     }
   };
 
@@ -191,7 +248,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading drivers...</span>
+        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading members...</span>
       </div>
     );
   }
@@ -201,7 +258,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Drivers</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">League Members</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage your league participants</p>
         </div>
         <button 
@@ -209,7 +266,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Driver</span>
+          <span>Add Member</span>
         </button>
       </div>
 
@@ -245,10 +302,10 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
               >
                 <div className="flex items-center space-x-4 flex-1">
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white font-bold">
-                    {driver.name.charAt(0).toUpperCase()}
+                    {getDisplayName(driver).charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-gray-900 dark:text-white font-medium">{driver.name}</p>
+                    <p className="text-gray-900 dark:text-white font-medium">{getDisplayName(driver)}</p>
                     <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                       {driver.steam_id && (
                         <span>Steam ID: {driver.steam_id}</span>
@@ -271,47 +328,72 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
         ) : (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No drivers added yet</p>
-            <p className="text-sm">Add your first driver to get started</p>
+            <p>No members added yet</p>
+            <p className="text-sm">Add your first member to get started</p>
           </div>
         )}
       </div>
 
-      {/* Add Driver Modal */}
+      {/* Add Member Modal */}
       {showAddModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="modal-overlay"
           onClick={() => setShowAddModal(false)}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            className="modal-panel max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Driver</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Member</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Driver Name *
+                  First Name *
                 </label>
                 <input
                   type="text"
-                  value={newDriver.name}
+                  value={newDriver.firstName}
                   onChange={(e) => {
-                    setNewDriver({ ...newDriver, name: e.target.value });
-                    if (formErrors.name) {
-                      setFormErrors({ ...formErrors, name: undefined });
+                    setNewDriver({ ...newDriver, firstName: e.target.value });
+                    if (formErrors.firstName) {
+                      setFormErrors({ ...formErrors, firstName: undefined });
                     }
                   }}
                   className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
-                    formErrors.name 
+                    formErrors.firstName 
                       ? 'border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
                   }`}
-                  placeholder="e.g., John Smith"
+                  placeholder="e.g., Lewis"
                 />
-                {formErrors.name && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.name}</p>
+                {formErrors.firstName && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.firstName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={newDriver.lastName}
+                  onChange={(e) => {
+                    setNewDriver({ ...newDriver, lastName: e.target.value });
+                    if (formErrors.lastName) {
+                      setFormErrors({ ...formErrors, lastName: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    formErrors.lastName 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
+                  placeholder="e.g., Hamilton"
+                />
+                {formErrors.lastName && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.lastName}</p>
                 )}
               </div>
               
@@ -350,7 +432,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setNewDriver({ name: '', steam_id: '' });
+                  setNewDriver({ firstName: '', lastName: '', steam_id: '' });
                   clearStatus();
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -362,48 +444,73 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
                 disabled={status === 'loading'}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {status === 'loading' ? 'Adding...' : 'Add Driver'}
+                {status === 'loading' ? 'Adding...' : 'Add Member'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Driver Modal */}
+      {/* Edit Member Modal */}
       {showEditModal && editingDriver && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="modal-overlay"
           onClick={() => setShowEditModal(false)}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            className="modal-panel max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Driver</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Member</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Driver Name *
+                  First Name *
                 </label>
                 <input
                   type="text"
-                  value={editingDriver.name}
+                  value={editingDriver.firstName || ''}
                   onChange={(e) => {
-                    setEditingDriver({ ...editingDriver, name: e.target.value });
-                    if (editFormErrors.name) {
-                      setEditFormErrors({ ...editFormErrors, name: undefined });
+                    setEditingDriver({ ...editingDriver, firstName: e.target.value });
+                    if (editFormErrors.firstName) {
+                      setEditFormErrors({ ...editFormErrors, firstName: undefined });
                     }
                   }}
                   className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
-                    editFormErrors.name 
+                    editFormErrors.firstName 
                       ? 'border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
                   }`}
-                  placeholder="e.g., John Smith"
+                  placeholder="e.g., Lewis"
                 />
-                {editFormErrors.name && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editFormErrors.name}</p>
+                {editFormErrors.firstName && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editFormErrors.firstName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={editingDriver.lastName || ''}
+                  onChange={(e) => {
+                    setEditingDriver({ ...editingDriver, lastName: e.target.value });
+                    if (editFormErrors.lastName) {
+                      setEditFormErrors({ ...editFormErrors, lastName: undefined });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                    editFormErrors.lastName 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  }`}
+                  placeholder="e.g., Hamilton"
+                />
+                {editFormErrors.lastName && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editFormErrors.lastName}</p>
                 )}
               </div>
               
@@ -454,7 +561,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
                 disabled={status === 'loading'}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {status === 'loading' ? 'Updating...' : 'Update Driver'}
+                {status === 'loading' ? 'Updating...' : 'Update Member'}
               </button>
             </div>
           </div>

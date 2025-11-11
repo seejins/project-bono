@@ -33,7 +33,7 @@ class PostSessionProcessor {
             // 5. Store original results snapshot (preserve UDP data)
             await this.dbService.storeOriginalSessionResults(sessionResultId, mappedResults);
             // 6. Store session results
-            await this.dbService.storeDriverSessionResults(sessionResultId, mappedResults);
+            await this.dbService.storeDriverSessionResults(sessionResultId, mappedResults); // Return value not needed here
             // 7. Mark event as completed if this was a race session
             if (sessionInfo.sessionType === 10) { // Race session
                 await this.markEventAsCompleted(eventId);
@@ -136,15 +136,15 @@ class PostSessionProcessor {
         const steamIds = finalResults.map(r => r.steamId).filter(Boolean);
         const driverNames = finalResults.map(r => r.driverName).filter(Boolean);
         // Query all mappings in one go
-        const steamIdMappings = steamIds.length > 0 ? await this.dbService.query(`SELECT member_id, f123_driver_name, f123_driver_number, f123_steam_id 
+        const steamIdMappings = steamIds.length > 0 ? await this.dbService.query(`SELECT your_driver_id, f123_driver_name, f123_driver_number, f123_steam_id 
        FROM f123_driver_mappings 
        WHERE season_id = $1 AND f123_steam_id = ANY($2)`, [seasonId, steamIds]) : { rows: [] };
-        const nameMappings = driverNames.length > 0 ? await this.dbService.query(`SELECT member_id, f123_driver_name, f123_driver_number, f123_driver_name as driver_name
+        const nameMappings = driverNames.length > 0 ? await this.dbService.query(`SELECT your_driver_id, f123_driver_name, f123_driver_number, f123_driver_name as driver_name
        FROM f123_driver_mappings 
        WHERE season_id = $1 AND f123_driver_name = ANY($2)`, [seasonId, driverNames]) : { rows: [] };
         // Create lookup maps for O(1) access
-        const steamIdMap = new Map(steamIdMappings.rows.map(r => [r.f123_steam_id, r]));
-        const nameMap = new Map(nameMappings.rows.map(r => [r.driver_name, r]));
+        const steamIdMap = new Map(steamIdMappings.rows.map((r) => [r.f123_steam_id, r]));
+        const nameMap = new Map(nameMappings.rows.map((r) => [r.driver_name, r]));
         // Map results using pre-fetched data
         return finalResults.map((result) => {
             // Try steam_id first (most reliable)
@@ -152,7 +152,7 @@ class PostSessionProcessor {
             if (steamMapping) {
                 return {
                     ...result,
-                    member_id: steamMapping.member_id,
+                    driver_id: steamMapping.your_driver_id,
                     mapped_driver_name: steamMapping.f123_driver_name,
                     mapped_driver_number: steamMapping.f123_driver_number
                 };
@@ -162,7 +162,7 @@ class PostSessionProcessor {
             if (nameMapping) {
                 return {
                     ...result,
-                    member_id: nameMapping.member_id,
+                    driver_id: nameMapping.your_driver_id,
                     mapped_driver_name: nameMapping.f123_driver_name,
                     mapped_driver_number: nameMapping.f123_driver_number
                 };
@@ -170,7 +170,7 @@ class PostSessionProcessor {
             // No mapping found
             return {
                 ...result,
-                member_id: null,
+                driver_id: null,
                 mapped_driver_name: result.driverName,
                 mapped_driver_number: result.carNumber
             };
@@ -189,10 +189,10 @@ class PostSessionProcessor {
                 console.log('⚠️ Could not find season for event, skipping standings recalculation');
                 return;
             }
-            // 2. Aggregate standings for each member from completed race sessions
+            // 2. Aggregate standings for each driver from completed race sessions
             const standingsResult = await this.query(`
         SELECT 
-          dsr.member_id,
+          dsr.driver_id,
           COUNT(DISTINCT dsr.session_result_id) as races_participated,
           COALESCE(SUM(dsr.points), 0)::INTEGER as total_points,
           SUM(CASE WHEN dsr.position = 1 THEN 1 ELSE 0 END)::INTEGER as wins,
@@ -207,8 +207,8 @@ class PostSessionProcessor {
         JOIN races r ON r.id = sr.race_id
         WHERE r.season_id = $1
           AND sr.session_type = 10
-          AND dsr.member_id IS NOT NULL
-        GROUP BY dsr.member_id
+          AND dsr.driver_id IS NOT NULL
+        GROUP BY dsr.driver_id
         ORDER BY total_points DESC, wins DESC, podiums DESC
       `, [seasonId]);
             console.log(`📊 Calculated standings for ${standingsResult.rows.length} member(s)`);
@@ -218,9 +218,13 @@ class PostSessionProcessor {
                 console.log('📊 Top 5 standings:');
                 for (let i = 0; i < topStandings.length; i++) {
                     const standing = topStandings[i];
-                    const member = await this.dbService.getMemberById(standing.member_id);
+                    let driverName = 'Unknown';
+                    if (standing.driver_id) {
+                        const driverResult = await this.query('SELECT name FROM drivers WHERE id = $1', [standing.driver_id]);
+                        driverName = driverResult.rows[0]?.name || 'Unknown';
+                    }
                     const position = i + 1;
-                    console.log(`  ${position}. ${member?.name || 'Unknown'} - ${standing.total_points || 0} pts (${standing.wins || 0} wins, ${standing.podiums || 0} podiums)`);
+                    console.log(`  ${position}. ${driverName} - ${standing.total_points || 0} pts (${standing.wins || 0} wins, ${standing.podiums || 0} podiums)`);
                 }
             }
             // Note: Standings are calculated on-demand rather than stored in a separate table
