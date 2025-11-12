@@ -15,6 +15,7 @@ import { PaceTab } from './DriverRaceAnalysis/tabs/PaceTab';
 import { StrategyTab } from './DriverRaceAnalysis/tabs/StrategyTab';
 import { TelemetryTab } from './DriverRaceAnalysis/tabs/TelemetryTab';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
+import { motion } from 'framer-motion';
 
 type AnalyticsTab = 'overview' | 'pace' | 'strategy' | 'telemetry';
 
@@ -689,7 +690,9 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     []
   );
 
-                    return (
+  const easing: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+  return (
     <div className="relative -mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0">
          <div
@@ -698,8 +701,18 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         />
         </div>
         
-      <div className="relative z-10 mx-auto max-w-[2048px] space-y-8 px-6 pt-40 pb-16 text-slate-900 dark:text-slate-100 lg:px-10">
-        <header className="flex flex-col items-center justify-center space-y-4 text-center">
+      <motion.div
+        className="relative z-10 mx-auto max-w-[1600px] space-y-8 px-6 pt-40 pb-16 text-slate-900 dark:text-slate-100 lg:px-10"
+        initial={{ opacity: 0, y: 32 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: easing }}
+      >
+        <motion.header
+          className="flex flex-col items-center justify-center space-y-4 text-center"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
+        >
           <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">Race Analysis</p>
           <h1 className="text-4xl font-black uppercase tracking-[0.18em] text-slate-900 dark:text-white sm:text-5xl">
             {driverNameLabel}
@@ -707,12 +720,20 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           <span className="text-sm font-medium uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
             {eventName}
           </span>
-        </header>
+        </motion.header>
 
-        <section className="space-y-6">
-          <nav
+        <motion.section
+          className="space-y-6"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
+        >
+          <motion.nav
             className="flex flex-col gap-4 border-b border-slate-200 pb-2 dark:border-slate-800 md:flex-row md:items-center md:justify-between"
             aria-label="Tabs"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: easing, delay: 0.22 }}
           >
             <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-6">
             <button
@@ -769,12 +790,12 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             </button>
       </div>
             <div className="w-full md:w-auto">
-              {sessions.length > 1 ? (
-                  <select
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/40 md:w-72"
-                  value={selectedSessionId ?? ''}
-                  onChange={(event) => handleSelectSession(event.target.value || null)}
-                >
+               {sessions.length > 1 ? (
+                   <select
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/40"
+                   value={selectedSessionId ?? ''}
+                   onChange={(event) => handleSelectSession(event.target.value || null)}
+                 >
                   {[...sessions]
                     .filter((session) => !!session?.sessionId)
                     .sort((a, b) => {
@@ -796,14 +817,22 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                     ))}
                 </select>
               ) : (
-                <span className="inline-flex w-full items-center justify-center rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300 md:w-auto">
+                <span className="inline-flex items-center justify-center rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300">
                   Session: {sessionLabel}
                 </span>
                     )}
                   </div>
-          </nav>
+          </motion.nav>
 
-          {activeTab === 'overview' && (
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.4, ease: easing }}
+            className="space-y-6"
+          >
+            {activeTab === 'overview' && (
               <OverviewTab
                 raceStats={raceStats}
                 sessionLabel={sessionLabel}
@@ -812,8 +841,8 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 formatSectorTime={formatSectorTime}
                 getTireCompoundColor={getTireCompoundColor}
               />
-          )}
-          {activeTab === 'pace' && (
+            )}
+            {activeTab === 'pace' && (
               <PaceTab
                 driverName={driver?.name ?? 'Driver'}
                 comparisonDriverName={comparisonDriverName}
@@ -830,8 +859,8 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 DeltaTooltipContent={DeltaTooltipContent}
                 hexToRgba={hexToRgba}
               />
-          )}
-          {activeTab === 'strategy' && (
+            )}
+            {activeTab === 'strategy' && (
               <StrategyTab
                 averageLapSeconds={averageLapSeconds}
                 compoundLineSetup={compoundLineSetup}
@@ -844,23 +873,40 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
               />
             )}
             {activeTab === 'telemetry' && <TelemetryTab />}
-          </section>
+          </motion.div>
 
-          <section className="space-y-4">
-            <div className="flex items-center justify-between text-slate-900 dark:text-slate-100">
+          <motion.div
+            className="space-y-4"
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: easing, delay: 0.26 }}
+          >
+            <motion.div
+              className="flex items-center justify-between text-slate-900 dark:text-slate-100"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: easing, delay: 0.32 }}
+            >
               <h3 className="text-lg font-semibold">Lap Times</h3>
               {lapData.length > 0 && (
                 <span className="text-sm text-slate-500 dark:text-slate-400">{lapData.length} laps recorded</span>
                     )}
-                  </div>
-            <DashboardTable
-              columns={lapTableColumns}
-              rows={lapData}
-              rowKey={(row) => row.lap_number}
-              emptyMessage="No lap data available"
-            />
-          </section>
-      </div>
+                  </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: easing, delay: 0.36 }}
+            >
+              <DashboardTable
+                columns={lapTableColumns}
+                rows={lapData}
+                rowKey={(row) => row.lap_number}
+                emptyMessage="No lap data available"
+              />
+            </motion.div>
+          </motion.div>
+        </motion.section>
+      </motion.div>
     </div>
   );
 };
