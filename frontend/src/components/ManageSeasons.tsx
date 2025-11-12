@@ -764,10 +764,10 @@ const SeasonManagement: React.FC<SeasonManagementProps> = ({
       {/* Tab Navigation */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
         <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-8 px-6">
+          <nav className="flex flex-col gap-3 px-6 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
             <button
               onClick={() => setActiveTab('events')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`w-full border-b-2 py-3 px-1 text-left text-sm font-medium transition-colors sm:w-auto sm:py-4 sm:text-center ${
                 activeTab === 'events'
                   ? 'border-red-600 text-red-600 dark:text-blue-400 dark:border-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
@@ -780,7 +780,7 @@ const SeasonManagement: React.FC<SeasonManagementProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('drivers')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`w-full border-b-2 py-3 px-1 text-left text-sm font-medium transition-colors sm:w-auto sm:py-4 sm:text-center ${
                 activeTab === 'drivers'
                   ? 'border-red-600 text-red-600 dark:text-blue-400 dark:border-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'

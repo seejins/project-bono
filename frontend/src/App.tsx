@@ -35,6 +35,16 @@ type AlertPayload = { id: string; type: string; message: string; timestamp: numb
 
 const TAB_BAR_HEIGHT = 88;
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, [pathname]);
+
+  return null;
+}
+
 function AppLayout() {
   const [alerts, setAlerts] = useState<AlertPayload[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -196,10 +206,7 @@ function HistoryLandingPage() {
 
   return (
     <PageTransition>
-      <HistoryPage
-        onSeasonSelect={(seasonId) => navigate(`/races?seasonId=${seasonId}`)}
-        onDriverSelect={(driverId) => navigate(`/history/driver/${driverId}`)}
-      />
+      <HistoryPage />
     </PageTransition>
   );
 }
@@ -327,23 +334,18 @@ function AppRoutes() {
   );
 }
 
-function AppContent() {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  );
-}
-
 function App() {
   return (
-    <ThemeProvider>
-      <SeasonProvider>
-        <AdminProvider>
-          <AppContent />
-        </AdminProvider>
-      </SeasonProvider>
-    </ThemeProvider>
+    <BrowserRouter>
+      <ScrollToTop />
+      <ThemeProvider>
+        <SeasonProvider>
+          <AdminProvider>
+            <AppRoutes />
+          </AdminProvider>
+        </SeasonProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   );
 }
 

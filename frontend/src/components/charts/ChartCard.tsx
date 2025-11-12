@@ -21,15 +21,15 @@ export const ChartCard: React.FC<ChartCardProps> = ({
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm',
+        'rounded-3xl border border-slate-200 bg-white shadow-md dark:border-slate-800 dark:bg-slate-950/70',
         className
       )}
     >
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h4>
+          <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
           {description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
           )}
         </div>
         {headerSlot && <div className="sm:text-right">{headerSlot}</div>}
