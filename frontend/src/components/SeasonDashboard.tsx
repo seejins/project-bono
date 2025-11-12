@@ -1,58 +1,18 @@
-import React, { useState, useEffect, ReactNode } from 'react';
-import { Trophy, Calendar, Award, Star, Zap } from 'lucide-react';
+import React, { useMemo } from 'react';
+import type { ReactNode } from 'react';
+import { Trophy, Calendar, Award, Star, Flag } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
-import { PreviousRaceResultsComponent } from './PreviousRaceResults';
-import { PanelHeader } from './layout/PanelHeader';
 import { F123DataService } from '../services/F123DataService';
-
-interface Driver {
-  id: string;
-  name: string;
-  team: string;
-  number: number;
-  points?: number;
-  wins?: number;
-  podiums?: number;
-  fastestLaps?: number;
-  position?: number;
-}
-
-interface Race {
-  id: string;
-  trackName: string;
-  date: string;
-  time?: string;
-  status: string;
-  winner?: string;
-  fastestLap?: string;
-}
-
-interface PodiumEntry {
-  position: number;
-  driver: string;
-  team: string;
-  teamColor: string;
-}
-
-interface Achievement {
-  id: string;
-  driverName: string;
-  driverTeam: string;
-  achievement: string;
-  raceName: string;
-  date: string;
-  type: 'first_win' | 'first_podium' | 'first_pole' | 'fastest_lap' | 'championship_lead' | 'milestone';
-}
-
-interface SeasonStats {
-  totalRaces: number;
-  completedRaces: number;
-  totalDrivers: number;
-  currentLeader: string;
-  mostWins: string;
-  fastestLapHolder: string;
-  driverOfTheDay: string;
-}
+import { OverviewStatStrip, type OverviewStatConfig } from './common/OverviewStatStrip';
+import { PreviousRaceResultsComponent } from './PreviousRaceResults';
+import { DashboardPage } from './layout/DashboardPage';
+import { DashboardTable } from './layout/DashboardTable';
+import {
+  useSeasonAnalysis,
+  type DriverSeasonSummary,
+  type SeasonAnalysisHighlight,
+  type SeasonEventSummary,
+} from '../hooks/useSeasonAnalysis';
 
 interface SeasonDashboardProps {
   onRaceSelect?: (raceId: string) => void;
@@ -60,249 +20,98 @@ interface SeasonDashboardProps {
   onScheduleView?: () => void;
 }
 
+const formatHighlightMeta = (highlight: SeasonAnalysisHighlight | null | undefined, label: string) => {
+  if (!highlight) {
+    return 'Awaiting data';
+  }
+  return `${highlight.value} ${label}`;
+};
+
+const formatEventMeta = (event: SeasonEventSummary | null) => {
+  if (!event?.raceDate) {
+    return 'Awaiting confirmation';
+  }
+
+  const parsed = new Date(event.raceDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Awaiting confirmation';
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, onDriverSelect, onScheduleView }) => {
   const { currentSeason } = useSeason();
-  const [standings, setStandings] = useState<Driver[]>([]);
-  const [nextRace, setNextRace] = useState<Race | null>(null);
-  const [previousRace, setPreviousRace] = useState<Race | null>(null);
-  const [previousRacePodium, setPreviousRacePodium] = useState<PodiumEntry[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [stats, setStats] = useState<SeasonStats | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
 
-  useEffect(() => {
-    if (currentSeason) {
-      fetchSeasonData();
+  const driverSummaries: DriverSeasonSummary[] = useMemo(() => {
+    if (!analysis) {
+      return [];
     }
-  }, [currentSeason]);
 
-  const fetchSeasonData = async () => {
-    try {
-      if (!currentSeason) return;
-      
-      setLoading(true);
-      
-      // Fetch real season data from API
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
-      // Fetch season participants (drivers)
-      const participantsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/participants`);
-      if (participantsResponse.ok) {
-        const participantsData = await participantsResponse.json();
-        setStandings(participantsData.participants || []);
-      }
-      
-      // Fetch season events/races
-      const eventsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/events`);
-      if (eventsResponse.ok) {
-        const eventsData = await eventsResponse.json();
-        const events = eventsData.events || [];
-        setEvents(events);
-        
-        // Find next and previous races
-        const now = new Date();
-        const upcomingRaces = events.filter((event: any) => 
-          event.status === 'scheduled' && 
-          (!event.race_date || new Date(event.race_date) > now)
-        ).sort((a: any, b: any) => 
-          new Date(a.race_date || '').getTime() - new Date(b.race_date || '').getTime()
-        );
-        
-        const completedRaces = events.filter((event: any) => 
-          event.status === 'completed'
-        ).sort((a: any, b: any) => 
-          new Date(b.race_date || '').getTime() - new Date(a.race_date || '').getTime()
-        );
-        
-        setNextRace(upcomingRaces[0] || null);
-        const latestCompletedRace = completedRaces[0] || null;
-        setPreviousRace(latestCompletedRace);
+    return [...analysis.drivers].sort((a, b) => {
+      const positionA = a.position ?? Number.MAX_SAFE_INTEGER;
+      const positionB = b.position ?? Number.MAX_SAFE_INTEGER;
+      return positionA - positionB;
+    });
+  }, [analysis]);
 
-        if (latestCompletedRace) {
-          const resultsResponse = await fetch(`${apiUrl}/api/races/${latestCompletedRace.id}/results`);
-          if (resultsResponse.ok) {
-            const resultsPayload = await resultsResponse.json();
-            const raceSession =
-              (resultsPayload.sessions || []).find((session: any) => session.sessionType === 10) ??
-              (resultsPayload.sessions || [])[0];
+  const highlights = analysis?.summary.highlights;
+  const nextEvent = analysis?.nextEvent ?? null;
 
-            if (raceSession?.results) {
-              const podium = (raceSession.results as any[])
-                .map((driver) => {
-                  const pos = Number(driver.position ?? driver.race_position ?? driver.finishPosition);
-                  if (!pos || pos > 3) {
-                    return null;
-                  }
-
-                  const driverName =
-                    driver.json_driver_name ||
-                    driver.driver_name ||
-                    driver.mapping_driver_name ||
-                    'Unknown Driver';
-
-                  const rawTeamName =
-                    driver.json_team_name ||
-                    driver.mapping_team_name ||
-                    driver.driver_team ||
-                    'Unknown Team';
-                  const teamName = F123DataService.getTeamDisplayName(rawTeamName);
-
-                  return {
-                    position: pos,
-                    driver: driverName,
-                    team: teamName,
-                    teamColor: F123DataService.getTeamColorHex(rawTeamName),
-                  };
-                })
-                .filter((entry): entry is PodiumEntry => entry != null)
-                .sort((a, b) => a.position - b.position);
-
-              setPreviousRacePodium(podium);
-            } else {
-              setPreviousRacePodium([]);
-            }
-          } else {
-            setPreviousRacePodium([]);
-          }
-        } else {
-          setPreviousRacePodium([]);
-        }
-      }
-      
-      // Fetch season statistics (endpoint doesn't exist yet, handle 404 gracefully)
-      try {
-        const statsResponse = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/stats`);
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          setStats(statsData.stats || null);
-        } else if (statsResponse.status !== 404) {
-          // Only log non-404 errors (404 is expected if endpoint doesn't exist)
-          console.warn('Failed to fetch season stats:', statsResponse.status);
-        }
-      } catch (error) {
-        // Silently handle stats fetch errors (endpoint may not exist)
-        console.warn('Season stats endpoint not available');
-      }
-      
-      // For now, set empty achievements - will be populated from race results
-      setAchievements([]);
-      
-    } catch (error) {
-      console.error('Error fetching season data:', error);
-      // Set empty data on error
-      setStandings([]);
-      setNextRace(null);
-      setPreviousRace(null);
-      setAchievements([]);
-      setStats(null);
-    } finally {
-      setLoading(false);
+  const handleHighlightClick = (highlight: SeasonAnalysisHighlight | null | undefined) => {
+    if (highlight?.id && onDriverSelect) {
+      onDriverSelect(highlight.id);
     }
   };
 
-  const getAchievementIcon = (type: string) => {
-    switch (type) {
-      case 'first_win': return <Trophy className="w-4 h-4" />;
-      case 'first_podium': return <Award className="w-4 h-4" />;
-      case 'first_pole': return <Star className="w-4 h-4" />;
-      case 'fastest_lap': return <Zap className="w-4 h-4" />;
-      case 'championship_lead': return <Trophy className="w-4 h-4" />;
-      default: return <Award className="w-4 h-4" />;
+  const handleNextEventClick = () => {
+    if (nextEvent?.id && onRaceSelect) {
+      onRaceSelect(nextEvent.id);
     }
   };
 
-  const getAchievementColor = (type: string) => {
-    switch (type) {
-      case 'first_win': return 'text-yellow-600 dark:text-yellow-400';
-      case 'first_podium': return 'text-gray-400 dark:text-gray-300';
-      case 'first_pole': return 'text-purple-600 dark:text-purple-400';
-      case 'fastest_lap': return 'text-green-600 dark:text-green-400';
-      case 'championship_lead': return 'text-red-600 dark:text-red-400';
-      default: return 'text-blue-600 dark:text-blue-400';
-    }
-  };
-
-  const handlePreviousRaceClick = () => {
-    if (previousRace && onRaceSelect) {
-      onRaceSelect(previousRace.id);
-    }
-  };
-
-  const handleNextRaceClick = () => {
-    if (nextRace && onRaceSelect) {
-      onRaceSelect(nextRace.id);
-    }
-  };
-
-  const handleMostWinsClick = () => {
-    if (stats?.mostWins && onDriverSelect) {
-      // Find driver ID by name
-      const driver = standings.find(d => d.name === stats.mostWins);
-      if (driver) {
-        onDriverSelect(driver.id);
-      }
-    }
-  };
-
-  const handleDriverOfTheDayClick = () => {
-    if (stats?.driverOfTheDay && onDriverSelect) {
-      // Find driver ID by name
-      const driver = standings.find(d => d.name === stats.driverOfTheDay);
-      if (driver) {
-        onDriverSelect(driver.id);
-      }
-    }
-  };
-
-  const totalEvents = events.length;
-  const completedEventsCount = events.filter(event => event.status === 'completed').length;
-  const upcomingEventsCount = Math.max(totalEvents - completedEventsCount, 0);
-  const driverCount = standings.length;
+  const totalEvents = analysis?.summary.totalEvents ?? 0;
+  const completedEventsCount = analysis?.summary.completedEvents ?? 0;
+  const upcomingEventsCount = analysis?.summary.upcomingEvents ?? Math.max(totalEvents - completedEventsCount, 0);
+  const driverCount = driverSummaries.length;
 
   const headerSecondaryActions: ReactNode[] = [];
 
-  if (previousRace) {
-    headerSecondaryActions.push(
-      <button
-        key="previous-race"
-        onClick={handlePreviousRaceClick}
-        className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white"
-      >
-        <Trophy className="h-4 w-4" />
-        Previous race
-      </button>
-    );
-  }
-
-  if (nextRace) {
+  if (nextEvent) {
     headerSecondaryActions.push(
       <button
         key="next-race"
-        onClick={handleNextRaceClick}
+        onClick={handleNextEventClick}
         className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white"
       >
         <Calendar className="h-4 w-4" />
         Next race
-      </button>
+      </button>,
     );
   }
 
-  const primaryAction = onScheduleView ? (
+  const primaryAction = onScheduleView
+    ? (
     <button
       onClick={onScheduleView}
-      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric px-5 py-2 text-sm font-semibold text-white shadow-brand-glow transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-accent"
+          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric px-5 py-2 text-sm font-semibold text-white shadow-brand-glow transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-accent"
     >
       <Calendar className="h-4 w-4" />
       View schedule
     </button>
-  ) : undefined;
+      )
+    : undefined;
 
-  const eventProgressText = totalEvents > 0
-    ? `${completedEventsCount}/${totalEvents} races complete`
-    : 'No races scheduled yet';
+  const eventProgressText =
+    totalEvents > 0 ? `${completedEventsCount}/${totalEvents} races complete` : 'No races scheduled yet';
 
-  const upcomingText = upcomingEventsCount > 0
+  const upcomingText =
+    upcomingEventsCount > 0
     ? `${upcomingEventsCount} upcoming`
     : completedEventsCount === totalEvents && totalEvents > 0
       ? 'Season complete'
@@ -312,196 +121,168 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     ? `Season ${currentSeason.year} • ${eventProgressText} • ${driverCount} drivers • ${upcomingText}`
     : undefined;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-      </div>
-    );
-  }
+  const summaryCards: OverviewStatConfig[] = [
+    {
+      id: 'most-wins',
+      title: 'Most Wins',
+      value: highlights?.mostWins?.name ?? 'Awaiting data',
+      meta: formatHighlightMeta(highlights?.mostWins, 'wins'),
+      icon: <Award className="w-5 h-5" />,
+      accentClass: 'text-purple-400 dark:text-purple-300',
+      onClick: () => handleHighlightClick(highlights?.mostWins),
+    },
+    {
+      id: 'most-poles',
+      title: 'Most Poles',
+      value: highlights?.mostPoles?.name ?? 'Awaiting data',
+      meta: formatHighlightMeta(highlights?.mostPoles, 'poles'),
+      icon: <Star className="w-5 h-5" />,
+      accentClass: 'text-amber-400 dark:text-amber-300',
+      onClick: () => handleHighlightClick(highlights?.mostPoles),
+    },
+    {
+      id: 'most-podiums',
+      title: 'Most Podiums',
+      value: highlights?.mostPodiums?.name ?? 'Awaiting data',
+      meta: formatHighlightMeta(highlights?.mostPodiums, 'podiums'),
+      icon: <Flag className="w-5 h-5" />,
+      accentClass: 'text-emerald-400 dark:text-emerald-300',
+      onClick: () => handleHighlightClick(highlights?.mostPodiums),
+    },
+    {
+      id: 'next-event',
+      title: 'Next Event',
+      value: nextEvent?.trackName || 'To be announced',
+      meta: formatEventMeta(nextEvent),
+      icon: <Calendar className="w-5 h-5" />,
+      accentClass: 'text-sky-400 dark:text-sky-300',
+      onClick: nextEvent ? handleNextEventClick : undefined,
+    },
+  ];
+
+  const getPositionBadgeClass = (position?: number | null) => {
+    if (position === 1) {
+      return 'inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-amber-500';
+    }
+    if (position === 2) {
+      return 'inline-flex items-center rounded-full bg-slate-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-400';
+    }
+    if (position === 3) {
+      return 'inline-flex items-center rounded-full bg-orange-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-orange-400';
+    }
+    return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300';
+  };
+
+  const standingsColumns = useMemo(
+    () => [
+      {
+        key: 'position',
+        label: 'Pos',
+        render: (_: number | undefined, row: DriverSeasonSummary) => (
+          <span className={getPositionBadgeClass(row.position)}>P{row.position ?? '—'}</span>
+        ),
+        className: 'font-semibold text-slate-800 dark:text-slate-100',
+      },
+      {
+        key: 'name',
+        label: 'Driver',
+        className: 'font-medium text-slate-900 dark:text-slate-100',
+      },
+      {
+        key: 'team',
+        label: 'Team',
+        render: (_: string, row: DriverSeasonSummary) => (
+          <span
+            className="font-medium"
+            style={{ color: F123DataService.getTeamColorHex(row.team ?? '') }}
+          >
+            {row.team ?? '—'}
+          </span>
+        ),
+      },
+      {
+        key: 'wins',
+        label: 'Wins',
+        align: 'right' as const,
+        className: 'text-slate-500 dark:text-slate-400',
+      },
+      {
+        key: 'podiums',
+        label: 'Podiums',
+        align: 'right' as const,
+        className: 'text-slate-500 dark:text-slate-400',
+      },
+      {
+        key: 'points',
+        label: 'Points',
+        align: 'right' as const,
+        render: (_: number, row: DriverSeasonSummary) => (
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{row.points} pts</span>
+        ),
+      },
+    ],
+    []
+  );
 
   return (
-    <div className="max-w-[2048px] mx-auto space-y-6">
-      <PanelHeader
-        icon={<Calendar className="h-6 w-6" />}
-        title="Season Dashboard"
-        subtitle={overviewDescription}
-        primaryAction={primaryAction}
-        secondaryActions={headerSecondaryActions}
-        breadcrumbs={
-          <span className="uppercase tracking-[0.3em] text-white/60">
-            {currentSeason?.name || 'Season Overview'}
-          </span>
-        }
-      />
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div 
-          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
-          onClick={handleMostWinsClick}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow-lg shadow-purple-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-purple-500/40">
-              <Award className="w-5 h-5 text-white" />
+    <DashboardPage
+      hero={{
+        imageSrc: '/hero/94mliza3aat71.jpg',
+        title: 'Season Dashboard',
+        subtitle: currentSeason?.name ?? 'F1 25',
+        description:
+          overviewDescription ??
+          'Dive into the latest standings, discover race-winning strategies, and keep pace with championship momentum.',
+        content: loading
+          ? (
+            <div className="rounded-full border border-white/25 px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/70 backdrop-blur">
+              Loading Season Data
             </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Most Wins</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{stats?.mostWins}</p>
-            </div>
-          </div>
+          )
+          : undefined,
+      }}
+      isReady={!loading && !!analysis}
+    >
+      {loading ? (
+        <div className="rounded-3xl border border-white/15 bg-white/10 p-10 text-center text-sm text-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          <p className="uppercase tracking-[0.3em] text-white/70">Loading season data</p>
         </div>
+      ) : error ? (
+        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-10 text-center text-sm text-red-200 backdrop-blur dark:border-red-400/40 dark:bg-red-500/15">
+          <p className="text-base font-semibold uppercase tracking-[0.3em]">Unable to load</p>
+          <p className="mt-2 text-sm text-red-200/80">{error}</p>
+        </div>
+      ) : !analysis ? (
+        <div className="rounded-3xl border border-dashed border-white/20 bg-white/10 p-12 text-center text-sm text-white/70 backdrop-blur dark:border-white/15 dark:bg-slate-900/50">
+          <p className="text-base font-semibold uppercase tracking-[0.3em] text-white/80">Select a season</p>
+          <p className="mt-2 text-sm text-white/65">Choose a season to see standings, race history, and highlights.</p>
+        </div>
+      ) : (
+        <>
+          <OverviewStatStrip items={summaryCards} />
 
-        <div 
-          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
-          onClick={handleDriverOfTheDayClick}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 text-white shadow-lg shadow-orange-400/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-orange-400/40">
-              <Star className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Driver of the Day</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{stats?.driverOfTheDay || 'TBD'}</p>
-            </div>
-          </div>
-        </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <DashboardTable
+              className="lg:col-span-2"
+              title="Championship Standings"
+              icon={<div className="flex h-10 w-10 items-center justify-center text-red-500"><Trophy className="h-5 w-5" /></div>}
+              columns={standingsColumns}
+              rows={driverSummaries}
+              rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
+              onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
+              emptyMessage="No drivers registered for this season yet."
+            />
 
-        <div 
-          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
-          onClick={handleNextRaceClick}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-sky-500/40">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Next Race</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{nextRace?.trackName || 'TBD'}</p>
-              {nextRace?.date && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {new Date(nextRace.date).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                  {nextRace.time && ` at ${new Date(`2000-01-01T${nextRace.time}`).toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: false
-                  })}`}
-                </p>
-              )}
+            <div className="space-y-6">
+              <PreviousRaceResultsComponent 
+                seasonId={currentSeason?.id || ''} 
+                onRaceSelect={onRaceSelect}
+              />
             </div>
           </div>
-        </div>
-
-        <div 
-          className="group relative overflow-hidden rounded-2xl bg-white/70 p-5 shadow-[0_22px_45px_-30px_rgba(15,23,42,0.65)] backdrop-blur-lg cursor-pointer transition hover:bg-white/85 dark:bg-slate-900/60 dark:hover:bg-slate-900/70"
-          onClick={handlePreviousRaceClick}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-lime-500 text-white shadow-lg shadow-emerald-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:shadow-emerald-500/40">
-              <Trophy className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Previous Race</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{previousRace?.trackName || 'TBD'}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Championship Standings - Main Display */}
-        <div className="relative lg:col-span-2 overflow-hidden rounded-3xl bg-white/70 shadow-[0_30px_65px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl transition hover:shadow-[0_36px_80px_-48px_rgba(15,23,42,0.75)] dark:bg-slate-900/70">
-          <div className="relative p-6 after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-black/5 dark:after:bg-white/10">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 text-white shadow-lg shadow-red-500/30">
-                <Trophy className="w-4 h-4 text-white" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Championship Standings</h2>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            <div className="space-y-3">
-              {standings.map((driver) => (
-                <div 
-                  key={driver.id} 
-                  className="flex items-center justify-between rounded-2xl bg-white/50 p-3 backdrop-blur-lg transition hover:bg-white/70 dark:bg-slate-800/60 dark:hover:bg-slate-800/80"
-                  onClick={() => onDriverSelect?.(driver.id)}
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                      driver.position === 1 ? 'position-1' :
-                      driver.position === 2 ? 'position-2' :
-                      driver.position === 3 ? 'position-3' :
-                      'bg-gray-600 text-white'
-                    }`}>
-                      {driver.position || '#'}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">{driver.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{driver.team}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{driver.points || 0} pts</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{driver.wins || 0}W {driver.podiums || 0}P</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Previous Race Results - Right Sidebar */}
-        <div className="space-y-6">
-          <PreviousRaceResultsComponent 
-            seasonId={currentSeason?.id || ''} 
-            onRaceSelect={onRaceSelect}
-          />
-          
-          {/* Achievements - Below Previous Race */}
-        <div className="relative overflow-hidden rounded-3xl bg-white/70 shadow-[0_30px_65px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl transition hover:shadow-[0_36px_80px_-48px_rgba(15,23,42,0.75)] dark:bg-slate-900/70">
-          <div className="relative p-6 after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-black/5 dark:after:bg-white/10">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-fuchsia-500 text-white shadow-lg shadow-purple-500/30">
-                <Star className="w-4 h-4 text-white" />
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Achievements</h2>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            <div className="space-y-4">
-              {achievements.map((achievement) => (
-                <div key={achievement.id} className="flex items-start gap-3 rounded-2xl bg-white/45 p-4 backdrop-blur-lg transition hover:bg-white/65 dark:bg-slate-800/60 dark:hover:bg-slate-800/80">
-                  <div className={`flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-full ${getAchievementColor(achievement.type)} bg-white/40 dark:bg-white/10`}>
-                    {getAchievementIcon(achievement.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{achievement.achievement}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {achievement.driverName} ({achievement.driverTeam})
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {achievement.raceName} • {new Date(achievement.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {achievements.length === 0 && (
-                <div className="rounded-2xl bg-white/40 py-8 text-center text-gray-500 backdrop-blur-lg dark:bg-slate-800/60 dark:text-gray-400">
-                  <Star className="w-12 h-12 mx-auto mb-4 opacity-60" />
-                  <p>No new achievements this season</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </DashboardPage>
   );
 };

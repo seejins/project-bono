@@ -376,8 +376,10 @@ export class RaceJSONImportService {
           'FINISHED';
 
         let resultStatus = 2; // Default to FINISHED
+        let resultStatusStr = typeof rawResultStatus === 'string' ? rawResultStatus : '';
         if (typeof rawResultStatus === 'number') {
           resultStatus = rawResultStatus;
+          resultStatusStr = getResultStatus(resultStatus);
         } else if (typeof rawResultStatus === 'string' && rawResultStatus.trim() !== '') {
           const normalizedStatus = rawResultStatus.trim().toLowerCase().replace(/[\s_-]+/g, '');
           switch (normalizedStatus) {
@@ -385,31 +387,43 @@ export class RaceJSONImportService {
             case 'complete':
             case 'classified':
               resultStatus = 2;
+              resultStatusStr = 'FINISHED';
               break;
             case 'dnf':
             case 'didnotfinish':
             case 'didnotfinishrace':
               resultStatus = 4;
+              resultStatusStr = 'DNF';
               break;
             case 'dsq':
             case 'disqualified':
               resultStatus = 5;
+              resultStatusStr = 'DSQ';
               break;
             case 'ncl':
             case 'didnotclassify':
             case 'notclassified':
               resultStatus = 6;
+              resultStatusStr = 'NCL';
               break;
             case 'ret':
             case 'retired':
             case 'retirement':
               resultStatus = 7;
+              resultStatusStr = 'RET';
               break;
             default:
               resultStatus = 2;
+              resultStatusStr = 'FINISHED';
           }
+        } else {
+          resultStatusStr = getResultStatus(resultStatus);
         }
-        
+
+        if (!resultStatusStr) {
+          resultStatusStr = getResultStatus(resultStatus);
+        }
+
         const numPenalties = finalClassification['num-penalties'] || finalClassification.numPenalties || result['num-penalties'] || result.numPenalties || result.penalties || 0;
         const penaltiesTime = finalClassification['penalties-time'] || finalClassification.penaltiesTime || 0; // Penalty time in seconds
         const numPitStops = finalClassification['num-pit-stops'] || finalClassification.numPitStops || result['num-pit-stops'] || result.numPitStops || result.pitStops || 0;

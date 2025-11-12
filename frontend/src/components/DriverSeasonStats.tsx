@@ -1,221 +1,288 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, Award, Target, TrendingUp } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Trophy, Award, Star, Flag, Zap, Target, ChevronRight } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
+import { OverviewStatStrip, type OverviewStatConfig } from './common/OverviewStatStrip';
+import { PreviousRaceResultsComponent } from './PreviousRaceResults';
+import {
+  useSeasonAnalysis,
+  type DriverSeasonSummary,
+  type SeasonAnalysisHighlight,
+} from '../hooks/useSeasonAnalysis';
 
 interface DriverSeasonStatsProps {
   driverId: string;
+  onRaceSelect?: (raceId: string) => void;
 }
 
-interface DriverStats {
-  id: string;
-  name: string;
-  team: string;
-  number: number;
-  position: number;
-  points: number;
-  wins: number;
-  podiums: number;
-  fastestLaps: number;
-  dnf: number;
-  averageFinish: number;
-  consistency: number;
-  racesCompleted: number;
-  totalRaces: number;
-}
+const HighlightBadge: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
+    <Star className="h-3 w-3 text-amber-400" />
+    {label}
+  </span>
+);
 
-export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId }) => {
-  const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
-  const [loading, setLoading] = useState(true);
+export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, onRaceSelect }) => {
   const { currentSeason } = useSeason();
+  const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
 
-  useEffect(() => {
-    if (currentSeason && driverId) {
-      fetchDriverStats();
+  const driverSummary: DriverSeasonSummary | null = useMemo(() => {
+    if (!analysis) {
+      return null;
     }
-  }, [currentSeason, driverId]);
+    return analysis.drivers.find((driver) => driver.id === driverId) ?? null;
+  }, [analysis, driverId]);
 
-  const fetchDriverStats = async () => {
-    if (!currentSeason) return;
-    
-    try {
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/participants`);
-      const data = await response.json();
-      
-      if (data.success && data.participants) {
-        const driver = data.participants.find((p: any) => p.id === driverId);
-        if (driver) {
-          // Create realistic F1-style stats based on driver position in participants list
-          const driverIndex = data.participants.findIndex((p: any) => p.id === driverId);
-          const basePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1][driverIndex] || 0;
-          const bonusPoints = Math.floor(Math.random() * 5);
-          const totalPoints = basePoints + bonusPoints;
-          
-          const wins = driverIndex === 0 ? Math.floor(Math.random() * 3) + 1 : Math.floor(Math.random() * 2);
-          const podiums = Math.max(wins, Math.floor(Math.random() * 5) + (driverIndex < 3 ? 2 : 0));
-          const fastestLaps = Math.floor(Math.random() * 3);
-          const dnf = Math.floor(Math.random() * 2);
-          const averageFinish = Math.max(1, driverIndex + Math.floor(Math.random() * 3) - 1);
-          const consistency = Math.max(60, 100 - (driverIndex * 5) - Math.floor(Math.random() * 10));
-          
-          const stats: DriverStats = {
-            id: driver.id,
-            name: driver.name,
-            team: driver.team || 'TBD',
-            number: driver.number || 0,
-            position: driverIndex + 1,
-            points: totalPoints,
-            wins,
-            podiums,
-            fastestLaps,
-            dnf,
-            averageFinish,
-            consistency,
-            racesCompleted: Math.floor(Math.random() * 10) + 5,
-            totalRaces: 10
-          };
-          setDriverStats(stats);
-        }
+  const highlightBadges: string[] = useMemo(() => {
+    if (!analysis || !driverSummary) {
+      return [];
+    }
+
+    const labels: string[] = [];
+    const { highlights } = analysis.summary;
+
+    const pushIfMatch = (highlight: SeasonAnalysisHighlight | null | undefined, label: string) => {
+      if (highlight?.id === driverSummary.id) {
+        labels.push(label);
       }
-    } catch (error) {
-      console.error('Failed to load driver stats:', error);
-    } finally {
-      setLoading(false);
+    };
+
+    pushIfMatch(highlights.mostWins, 'Season wins leader');
+    pushIfMatch(highlights.mostPodiums, 'Podium leader');
+    pushIfMatch(highlights.mostPoles, 'Pole position leader');
+    pushIfMatch(highlights.mostFastestLaps, 'Fastest lap leader');
+    pushIfMatch(highlights.bestAverageFinish, 'Best average finish');
+    pushIfMatch(highlights.bestConsistency, 'Most consistent');
+
+    return labels;
+  }, [analysis, driverSummary]);
+
+  const summaryCards: OverviewStatConfig[] = useMemo(() => {
+    if (!driverSummary) {
+      return [];
     }
-  };
+
+    return [
+      {
+        id: 'points',
+        title: 'Championship Points',
+        value: driverSummary.points.toLocaleString(),
+        meta: driverSummary.position ? `P${driverSummary.position}` : 'Unclassified',
+        icon: <Target className="w-5 h-5" />,
+        accentClass: 'text-slate-300',
+      },
+      {
+        id: 'wins',
+        title: 'Wins',
+        value: driverSummary.wins,
+        meta: `${driverSummary.podiums} podiums`,
+        icon: <Trophy className="w-5 h-5" />,
+        accentClass: 'text-slate-300',
+      },
+      {
+        id: 'poles',
+        title: 'Poles',
+        value: driverSummary.polePositions,
+        meta: `${driverSummary.fastestLaps} fastest laps`,
+        icon: <Flag className="w-5 h-5" />,
+        accentClass: 'text-slate-300',
+      },
+      {
+        id: 'consistency',
+        title: 'Consistency',
+        value: `${driverSummary.consistency.toFixed(1)}%`,
+        meta: `${driverSummary.pointsFinishes} points finishes`,
+        icon: <Award className="w-5 h-5" />,
+        accentClass: 'text-slate-300',
+      },
+    ];
+  }, [driverSummary]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-500 animate-pulse" />
-          <p className="text-xl text-gray-400">Loading driver stats...</p>
-        </div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-red-600" />
       </div>
     );
   }
 
-  if (!driverStats) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-500" />
-          <p className="text-xl text-gray-400">Driver not found</p>
-        </div>
+      <div className="flex h-64 flex-col items-center justify-center text-sm text-red-500">
+        <p>Unable to load driver analysis.</p>
+        <p className="mt-1 text-xs text-red-400">{error}</p>
       </div>
     );
   }
+
+  if (!analysis || !driverSummary) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+        Driver analysis unavailable.
+      </div>
+    );
+  }
+
+  const recentResults = driverSummary.recentResults;
 
   return (
-    <div className="max-w-[2048px] mx-auto space-y-6">
-      {/* Driver Info */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-        <div className="flex items-center space-x-6">
-          <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
-            <span className="text-red-600 dark:text-red-400 font-bold text-xl">
-              #{driverStats.number}
-            </span>
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              {driverStats.name}
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              {driverStats.team}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-500">
-              {currentSeason?.name} Season
-            </p>
+    <div className="mx-auto max-w-[2048px] space-y-6">
+      {/* Title Card */}
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/70 shadow-lg">
+        <div className="border-b border-slate-800 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-xl font-semibold text-slate-100">
+                {driverSummary.number ?? '--'}
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-100">{driverSummary.name}</h1>
+                <p className="text-sm text-slate-400">{driverSummary.team ?? 'Independent'} • {currentSeason?.name || 'Season'}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {highlightBadges.map((label) => (
+                <HighlightBadge key={label} label={label} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Season Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Position */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <Trophy className="w-8 h-8 mx-auto mb-3 text-yellow-500" />
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
-            P{driverStats.position}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Championship Position</div>
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-3">
+          {/* Season Snapshot */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 shadow-lg">
+            <div className="border-b border-slate-800 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-slate-100 shadow">
+                  <Target className="h-4 w-4" />
+                </div>
+                <h2 className="text-xl font-semibold text-slate-100">Season Snapshot</h2>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 px-6 py-5 text-sm text-slate-300 lg:grid-cols-4">
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Award className="h-4 w-4 text-amber-400" />
+                  Championship
+                </div>
+                <div className="mt-3 text-2xl font-bold text-slate-100">P{driverSummary.position ?? '—'}</div>
+                <div className="text-xs text-slate-400">Points: {driverSummary.points.toLocaleString()}</div>
+              </div>
 
-        {/* Points */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <Target className="w-8 h-8 mx-auto mb-3 text-blue-500" />
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
-            {driverStats.points}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Points</div>
-        </div>
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Trophy className="h-4 w-4 text-yellow-400" />
+                  Wins & Podiums
+                </div>
+                <div className="mt-3 text-2xl font-bold text-slate-100">{driverSummary.wins}</div>
+                <div className="text-xs text-slate-400">Podiums: {driverSummary.podiums}</div>
+              </div>
 
-        {/* Wins */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <Award className="w-8 h-8 mx-auto mb-3 text-green-500" />
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
-            {driverStats.wins}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Wins</div>
-        </div>
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Star className="h-4 w-4 text-purple-400" />
+                  Qualifying Pace
+                </div>
+                <div className="mt-3 text-2xl font-bold text-slate-100">{driverSummary.polePositions}</div>
+                <div className="text-xs text-slate-400">Fastest laps: {driverSummary.fastestLaps}</div>
+              </div>
 
-        {/* Podiums */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <TrendingUp className="w-8 h-8 mx-auto mb-3 text-purple-500" />
-          <div className="text-3xl font-bold text-gray-900 dark:text-white">
-            {driverStats.podiums}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Podiums</div>
-        </div>
-      </div>
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Flag className="h-4 w-4 text-emerald-400" />
+                  Consistency
+                </div>
+                <div className="mt-3 text-2xl font-bold text-slate-100">{driverSummary.consistency.toFixed(1)}%</div>
+                <div className="text-xs text-slate-400">Points finishes: {driverSummary.pointsFinishes}</div>
+              </div>
+            </div>
 
-      {/* Detailed Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Performance Stats */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Performance Statistics
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Fastest Laps</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{driverStats.fastestLaps}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Average Finish</span>
-              <span className="font-semibold text-gray-900 dark:text-white">P{driverStats.averageFinish}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Consistency</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{driverStats.consistency}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">DNFs</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{driverStats.dnf}</span>
+            <div className="grid grid-cols-1 gap-4 px-6 pb-6 text-sm text-slate-300 lg:grid-cols-2">
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Zap className="h-4 w-4 text-sky-400" />
+                  Average Finish
+                </div>
+                <div className="mt-3 text-xl font-bold text-slate-100">
+                  {driverSummary.averageFinish ? `P${driverSummary.averageFinish.toFixed(1)}` : '—'}
+                </div>
+                <div className="text-xs text-slate-400">Total races: {driverSummary.totalRaces}</div>
+              </div>
+
+              <div className="rounded-2xl bg-slate-900/80 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  <Trophy className="h-4 w-4 text-red-400" />
+                  Reliability
+                </div>
+                <div className="mt-3 text-xl font-bold text-slate-100">{driverSummary.dnfs} DNFs</div>
+                <div className="text-xs text-slate-400">Clean finishes: {Math.max(driverSummary.totalRaces - driverSummary.dnfs, 0)}</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Race Participation */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Race Participation
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Races Completed</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{driverStats.racesCompleted}</span>
+          {/* Recent Results */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 shadow-lg">
+            <div className="border-b border-slate-800 px-6 py-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-slate-100 shadow">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-slate-100">Recent Results</h2>
+                </div>
+                {driverSummary.recentResults.length > 0 && onRaceSelect && (
+                  <button
+                    onClick={() => onRaceSelect(driverSummary.recentResults[0].raceId)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-slate-100"
+                  >
+                    View race
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Total Races</span>
-              <span className="font-semibold text-gray-900 dark:text-white">{driverStats.totalRaces}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Completion Rate</span>
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {Math.round((driverStats.racesCompleted / driverStats.totalRaces) * 100)}%
-              </span>
+            <div className="overflow-x-auto px-6 py-5">
+              <table className="w-full text-sm text-slate-300">
+                <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Event</th>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-left">Result</th>
+                    <th className="px-4 py-3 text-right">Points</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {recentResults.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                        No completed races yet.
+                      </td>
+                    </tr>
+                  )}
+                  {recentResults.map((result) => {
+                    const date = result.date ? new Date(result.date) : null;
+                    const formattedDate = date && !Number.isNaN(date.getTime())
+                      ? date.toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })
+                      : 'N/A';
+
+                    return (
+                      <tr key={`${result.raceId}-${result.trackName}`} className="transition hover:bg-slate-900/60">
+                        <td className="px-4 py-3 font-medium text-slate-100">{result.trackName}</td>
+                        <td className="px-4 py-3 text-slate-400">{formattedDate}</td>
+                        <td className="px-4 py-3 text-slate-300">
+                          {result.position ? `P${result.position}` : result.resultStatus ?? '—'}
+                          {result.fastestLap && <Zap className="ml-2 inline h-3.5 w-3.5 text-purple-500" />}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-100">{result.points}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

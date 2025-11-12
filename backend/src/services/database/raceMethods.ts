@@ -139,7 +139,7 @@ export const raceMethods = {
     const sessionResult = await this.db.query(
       `SELECT additional_data 
        FROM session_results 
-       WHERE race_id = $1 
+       WHERE race_id = $1 AND session_type = 10
        ORDER BY created_at DESC 
        LIMIT 1`,
       [raceId],
@@ -163,7 +163,7 @@ export const raceMethods = {
         `SELECT MAX(num_laps) as max_laps 
          FROM driver_session_results 
          WHERE session_result_id IN (
-           SELECT id FROM session_results WHERE race_id = $1
+           SELECT id FROM session_results WHERE race_id = $1 AND session_type = 10
          )`,
         [raceId],
       );
@@ -236,6 +236,44 @@ export const raceMethods = {
         const finalSessionTypes =
           row.session_types || (sessionTypes.length > 0 ? sessionTypes.join(', ') : null);
 
+        let totalLaps: number | null = null;
+
+        const sessionResult = await this.db.query(
+          `SELECT additional_data
+           FROM session_results
+           WHERE race_id = $1 AND session_type = 10
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [row.id],
+        );
+
+        if (sessionResult.rows.length > 0 && sessionResult.rows[0].additional_data) {
+          const additionalData =
+            typeof sessionResult.rows[0].additional_data === 'string'
+              ? JSON.parse(sessionResult.rows[0].additional_data)
+              : sessionResult.rows[0].additional_data;
+
+          totalLaps =
+            additionalData.sessionInfo?.['total-laps'] ??
+            additionalData.sessionInfo?.totalLaps ??
+            null;
+        }
+
+        if (!totalLaps) {
+          const maxLapsResult = await this.db.query(
+            `SELECT MAX(num_laps) as max_laps
+             FROM driver_session_results
+             WHERE session_result_id IN (
+               SELECT id FROM session_results WHERE race_id = $1 AND session_type = 10
+             )`,
+            [row.id],
+          );
+
+          if (maxLapsResult.rows[0]?.max_laps) {
+            totalLaps = maxLapsResult.rows[0].max_laps;
+          }
+        }
+
         return {
           id: row.id,
           season_id: row.season_id,
@@ -258,6 +296,7 @@ export const raceMethods = {
           created_at: row.created_at,
           updated_at: row.updated_at,
           session_config: row.session_config,
+          total_laps: totalLaps,
         };
       }),
     );

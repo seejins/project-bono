@@ -154,6 +154,197 @@ export const seasonMethods = {
     return null;
   },
 
+  async getSeasonAnalysis(this: DatabaseService, seasonId: string): Promise<any> {
+    const season = await this.getSeasonById(seasonId);
+    if (!season) {
+      return null;
+    }
+
+    const [eventsRaw, standings, driverList, previousRace] = await Promise.all([
+      this.getEventsBySeason(seasonId),
+      this.getSeasonStandings(seasonId),
+      this.getDriversBySeason(seasonId),
+      this.getPreviousRaceResults(seasonId).catch(() => null),
+    ]);
+
+    const events = (eventsRaw ?? []).map((event: any) => {
+      const raceDate = event.race_date || event.raceDate || null;
+      return {
+        id: event.id,
+        trackName:
+          event.track_name ||
+          event.track?.name ||
+          event.trackName ||
+          'Unknown Track',
+        status: event.status || 'scheduled',
+        raceDate,
+        sessionTypes: event.session_types || event.sessionTypes || null,
+        track: event.track || null,
+      };
+    });
+
+    const parseDate = (value: string | null | undefined) => {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const completedEvents = events
+      .filter((event) => event.status === 'completed')
+      .sort((a, b) => {
+        const dateA = parseDate(a.raceDate)?.getTime() ?? 0;
+        const dateB = parseDate(b.raceDate)?.getTime() ?? 0;
+        return dateB - dateA;
+      });
+
+    const upcomingEvents = events
+      .filter((event) => event.status !== 'completed')
+      .sort((a, b) => {
+        const dateA = parseDate(a.raceDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const dateB = parseDate(b.raceDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        return dateA - dateB;
+      });
+
+    const now = Date.now();
+    const nextEvent =
+      upcomingEvents.find((event) => {
+        const date = parseDate(event.raceDate);
+        return date ? date.getTime() >= now : false;
+      }) ?? upcomingEvents[0] ?? null;
+
+    const driverSummaries = await Promise.all(
+      (driverList ?? []).map(async (driver) => {
+        const [stats, raceHistory] = await Promise.all([
+          this.getDriverSeasonStats(driver.id, seasonId),
+          this.getDriverRaceHistory(driver.id, seasonId),
+        ]);
+
+        const standing = standings.find((entry) => entry.id === driver.id);
+        const recentResults = (raceHistory ?? []).slice(0, 5).map((entry) => ({
+          raceId: entry.raceId,
+          trackName: entry.trackName,
+          date: entry.raceDate,
+          position: entry.position,
+          points: entry.points ?? 0,
+          gridPosition: entry.gridPosition ?? null,
+          fastestLap: entry.fastestLap ?? false,
+          resultStatus: entry.resultStatus ?? null,
+        }));
+
+        return {
+          id: driver.id,
+          name: driver.name,
+          team: driver.team,
+          number: driver.number,
+          points: standing?.points ?? Number(stats?.points ?? 0),
+          wins: standing?.wins ?? Number(stats?.wins ?? 0),
+          podiums: standing?.podiums ?? Number(stats?.podiums ?? 0),
+          polePositions: Number(stats?.polePositions ?? 0),
+          fastestLaps: Number(stats?.fastestLaps ?? 0),
+          averageFinish: Number(stats?.averageFinish ?? 0),
+          totalRaces: Number(stats?.totalRaces ?? raceHistory?.length ?? 0),
+          dnfs: Number(stats?.dnfs ?? 0),
+          pointsFinishes: Number(stats?.pointsFinishes ?? 0),
+          consistency: Number(stats?.consistency ?? 0),
+          position: standing?.position ?? null,
+          recentResults,
+        };
+      }),
+    );
+
+    const pickHighlight = (
+      key: keyof (typeof driverSummaries)[number],
+      options?: { lowerIsBetter?: boolean; minRaces?: number; minValue?: number },
+    ) => {
+      if (driverSummaries.length === 0) {
+        return null;
+      }
+
+      let best: {
+        id: string;
+        name: string;
+        team: string | null;
+        value: number;
+      } | null = null;
+
+      for (const driver of driverSummaries) {
+        const value = Number(driver[key as keyof typeof driver]);
+        if (!Number.isFinite(value)) {
+          continue;
+        }
+        if (options?.minRaces && (driver.totalRaces || 0) < options.minRaces) {
+          continue;
+        }
+        if (options?.minValue !== undefined && value <= options.minValue) {
+          continue;
+        }
+
+        if (!best) {
+          best = {
+            id: driver.id,
+            name: driver.name,
+            team: driver.team ?? null,
+            value,
+          };
+          continue;
+        }
+
+        if (options?.lowerIsBetter) {
+          if (value < best.value) {
+            best = {
+              id: driver.id,
+              name: driver.name,
+              team: driver.team ?? null,
+              value,
+            };
+          }
+        } else if (value > best.value) {
+          best = {
+            id: driver.id,
+            name: driver.name,
+            team: driver.team ?? null,
+            value,
+          };
+        }
+      }
+
+      if (best && options?.minValue !== undefined && best.value <= options.minValue) {
+        return null;
+      }
+
+      return best;
+    };
+
+    const highlights = {
+      mostWins: pickHighlight('wins', { minValue: 0.5 }),
+      mostPodiums: pickHighlight('podiums', { minValue: 0.5 }),
+      mostPoles: pickHighlight('polePositions', { minValue: 0.5 }),
+      mostFastestLaps: pickHighlight('fastestLaps', { minValue: 0.5 }),
+      bestAverageFinish: pickHighlight('averageFinish', { lowerIsBetter: true, minRaces: 3 }),
+      bestConsistency: pickHighlight('consistency', { minValue: 0 }),
+    };
+
+    return {
+      season,
+      summary: {
+        totalEvents: events.length,
+        completedEvents: completedEvents.length,
+        upcomingEvents: events.length - completedEvents.length,
+        highlights,
+      },
+      drivers: driverSummaries,
+      events: {
+        all: events,
+        completed: completedEvents,
+        upcoming: upcomingEvents,
+      },
+      nextEvent,
+      previousRace: previousRace ?? null,
+    };
+  },
+
   async getHistoricInsights(this: DatabaseService): Promise<any> {
     try {
       const seasonsResult = await this.db.query(`

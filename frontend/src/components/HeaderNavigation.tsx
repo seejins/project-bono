@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Trophy, Users, Calendar, History, Settings, Clock } from 'lucide-react';
+import { Trophy, Users, Calendar, History, Settings, Home } from 'lucide-react';
 
 type HeaderVariant = 'overlay' | 'surface';
 
@@ -17,11 +17,11 @@ const LINKS: Array<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { to: '/', label: 'Season', icon: Trophy, exact: true },
+  { to: '/', label: 'Home', icon: Home, exact: true },
+  { to: '/season', label: 'Season', icon: Trophy },
   { to: '/grid', label: 'Grid', icon: Users },
   { to: '/races', label: 'Schedule', icon: Calendar },
   { to: '/history', label: 'History', icon: History },
-  { to: '/live', label: 'Live Timings', icon: Clock },
   { to: '/admin', label: 'Admin', icon: Settings },
 ];
 
@@ -34,10 +34,8 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
   return (
     <header
       className={clsx(
-        'z-40 h-[88px] border-b transition-colors duration-300',
-        isOverlay
-          ? 'border-transparent bg-transparent text-white'
-          : 'border-gray-200 bg-white/95 text-gray-900 dark:border-gray-800 dark:bg-gray-900/95 dark:text-white',
+        'z-40 h-[88px] border-b border-transparent bg-transparent transition-colors duration-300',
+        isOverlay ? 'text-white' : 'text-gray-900 dark:text-white',
         className
       )}
     >

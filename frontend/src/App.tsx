@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { io } from 'socket.io-client';
 import {
@@ -40,46 +40,12 @@ function AppLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('f1-app-authenticated') === 'true';
   });
-  const contentAnchorRef = useRef<HTMLDivElement | null>(null);
-  const heroRef = useRef<HTMLElement | null>(null);
-  const [isHeroInView, setIsHeroInView] = useState(true);
+  const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const scrollToMainContent = () => {
-    contentAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const handleHeroExplore = () => {
-    if (isHome) {
-      scrollToMainContent();
-    }
+    navigate('/season');
   };
-
-  useEffect(() => {
-    if (!isHome) {
-      setIsHeroInView(false);
-      return;
-    }
-
-    const element = heroRef.current;
-    if (!element) {
-      setIsHeroInView(false);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsHeroInView(entry.intersectionRatio >= 0.35);
-      },
-      { threshold: [0.15, 0.35, 0.6] }
-    );
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isHome]);
 
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -120,7 +86,7 @@ function AppLayout() {
   };
 
   const showAlerts = location.pathname !== '/admin' && alerts.length > 0;
-  const headerVariant = isHome && isHeroInView ? 'overlay' : 'surface';
+  const headerVariant = 'overlay' as const;
 
   const mainContainerClass = useMemo(
     () =>
@@ -131,39 +97,36 @@ function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="relative min-h-screen bg-[#060b1d] text-white">
       {!isAuthenticated ? (
         <PasswordGate onAuthenticated={handleAppAuthentication} />
       ) : (
         <>
-          <div
-            className={clsx(
-              'sticky top-0 z-50 transition-colors duration-300',
-              headerVariant === 'overlay'
-                ? 'bg-transparent'
-                : 'bg-white/95 shadow-sm dark:bg-gray-900/95'
-            )}
-          >
+          <div className="absolute inset-x-0 top-0 z-50 bg-transparent transition-colors duration-300">
             <HeaderNavigation variant={headerVariant} />
           </div>
 
           {isHome && (
-            <div style={{ marginTop: -TAB_BAR_HEIGHT }}>
-              <HeroSection ref={heroRef} onExplore={handleHeroExplore} />
+            <div>
+              <HeroSection
+                onExplore={handleHeroExplore}
+              />
             </div>
           )}
 
-          <main ref={contentAnchorRef}>
-            <section className={mainContainerClass}>
-              {showAlerts && (
-                <div className="mb-8">
-                  <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
-                </div>
-              )}
+          {!isHome && (
+            <main>
+              <section className={mainContainerClass}>
+                {showAlerts && (
+                  <div className="mb-8">
+                    <AlertSystem alerts={alerts} onDismiss={dismissAlert} />
+                  </div>
+                )}
 
-              <Outlet />
-            </section>
-          </main>
+                <Outlet />
+              </section>
+            </main>
+          )}
         </>
       )}
     </div>
@@ -171,6 +134,10 @@ function AppLayout() {
 }
 
 function HomePage() {
+  return null;
+}
+
+function SeasonDashboardPage() {
   const navigate = useNavigate();
 
   const handleRaceSelect = (raceId: string) => {
@@ -208,6 +175,7 @@ function GridPage() {
 
 function DriverSeasonStatsPage() {
   const { driverId } = useParams<{ driverId: string }>();
+  const navigate = useNavigate();
 
   if (!driverId) {
     return <Navigate to="/grid" replace />;
@@ -215,7 +183,10 @@ function DriverSeasonStatsPage() {
 
   return (
     <PageTransition>
-      <DriverSeasonStats driverId={driverId} />
+      <DriverSeasonStats
+        driverId={driverId}
+        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+      />
     </PageTransition>
   );
 }
@@ -340,6 +311,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="season" element={<SeasonDashboardPage />} />
         <Route path="grid" element={<GridPage />} />
         <Route path="grid/:driverId" element={<DriverSeasonStatsPage />} />
         <Route path="history" element={<HistoryLandingPage />} />

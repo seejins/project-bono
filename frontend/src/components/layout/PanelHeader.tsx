@@ -13,6 +13,7 @@ interface PanelHeaderProps {
   contextTabs?: ReactNode;
   backgroundImage?: string;
   className?: string;
+  children?: ReactNode;
 }
 
 export function PanelHeader({
@@ -27,6 +28,7 @@ export function PanelHeader({
   contextTabs,
   backgroundImage,
   className,
+  children,
 }: PanelHeaderProps) {
   return (
     <header
@@ -78,6 +80,7 @@ export function PanelHeader({
         </div>
 
         {contextTabs && <div className="flex flex-wrap gap-2">{contextTabs}</div>}
+        {children}
       </div>
     </header>
   );

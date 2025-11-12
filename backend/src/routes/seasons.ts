@@ -126,6 +126,31 @@ export default function createSeasonsRoutes(
     }
   });
 
+  router.get('/:id/analysis', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await seasons.ensureInitialized();
+
+      const analysis = await seasons.getSeasonAnalysis(id);
+      if (!analysis) {
+        return res.status(404).json({
+          error: 'Season not found',
+        });
+      }
+
+      res.json({
+        success: true,
+        analysis,
+      });
+    } catch (error) {
+      console.error('Get season analysis error:', error);
+      res.status(500).json({
+        error: 'Failed to get season analysis',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   // Get season by ID
   router.get('/:id', async (req, res) => {
     try {

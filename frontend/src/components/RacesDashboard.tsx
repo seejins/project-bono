@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import clsx from 'clsx';
 import { apiGet } from '../utils/api';
-import { Grid3X3, List, Calendar, CheckCircle, Clock, XCircle, MapPin, Flag, Trophy, Edit } from 'lucide-react';
+import { Grid3X3, List, Calendar, MapPin, Flag } from 'lucide-react';
+import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
+import { DashboardPage } from './layout/DashboardPage';
 
 interface Event {
   id: string;
@@ -24,6 +27,8 @@ interface Event {
     country: string;
     length: number;
   };
+  total_laps?: number | null;
+  track_length?: number | null;
 }
 
 interface RacesDashboardProps {
@@ -33,11 +38,137 @@ interface RacesDashboardProps {
 
 type ViewMode = 'cards' | 'list';
 
+const formatEventDate = (dateString: string | null) => {
+  if (!dateString) return 'TBD';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const getSessionTypes = (sessionTypes: string | null) => {
+  if (!sessionTypes) return ['Race'];
+  return sessionTypes.split(', ');
+};
+
+const getSessionTypeBadgeClass = (sessionType: string) => {
+  const type = sessionType.toLowerCase();
+  if (type.includes('practice')) {
+    return 'bg-emerald-500/15 text-emerald-400';
+  }
+  if (type.includes('qualifying')) {
+    return 'bg-sky-500/15 text-sky-400';
+  }
+  if (type.includes('race')) {
+    return 'bg-red-500/15 text-red-400';
+  }
+  return 'bg-slate-500/10 text-slate-500';
+};
+
+const EVENT_STATUS_META: Record<Event['status'] | 'scheduled', {
+  label: string;
+  textClass: string;
+  dotClass: string;
+}> = {
+  completed: {
+    label: 'Completed',
+    textClass: 'text-emerald-400',
+    dotClass: 'bg-emerald-400',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    textClass: 'text-red-400',
+    dotClass: 'bg-red-400',
+  },
+  scheduled: {
+    label: 'Scheduled',
+    textClass: 'text-amber-400',
+    dotClass: 'bg-amber-400',
+  },
+};
+
+const getEventStatusMeta = (status: Event['status'] | undefined) =>
+  EVENT_STATUS_META[status ?? 'scheduled'];
+
 export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRaceSelect }) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+
+  const tableColumns = useMemo<DashboardTableColumn<Event>[]>(() => [
+    {
+      key: 'track_name',
+      label: 'Event',
+      className: 'font-semibold text-slate-900 dark:text-slate-100',
+    },
+    {
+      key: 'track-info',
+      label: 'Circuit',
+      render: (_: unknown, row) => (
+        <div className="text-sm text-slate-500 dark:text-slate-400">
+          <div>{row.track?.name || 'Venue TBD'}</div>
+          <div>{row.track?.length ? `${row.track.length} km` : 'Distance TBD'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'laps',
+      label: 'Total Laps',
+      align: 'right' as const,
+      render: (_: unknown, row) => (
+        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {row.total_laps != null ? row.total_laps : row.session_duration ? `${row.session_duration} laps` : 'Laps TBD'}
+        </span>
+      ),
+    },
+    {
+      key: 'race_date',
+      label: 'Date',
+      render: (_: string | null, row) => (
+        <span className="text-sm text-slate-400 dark:text-slate-500">{formatEventDate(row.race_date)}</span>
+      ),
+    },
+    {
+      key: 'session_types',
+      label: 'Sessions',
+      render: (_: string | null, row) => (
+        <div className="flex flex-wrap gap-2">
+          {getSessionTypes(row.session_types).map((session) => (
+            <span
+              key={session}
+              className={clsx(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] 2xl:text-xs font-semibold uppercase tracking-[0.2em]',
+                getSessionTypeBadgeClass(session)
+              )}
+            >
+              {session}
+            </span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (_: string, row) => {
+        const statusMeta = getEventStatusMeta(row.status);
+        return (
+          <span
+            className={clsx(
+              'inline-flex items-center gap-2 text-[11px] 2xl:text-xs font-semibold uppercase tracking-[0.25em]',
+              statusMeta.textClass
+            )}
+          >
+            <span className={clsx('h-2 w-2 rounded-full', statusMeta.dotClass)} />
+            {statusMeta.label}
+          </span>
+        );
+      },
+    },
+  ], []);
 
   useEffect(() => {
     loadEvents();
@@ -62,43 +193,6 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
     } finally {
       setLoading(false);
     }
-  };
-
-  const getEventStatus = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Completed</span>;
-      case 'cancelled':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Cancelled</span>;
-      default:
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Scheduled</span>;
-    }
-  };
-
-  const getEventStatusIcon = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'cancelled':
-        return <XCircle className="h-5 w-5 text-red-600" />;
-      default:
-        return <Clock className="h-5 w-5 text-yellow-600" />;
-    }
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBD';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const getSessionTypes = (sessionTypes: string | null) => {
-    if (!sessionTypes) return ['Race'];
-    return sessionTypes.split(', ');
   };
 
   if (loading) {
@@ -134,34 +228,46 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
   }
 
   return (
-    <div className="max-w-[2048px] mx-auto space-y-6">
+    <DashboardPage
+      hero={{
+        imageSrc: '/hero/94mliza3aat71.jpg',
+        title: 'Season Schedule',
+        subtitle: events.length ? `${events.length} Events` : 'Season Calendar',
+        description: 'Track every race weekend, session type, and status update across the entire campaign.',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Schedule</h2>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {events.length} event{events.length !== 1 ? 's' : ''}
-          </span>
-          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="flex h-10 w-10 items-center justify-center text-slate-900 dark:text-slate-100">
+            <Calendar className="h-6 w-6" />
+          </div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Season Schedule</h1>
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <div className="flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-900">
             <button
               onClick={() => setViewMode('cards')}
-              className={`p-2 rounded-md transition-colors ${
+              className={clsx(
+                'rounded-md px-3 py-1 transition-colors',
                 viewMode === 'cards'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+                  ? 'bg-red-600 text-white'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              )}
             >
-              <Grid3X3 className="h-4 w-4" />
+              Grid
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-colors ${
+              className={clsx(
+                'rounded-md px-3 py-1 transition-colors',
                 viewMode === 'list'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+                  ? 'bg-red-600 text-white'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              )}
             >
-              <List className="h-4 w-4" />
+              List
             </button>
           </div>
         </div>
@@ -177,24 +283,23 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
       ) : (
         <>
           {viewMode === 'cards' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {events.map((event) => (
                 <EventCard key={event.id} event={event} onRaceSelect={onRaceSelect} />
               ))}
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-              <EventListHeader />
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {events.map((event) => (
-                  <EventListItem key={event.id} event={event} onRaceSelect={onRaceSelect} />
-                ))}
-              </div>
-            </div>
+            <DashboardTable
+              columns={tableColumns}
+              rows={events}
+              rowKey={(row) => row.id}
+              onRowClick={onRaceSelect ? (row) => onRaceSelect(row.id) : undefined}
+              emptyMessage="No events scheduled."
+            />
           )}
         </>
       )}
-    </div>
+    </DashboardPage>
   );
 };
 
@@ -205,238 +310,63 @@ interface EventCardProps {
 }
 
 const EventCard: React.FC<EventCardProps> = ({ event, onRaceSelect }) => {
-  const getEventStatusIcon = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'cancelled':
-        return <XCircle className="h-5 w-5 text-red-600" />;
-      default:
-        return <Clock className="h-5 w-5 text-yellow-600" />;
-    }
-  };
-
-  const getEventStatus = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Completed</span>;
-      case 'cancelled':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Cancelled</span>;
-      default:
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Scheduled</span>;
-    }
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBD';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const getSessionTypes = (sessionTypes: string | null) => {
-    if (!sessionTypes) return ['Race'];
-    return sessionTypes.split(', ');
-  };
-
-  const getSessionTypeColor = (sessionType: string) => {
-    const type = sessionType.toLowerCase();
-    if (type.includes('practice')) {
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-    } else if (type.includes('qualifying')) {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-    } else if (type.includes('race')) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-    }
-    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
-  };
+  const statusMeta = getEventStatusMeta(event.status);
+  const sessionTypes = getSessionTypes(event.session_types);
 
   return (
-    <div 
-      className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-xl hover:scale-[1.02] transition-all duration-200 cursor-pointer border border-transparent hover:border-red-600/20"
+    <div
+      className="flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-md transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-950/70"
       onClick={() => onRaceSelect?.(event.id)}
     >
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <MapPin className="h-5 w-5 text-red-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {event.track_name}
-            </h3>
-          </div>
-          {getEventStatusIcon(event)}
-        </div>
-
-        {/* Track Info */}
-        <div className="mb-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {event.track.name ? `${event.track.name} • ` : ''}{event.track.length}km
-          </p>
-        </div>
-
-        {/* Date */}
-        <div className="flex items-center space-x-2 mb-4">
-          <Calendar className="h-4 w-4 text-gray-400" />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {formatDate(event.race_date)}
-          </span>
-        </div>
-
-        {/* Session Types */}
-        <div className="mb-4">
-          <div className="flex flex-wrap gap-1">
-            {getSessionTypes(event.session_types).map((sessionType, index) => (
-              <span
-                key={index}
-                className={`px-2 py-1 rounded-full text-xs ${getSessionTypeColor(sessionType)}`}
-              >
-                {sessionType}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="flex items-center justify-between">
-          {getEventStatus(event)}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Event List Header Component
-const EventListHeader: React.FC = () => {
-  return (
-    <div className="px-6 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-      <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-        <div className="col-span-4">Track</div>
-        <div className="col-span-2">Date</div>
-        <div className="col-span-2">Sessions</div>
-        <div className="col-span-2">Status</div>
-        <div className="col-span-2">Actions</div>
-      </div>
-    </div>
-  );
-};
-
-// Event List Item Component
-interface EventListItemProps {
-  event: Event;
-  onRaceSelect?: (raceId: string) => void;
-}
-
-const EventListItem: React.FC<EventListItemProps> = ({ event, onRaceSelect }) => {
-  const getEventStatusIcon = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'cancelled':
-        return <XCircle className="h-4 w-4 text-red-600" />;
-      default:
-        return <Clock className="h-4 w-4 text-yellow-600" />;
-    }
-  };
-
-  const getEventStatus = (event: Event) => {
-    switch (event.status) {
-      case 'completed':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Completed</span>;
-      case 'cancelled':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Cancelled</span>;
-      default:
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Scheduled</span>;
-    }
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBD';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const getSessionTypes = (sessionTypes: string | null) => {
-    if (!sessionTypes) return ['Race'];
-    return sessionTypes.split(', ');
-  };
-
-  const getSessionTypeColor = (sessionType: string) => {
-    const type = sessionType.toLowerCase();
-    if (type.includes('practice')) {
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-    } else if (type.includes('qualifying')) {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-    } else if (type.includes('race')) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-    }
-    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
-  };
-
-  return (
-    <div 
-      className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer border-l-4 border-transparent hover:border-red-600"
-      onClick={() => onRaceSelect?.(event.id)}
-    >
-      <div className="grid grid-cols-12 gap-4 items-center">
-        {/* Track */}
-        <div className="col-span-4">
-          <div className="flex items-center space-x-3">
-            <MapPin className="h-4 w-4 text-red-600" />
+      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex items-center justify-between w-full gap-3">
+          <div className="flex items-center gap-3">
+            <MapPin className="h-5 w-5 text-red-500" />
             <div>
-              <div className="font-medium text-gray-900 dark:text-white">
-                {event.track_name}
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {event.track.name ? `${event.track.name} • ` : ''}{event.track.length}km
-              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                {event.track_name || 'TBD'}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {formatEventDate(event.race_date)}
+              </p>
             </div>
           </div>
+          <span
+            className={clsx(
+              'inline-flex items-center gap-2 text-[11px] 2xl:text-xs font-semibold uppercase tracking-[0.28em]',
+              statusMeta.textClass
+            )}
+          >
+            <span className={clsx('h-2 w-2 rounded-full', statusMeta.dotClass)} />
+            {statusMeta.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 px-6 py-5 text-sm 2xl:text-base text-slate-600 dark:text-slate-300">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Track Information</p>
+          <ul className="mt-2 space-y-1 text-sm 2xl:text-base text-slate-600 dark:text-slate-300">
+            <li>{event.track?.name || 'Venue TBD'}</li>
+            <li>{event.track?.length ? `${event.track.length} km` : 'Distance TBD'}</li>
+            <li>{event.total_laps != null ? `${event.total_laps} laps` : event.session_duration ? `${event.session_duration} laps` : 'Laps TBD'}</li>
+          </ul>
         </div>
 
-        {/* Date */}
-        <div className="col-span-2">
-          <div className="flex items-center space-x-2">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {formatDate(event.race_date)}
-            </span>
-          </div>
-        </div>
-
-        {/* Sessions */}
-        <div className="col-span-2">
-          <div className="flex flex-wrap gap-1">
-            {getSessionTypes(event.session_types).map((sessionType, index) => (
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Session Types</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {sessionTypes.map((sessionType) => (
               <span
-                key={index}
-                className={`px-2 py-1 rounded-full text-xs ${getSessionTypeColor(sessionType)}`}
+                key={sessionType}
+                className={clsx(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] 2xl:text-xs font-semibold uppercase tracking-[0.2em]',
+                  getSessionTypeBadgeClass(sessionType)
+                )}
               >
                 {sessionType}
               </span>
             ))}
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="col-span-2">
-          <div className="flex items-center space-x-2">
-            {getEventStatusIcon(event)}
-            {getEventStatus(event)}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="col-span-2">
-          <div className="flex items-center space-x-2">
-            <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-              <Edit className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </div>

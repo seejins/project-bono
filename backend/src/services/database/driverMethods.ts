@@ -329,8 +329,10 @@ export const driverMethods = {
           SUM(dsr.points) as points,
           COUNT(*) FILTER (WHERE dsr.pole_position = true) as pole_positions,
           COUNT(*) FILTER (WHERE dsr.fastest_lap = true) as fastest_laps,
-          AVG(dsr.position) as avg_finish,
-          COUNT(*) as total_races
+          AVG(NULLIF(dsr.position, 0)) as avg_finish,
+          COUNT(*) as total_races,
+          COUNT(*) FILTER (WHERE dsr.result_status IN (4, 7)) as dnfs,
+          COUNT(*) FILTER (WHERE dsr.position IS NOT NULL AND dsr.position <= 10) as points_finishes
         FROM driver_session_results dsr
         JOIN session_results sr ON sr.id = dsr.session_result_id
         JOIN races r ON r.id = sr.race_id
@@ -340,14 +342,28 @@ export const driverMethods = {
       );
 
       const stats = statsResult.rows[0] || {};
+      const wins = Number(stats.wins ?? 0);
+      const podiums = Number(stats.podiums ?? 0);
+      const points = Number(stats.points ?? 0);
+      const polePositions = Number(stats.pole_positions ?? 0);
+      const fastestLaps = Number(stats.fastest_laps ?? 0);
+      const avgFinish = Number(stats.avg_finish ?? 0);
+      const totalRaces = Number(stats.total_races ?? 0);
+      const dnfs = Number(stats.dnfs ?? 0);
+      const pointsFinishes = Number(stats.points_finishes ?? 0);
+      const consistency = totalRaces > 0 ? Math.round((pointsFinishes / totalRaces) * 1000) / 10 : 0;
+
       return {
-        wins: parseInt(stats.wins) || 0,
-        podiums: parseInt(stats.podiums) || 0,
-        points: parseFloat(stats.points) || 0,
-        polePositions: parseInt(stats.pole_positions) || 0,
-        fastestLaps: parseInt(stats.fastest_laps) || 0,
-        averageFinish: parseFloat(stats.avg_finish) || 0,
-        totalRaces: parseInt(stats.total_races) || 0,
+        wins,
+        podiums,
+        points,
+        polePositions,
+        fastestLaps,
+        averageFinish: avgFinish,
+        totalRaces,
+        dnfs,
+        pointsFinishes,
+        consistency,
       };
     } catch (error) {
       console.error('Error getting driver season stats:', error);
@@ -359,6 +375,9 @@ export const driverMethods = {
         fastestLaps: 0,
         averageFinish: 0,
         totalRaces: 0,
+        dnfs: 0,
+        pointsFinishes: 0,
+        consistency: 0,
       };
     }
   },

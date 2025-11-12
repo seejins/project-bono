@@ -51,6 +51,10 @@ export class SeasonRepository {
   getActiveSeason() {
     return this.service.getActiveSeason();
   }
+
+  getSeasonAnalysis(id: string) {
+    return this.service.getSeasonAnalysis(id);
+  }
 }
 
 export class DriverRepository {

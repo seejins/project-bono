@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Trophy, ChevronDown } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import { apiGet } from '../utils/api';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
@@ -42,9 +42,9 @@ interface PodiumEntry {
 }
 
 const PODIUM_SIZE_MAP: Record<number, string> = {
-  1: 'text-2xl sm:text-3xl lg:text-4xl 2xl:text-5xl',
-  2: 'text-lg sm:text-xl lg:text-2xl 2xl:text-3xl',
-  3: 'text-sm sm:text-base lg:text-lg 2xl:text-xl',
+  1: 'text-xl sm:text-2xl md:text-[26px] lg:text-4xl 2xl:text-5xl',
+  2: 'text-base sm:text-lg md:text-xl lg:text-2xl 2xl:text-3xl',
+  3: 'text-sm sm:text-base md:text-lg lg:text-xl 2xl:text-2xl',
 };
 
 const PODIUM_LABEL_MAP: Record<number, string> = {
@@ -53,10 +53,16 @@ const PODIUM_LABEL_MAP: Record<number, string> = {
   3: '3RD',
 };
 
+const PODIUM_TEXT_COLOR_MAP: Record<number, string> = {
+  1: 'text-white/85',
+  2: 'text-white/70',
+  3: 'text-white/60',
+};
+
 export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
   ({ onExplore }, ref) => {
     const { currentSeason } = useSeason();
-    const [raceLabel, setRaceLabel] = useState('Season Championship');
+    const [raceLabel, setRaceLabel] = useState('Season Leaders');
     const [seasonTag, setSeasonTag] = useState<string | null>(null);
     const [raceDate, setRaceDate] = useState<string | null>(null);
     const [podiumEntries, setPodiumEntries] = useState<PodiumEntry[]>([]);
@@ -71,7 +77,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     const [heroContentVisible, setHeroContentVisible] = useState(false);
     const [cardsVisible, setCardsVisible] = useState(false);
     const [buttonVisible, setButtonVisible] = useState(false);
-    const [scrollCueVisible, setScrollCueVisible] = useState(false);
     const [videoRevealed, setVideoRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -129,8 +134,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           });
 
           setPodiumEntries(leaders);
-          setRaceLabel(currentSeason?.name || 'Season Championship');
-          setSeasonTag(currentSeason ? `Season ${currentSeason.year}` : null);
+          setRaceLabel('Season Leaders');
+          setSeasonTag(currentSeason?.name ?? null);
           setRaceDate(null);
 
           if (!eventsResponse.ok) {
@@ -256,7 +261,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
       let heroTimeout: number | null = null;
       let cardsTimeout: number | null = null;
       let buttonTimeout: number | null = null;
-      let scrollCueTimeout: number | null = null;
 
       if (!isLoading) {
         frame = requestAnimationFrame(() => {
@@ -268,16 +272,12 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
             buttonTimeout = window.setTimeout(() => {
               setButtonVisible(true);
             }, PODIUM_BUTTON_DELAY_MS);
-            scrollCueTimeout = window.setTimeout(() => {
-              setScrollCueVisible(true);
-            }, PODIUM_TOTAL_DURATION_MS + 500);
           }, HERO_DELAY_MS);
         });
       } else {
         setHeroContentVisible(false);
         setCardsVisible(false);
         setButtonVisible(false);
-        setScrollCueVisible(false);
       }
 
       return () => {
@@ -293,9 +293,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         if (buttonTimeout !== null) {
           window.clearTimeout(buttonTimeout);
         }
-        if (scrollCueTimeout !== null) {
-          window.clearTimeout(scrollCueTimeout);
-        }
       };
     }, [isLoading]);
 
@@ -310,6 +307,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         year: 'numeric',
       });
     }, [raceDate]);
+
+    const subtitle = seasonTag ?? formattedRaceDate ?? null;
 
     const displayPodium = useMemo(() => {
       return [1, 2, 3].map((position) => {
@@ -331,7 +330,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     return (
       <section
         ref={ref}
-        className="relative flex h-screen w-full flex-col justify-between overflow-hidden pb-12"
+        className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden"
       >
         <video
           className="absolute inset-0 h-full w-full object-cover"
@@ -350,9 +349,9 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/60 to-black/20" />
 
-        <div className="relative z-10 flex h-full justify-center">
-          <div className="flex h-full w-full max-w-[2560px] flex-col justify-center lg:justify-end gap-4 px-6 md:gap-6 md:px-12 lg:px-20 lg:pb-6">
-            <div className="flex flex-col justify-center -translate-y-4 md:-translate-y-10 lg:justify-start lg:-translate-y-20">
+        <div className="relative z-10 flex min-h-[100dvh] w-full justify-center">
+          <div className="flex w-full max-w-[2560px] flex-col px-6 py-10 md:px-12 md:py-12 lg:px-20 lg:py-16">
+            <div className="flex flex-1 flex-col justify-end">
               <div
                 className={clsx(
                   'max-w-4xl space-y-6 text-white transition-all duration-[1200ms] ease-out',
@@ -363,41 +362,38 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                   <h1 className="text-lg font-semibold uppercase tracking-[0.35em] text-white/90 sm:text-xl">
                     {raceLabel}
                   </h1>
-                  {formattedRaceDate && (
-                    <p className="mt-2 text-xs uppercase tracking-[0.4em] text-white/60">
-                      {formattedRaceDate}
+                  {subtitle && (
+                    <p className="mt-2 text-sm sm:text-base uppercase tracking-[0.4em] text-white/60">
+                      {subtitle}
                     </p>
                   )}
                 </div>
 
                 {error && <p className="text-sm text-red-300">{error}</p>}
 
-                <div className="space-y-4 md:space-y-5">
+                <div className="space-y-6 md:space-y-8">
                   {displayPodium.map(({ position, driver, teamColor }, index) => (
                     <div
                       key={position}
                       className={clsx(
-                        'flex items-baseline gap-6 transition-all duration-[1000ms] ease-out',
+                        'flex items-center gap-8 transition-all duration-[1000ms] ease-out',
                         heroContentVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-5'
                       )}
                       style={{ transitionDelay: `${PODIUM_INITIAL_DELAY_MS + index * PODIUM_STAGGER_MS}ms` }}
                     >
-                      <span className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
+                      <span className="inline-flex w-20 justify-center text-sm sm:text-base md:text-lg font-semibold uppercase tracking-[0.45em] text-white/70">
                         {PODIUM_LABEL_MAP[position] ?? `${position}TH`}
                       </span>
-                      <div className="flex flex-col">
+                      <div className="flex items-stretch gap-5">
+                        <span
+                          className="inline-block w-1 rounded-full self-stretch"
+                          style={{ backgroundColor: teamColor }}
+                        />
                         <p
-                          className={`${PODIUM_SIZE_MAP[position]} font-bold uppercase tracking-[0.18em]`}
+                          className={`${PODIUM_SIZE_MAP[position]} ${PODIUM_TEXT_COLOR_MAP[position]} font-bold uppercase tracking-[0.18em] leading-none`}
                         >
                           {driver}
                         </p>
-                        <span
-                          className="mt-2 h-1 border-b-4"
-                          style={{
-                            borderColor: teamColor,
-                            width: position === 1 ? '12rem' : position === 2 ? '8rem' : '6rem',
-                          }}
-                        />
                       </div>
                     </div>
                   ))}
@@ -406,14 +402,14 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 <button
                   onClick={onExplore}
                   className={clsx(
-                    'group inline-flex items-center gap-3 rounded-full bg-red-600 px-6 py-3 text-xs font-semibold uppercase tracking-[0.4em] text-white transition-all duration-500 ease-out hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500 disabled:bg-red-600/70 disabled:text-white/80',
+                    'group mt-1 inline-flex items-center gap-3 rounded-full bg-red-600 px-6 py-3 text-xs font-semibold uppercase tracking-[0.4em] text-white transition-all duration-500 ease-out hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500 disabled:bg-red-600/70 disabled:text-white/80',
                     buttonVisible
                       ? 'opacity-100 translate-x-0 translate-y-0'
                       : 'pointer-events-none opacity-0 -translate-x-6'
                   )}
                   disabled={isLoading}
                 >
-                  View Race Results
+                  Season Dashboard
                   <Trophy className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </button>
               </div>
@@ -421,11 +417,11 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
             <div
               className={clsx(
-                'flex w-full flex-col gap-4 lg:-mt-2 lg:flex-row lg:gap-6 transition-all duration-[1300ms] ease-out',
+                'mt-10 grid w-full gap-4 transition-all duration-[1300ms] ease-out lg:mt-14 lg:grid-cols-3 lg:gap-6',
                 cardsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
               )}
             >
-              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
                   Next Event
                 </h3>
@@ -452,28 +448,28 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 )}
               </article>
 
-              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
                   Last Race Podium
                 </h3>
                 {previousEvent ? (
-                  <p className="mt-2 text-sm text-white/70">
+                    <p className="mt-2 text-base text-white/75">
                     {previousEvent.track_name || previousEvent.name || 'Previous Race'}
                   </p>
                 ) : null}
-                <ul className="mt-2 space-y-1.5">
+                <ul className="mt-2 space-y-1">
                   {previousRacePodium.length > 0 ? (
                     previousRacePodium.map((entry) => (
-                      <li key={entry.position} className="flex items-center justify-between text-sm py-0.5">
+                      <li key={entry.position} className="flex items-center justify-between py-1 text-base">
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-flex w-16 justify-center text-[11px] font-medium uppercase tracking-[0.3em] text-white/60">
+                          <span className="inline-flex w-16 justify-center text-xs font-medium uppercase tracking-[0.3em] text-white/70">
                             {PODIUM_LABEL_MAP[entry.position] ?? `${entry.position}TH`}
                           </span>
                           <span
-                            className="inline-block h-4 w-0.5 rounded-full"
+                            className="inline-block h-5 w-0.5 rounded-full"
                             style={{ backgroundColor: entry.teamColor }}
                           />
-                          <span className="text-xs font-medium text-white/80 leading-tight">
+                          <span className="text-sm font-semibold text-white/85 leading-tight">
                             {entry.driver}
                           </span>
                         </div>
@@ -485,7 +481,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 </ul>
               </article>
 
-              <article className="flex-1 rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
                   Season Progress
                 </h3>
@@ -510,23 +506,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           </div>
         </div>
 
-        <div
-          className={clsx(
-            'pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center transition-all duration-[1300ms] ease-out',
-            scrollCueVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-          )}
-        >
-          <button
-            onClick={onExplore}
-            disabled={isLoading}
-            className="pointer-events-auto flex flex-col items-center gap-2 text-white/60 transition hover:text-white/80"
-          >
-            <span className="text-xs uppercase tracking-[0.35em]">Scroll for more</span>
-            <span className="animate-bounce text-white/80">
-              <ChevronDown className="h-5 w-5" />
-            </span>
-          </button>
-        </div>
       </section>
     );
   }
