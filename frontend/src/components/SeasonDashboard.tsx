@@ -186,11 +186,15 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       {
         key: 'name',
         label: 'Driver',
+        align: 'left' as const,
+        headerClassName: 'text-left',
         className: 'font-medium text-slate-900 dark:text-slate-100',
       },
       {
         key: 'team',
         label: 'Team',
+        align: 'left' as const,
+        headerClassName: 'text-left',
         render: (_: string, row: DriverSeasonSummary) => (
           <span
             className="font-medium"
@@ -203,19 +207,16 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       {
         key: 'wins',
         label: 'Wins',
-        align: 'right' as const,
         className: 'text-slate-500 dark:text-slate-400',
       },
       {
         key: 'podiums',
         label: 'Podiums',
-        align: 'right' as const,
         className: 'text-slate-500 dark:text-slate-400',
       },
       {
         key: 'points',
         label: 'Points',
-        align: 'right' as const,
         render: (_: number, row: DriverSeasonSummary) => (
           <span className="font-semibold text-slate-900 dark:text-slate-100">{row.points} pts</span>
         ),

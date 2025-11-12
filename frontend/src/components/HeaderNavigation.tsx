@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Trophy, Users, Calendar, History, Settings, Home } from 'lucide-react';
+import { Trophy, Users, Calendar, Settings, Home, Clock } from 'lucide-react';
 
 type HeaderVariant = 'overlay' | 'surface';
 
@@ -21,7 +21,7 @@ const LINKS: Array<{
   { to: '/season', label: 'Season', icon: Trophy },
   { to: '/grid', label: 'Grid', icon: Users },
   { to: '/races', label: 'Schedule', icon: Calendar },
-  { to: '/history', label: 'History', icon: History },
+  { to: '/live', label: 'Live Timings', icon: Clock },
   { to: '/admin', label: 'Admin', icon: Settings },
 ];
 

@@ -102,11 +102,15 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
     {
       key: 'track_name',
       label: 'Event',
+      align: 'left' as const,
+      headerClassName: 'text-left',
       className: 'font-semibold text-slate-900 dark:text-slate-100',
     },
     {
       key: 'track-info',
       label: 'Circuit',
+      align: 'left' as const,
+      headerClassName: 'text-left',
       render: (_: unknown, row) => (
         <div className="text-sm text-slate-500 dark:text-slate-400">
           <div>{row.track?.name || 'Venue TBD'}</div>
@@ -117,7 +121,6 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
     {
       key: 'laps',
       label: 'Total Laps',
-      align: 'right' as const,
       render: (_: unknown, row) => (
         <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           {row.total_laps != null ? row.total_laps : row.session_duration ? `${row.session_duration} laps` : 'Laps TBD'}
@@ -140,7 +143,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
             <span
               key={session}
               className={clsx(
-                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] 2xl:text-xs font-semibold uppercase tracking-[0.2em]',
+                'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] 2xl:text-sm font-semibold',
                 getSessionTypeBadgeClass(session)
               )}
             >
@@ -156,12 +159,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
       render: (_: string, row) => {
         const statusMeta = getEventStatusMeta(row.status);
         return (
-          <span
-            className={clsx(
-              'inline-flex items-center gap-2 text-[11px] 2xl:text-xs font-semibold uppercase tracking-[0.25em]',
-              statusMeta.textClass
-            )}
-          >
+          <span className={clsx('inline-flex items-center gap-2 text-sm font-semibold', statusMeta.textClass)}>
             <span className={clsx('h-2 w-2 rounded-full', statusMeta.dotClass)} />
             {statusMeta.label}
           </span>

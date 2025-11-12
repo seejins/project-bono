@@ -6,9 +6,6 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { TelemetryService } from './services/TelemetryService';
 import { DatabaseService } from './services/DatabaseService';
-import { SessionExportService } from './services/SessionExportService';
-import { F123UDPProcessor } from './services/F123UDPProcessor';
-import { PostSessionProcessor } from './services/PostSessionProcessor';
 import { RaceResultsEditor } from './services/RaceResultsEditor';
 import { setupRoutes } from './routes';
 import { setupSocketHandlers } from './socket';
@@ -48,10 +45,7 @@ app.use(express.json());
 const pool = createPgPool();
 const databaseService = new DatabaseService(pool);
 const telemetryService = new TelemetryService();
-const sessionExportService = new SessionExportService(databaseService);
-const f123UDPProcessor = new F123UDPProcessor(databaseService, telemetryService);
 const raceResultsEditor = new RaceResultsEditor(databaseService);
-const postSessionProcessor = new PostSessionProcessor(databaseService, telemetryService, io, f123UDPProcessor);
 
 // Initialize database tables
 databaseService.ensureInitialized().then(() => {
@@ -62,16 +56,14 @@ databaseService.ensureInitialized().then(() => {
 });
 
 // Setup routes
-setupRoutes(app, io, { 
-  telemetryService, 
-  databaseService, 
-  f123UDPProcessor,
-  postSessionProcessor,
-  raceResultsEditor 
+setupRoutes(app, io, {
+  telemetryService,
+  databaseService,
+  raceResultsEditor
 });
 
 // Setup Socket.IO handlers
-setupSocketHandlers(io, { telemetryService, sessionExportService });
+setupSocketHandlers(io, { telemetryService });
 
 // Start telemetry service only in development/local mode
 const isProduction = process.env.NODE_ENV === 'production';
@@ -80,12 +72,6 @@ const disableUDP = process.env.DISABLE_UDP === 'true';
 if (!isProduction && !disableUDP) {
   telemetryService.start();
   console.log('📡 UDP Telemetry service started (local mode)');
-  // Initialize F123UDPProcessor (it listens to TelemetryService events, doesn't create its own UDP listener)
-  f123UDPProcessor.initialize().then(() => {
-    console.log('✅ F123UDPProcessor initialized');
-  }).catch((error) => {
-    console.error('❌ Failed to initialize F123UDPProcessor:', error);
-  });
 } else {
   console.log('📡 UDP Telemetry service disabled (production mode)');
 }
@@ -123,7 +109,6 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down gracefully...');
   telemetryService.stop();
-  f123UDPProcessor.stop(); // Just clears state, doesn't stop UDP (handled by TelemetryService)
   server.close(() => {
     console.log('✅ Server closed');
     pool.end().then(() => {

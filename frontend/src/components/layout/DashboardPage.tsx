@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
@@ -34,9 +34,15 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
     content,
   } = hero;
   const [imageLoaded, setImageLoaded] = useState(false);
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    setImageLoaded(false);
+    const img = imageRef.current;
+    if (img?.complete && img.naturalWidth > 0) {
+      setImageLoaded(true);
+    } else {
+      setImageLoaded(false);
+    }
   }, [imageSrc]);
 
   const heroReady = imageLoaded && isReady;
@@ -53,10 +59,16 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
         <div className="absolute inset-0">
           {!heroReady && <div className="absolute inset-0 bg-black" />}
           <img
+            ref={imageRef}
             src={imageSrc}
             alt={title}
             className="h-full w-full object-cover"
+            loading="eager"
             onLoad={() => setImageLoaded(true)}
+            onError={() => {
+              console.warn(`Failed to load hero image at ${imageSrc}`);
+              setImageLoaded(true);
+            }}
           />
           <div className={clsx('absolute inset-0', overlayClassName)} />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/90 via-black/55 to-transparent" />

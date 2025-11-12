@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import clsx from 'clsx';
 import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
 import { getTireCompound } from '../utils/f123DataMapping';
 import { useAdmin } from '../contexts/AdminContext';
+import { DashboardPage } from './layout/DashboardPage';
+import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 
 type DriverPenalty = {
   id: string;
@@ -493,7 +496,18 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return luminance > 0.5 ? '#000000' : '#FFFFFF';
   };
 
-  const getPositionColor = (position: number) => F123DataService.getPositionColor(position);
+  const getPositionBadgeClass = (position?: number | null) => {
+    if (position === 1) {
+      return 'inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-500 2xl:text-sm';
+    }
+    if (position === 2) {
+      return 'inline-flex items-center rounded-full bg-slate-400/15 px-3 py-1 text-xs font-semibold text-slate-400 2xl:text-sm';
+    }
+    if (position === 3) {
+      return 'inline-flex items-center rounded-full bg-orange-400/15 px-3 py-1 text-xs font-semibold text-orange-400 2xl:text-sm';
+    }
+    return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300 2xl:text-sm';
+  };
 
   const handleDriverClick = (driver: F123DriverResult) => {
     onDriverSelect(driver.id, raceId, activeSession);
@@ -579,6 +593,178 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     
     return matchingPendingAdd;
   }, [penaltyMap, pendingPenaltyAdds]);
+
+  const formatRaceTotalTime = (driver: F123DriverResult) => {
+    if ((driver as any)._raceTimeFormatted && driver.raceTime) {
+      return (driver as any).raceTime;
+    }
+
+    const totalTimeMs = (driver as any)._totalRaceTimeMs;
+    if (totalTimeMs && totalTimeMs > 0) {
+      return F123DataService.formatTimeFromMs(totalTimeMs);
+    }
+
+    return '--:--.---';
+  };
+
+  const renderPenaltyCell = (driver: F123DriverResult) => {
+    if (isEditing) {
+      const hasExistingPenalties = driverHasExistingPenalties(driver);
+      const buttonColor = hasExistingPenalties
+        ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-700 dark:hover:text-red-300 border-red-300 dark:border-red-700 hover:border-red-500 dark:hover:border-red-500'
+        : 'text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-500';
+
+      return (
+        <div className="flex items-center justify-center">
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              console.log('🔍 CLICKED ADD BUTTON - Driver object:', {
+                driver,
+                driver_keys: Object.keys(driver as any),
+                has_additional_data: !!(driver as any).additional_data,
+                has_additionalData: !!(driver as any).additionalData,
+                additional_data_sample: (driver as any).additional_data ? JSON.stringify((driver as any).additional_data).substring(0, 200) : 'MISSING',
+                additionalData_sample: (driver as any).additionalData ? JSON.stringify((driver as any).additionalData).substring(0, 200) : 'MISSING'
+              });
+              setSelectedDriver(driver);
+              setPenaltySeconds('5');
+              setPenaltyReason('');
+              setPendingPenaltyAdds([]);
+              setPendingPenaltyRemovals([]);
+              setPenaltyModalOpen(true);
+              const driverSessionResultId = getDriverSessionResultId(driver);
+              if (driverSessionResultId) {
+                await fetchDriverPenalties(driverSessionResultId);
+              } else {
+                await fetchSessionPenalties();
+              }
+            }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${buttonColor}`}
+          >
+            Add
+          </button>
+        </div>
+      );
+    }
+
+    const totalPenalties = (driver as any).totalPenalties;
+    if (totalPenalties != null && totalPenalties > 0) {
+      const penaltyReason = (driver as any).penaltyReason;
+      return (
+        <div
+          className="relative inline-block group"
+          onMouseEnter={(e) => {
+            const tooltip = e.currentTarget.querySelector('.penalty-tooltip') as HTMLElement;
+            if (tooltip) {
+              tooltip.style.opacity = '1';
+              tooltip.style.visibility = 'visible';
+            }
+          }}
+          onMouseLeave={(e) => {
+            const tooltip = e.currentTarget.querySelector('.penalty-tooltip') as HTMLElement;
+            if (tooltip) {
+              tooltip.style.opacity = '0';
+              tooltip.style.visibility = 'hidden';
+            }
+          }}
+        >
+          <span className="text-base font-normal text-red-600 dark:text-red-400 cursor-help underline decoration-dotted">
+            {totalPenalties}s
+          </span>
+          {penaltyReason && (
+            <div className="penalty-tooltip absolute bottom-full left-1/2 z-50 -translate-x-1/2 transform whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-all duration-200 dark:bg-gray-700">
+              {penaltyReason}
+              <div className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 transform border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return <span className="text-base text-gray-500 dark:text-gray-400">-</span>;
+  };
+
+  const renderRaceTiresCell = (driver: F123DriverResult) => {
+    const tiresUsed = (driver as any).raceTiresUsed;
+    if (!tiresUsed || (Array.isArray(tiresUsed) && tiresUsed.length === 0)) {
+      return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
+    }
+
+    if (Array.isArray(tiresUsed)) {
+      const tireStrings = tiresUsed.map((t: any) => {
+        if (typeof t === 'number') {
+          return getTireCompound(t);
+        }
+        const tireStr = String(t).toLowerCase();
+        if (tireStr.includes('soft')) return 'S';
+        if (tireStr.includes('medium')) return 'M';
+        if (tireStr.includes('hard')) return 'H';
+        if (tireStr.includes('intermediate')) return 'I';
+        if (tireStr.includes('wet')) return 'W';
+        return String(t);
+      });
+
+      return (
+        <div className="flex items-center justify-center gap-1">
+          {tireStrings.map((tireStr, idx) => {
+            const icon = F123DataService.getTireCompoundIcon(tireStr);
+            const fullName = F123DataService.getTireCompoundFullName(tireStr);
+            const label = F123DataService.getTireCompoundText(tireStr);
+            return icon ? (
+              <img
+                key={`${tireStr}-${idx}`}
+                src={icon}
+                alt={`${fullName} tire`}
+                className="h-6 w-6"
+              />
+            ) : (
+              <span key={`${tireStr}-${idx}`} className="text-lg font-semibold text-gray-900 dark:text-white">
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      );
+    }
+
+    const icon = F123DataService.getTireCompoundIcon(tiresUsed);
+    const fullName = F123DataService.getTireCompoundFullName(tiresUsed);
+    const label = F123DataService.getTireCompoundText(tiresUsed);
+    return icon ? (
+      <div className="flex items-center justify-center">
+        <img src={icon} alt={`${fullName} tire`} className="h-6 w-6" />
+      </div>
+    ) : (
+      <span className="text-lg text-gray-900 dark:text-white">{label}</span>
+    );
+  };
+
+  const renderQualifyingTireCell = (driver: F123DriverResult) => {
+    const tire = (driver as any).qualifyingTire;
+    if (!tire) {
+      return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
+    }
+
+    const tireValue = typeof tire === 'number' ? getTireCompound(tire) : tire;
+    const icon = F123DataService.getTireCompoundIcon(tireValue);
+    const label = F123DataService.getTireCompoundText(tireValue);
+    const fullName = F123DataService.getTireCompoundFullName(tireValue);
+
+    if (icon) {
+      return (
+        <div className="flex items-center justify-center">
+          <img src={icon} alt={`${fullName} tire`} className="h-6 w-6" />
+        </div>
+      );
+    }
+
+    return (
+      <span className="text-lg font-semibold text-gray-900 dark:text-white">
+        {label}
+      </span>
+    );
+  };
 
   // Helper function to get all penalties for a driver (for modal display)
   // Uses driver_session_result_id (UUID) for direct matching with Map lookup
@@ -783,86 +969,342 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500 dark:text-gray-400">Loading race data...</div>
-      </div>
-    );
-  }
+  const distanceLabel = raceData?.track?.length ? `${raceData.track.length} km` : 'Distance TBD';
+  const lapsLabel = raceData?.laps != null ? `${raceData.laps} laps` : 'Laps TBD';
+  const heroTitle = raceData?.trackName ?? 'Race Overview';
+  const heroSubtitle = 'Race Results';
+  const heroDescription = raceData?.raceDate
+    ? `${new Date(raceData.raceDate).toLocaleDateString()} • ${distanceLabel} • ${lapsLabel}`
+    : `${distanceLabel} • ${lapsLabel}`;
+  const heroBase = {
+    imageSrc: '/hero/94mliza3aat71.jpg',
+    title: heroTitle,
+    subtitle: heroSubtitle,
+    description: heroDescription,
+  };
+  const isReady = !loading && !error && !!raceData;
+  const distanceDisplay = raceData?.track?.length ? `${raceData.track.length} km` : distanceLabel;
+  const lapsDisplay = raceData?.laps != null ? `${raceData.laps} laps` : lapsLabel;
+  const raceMetaParts = [distanceDisplay, lapsDisplay].filter(Boolean);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">{error}</div>
-      </div>
-    );
-  }
+  const viewState = loading
+    ? 'loading'
+    : error
+      ? 'error'
+      : !raceData
+        ? 'empty'
+        : 'ready';
 
-  if (!raceData) {
+  const heroStatus = (() => {
+    switch (viewState) {
+      case 'loading':
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500 dark:text-gray-400">No race data found</div>
+          <div className="rounded-full border border-white/25 px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/70 backdrop-blur">
+            Loading Race Data
       </div>
     );
-  }
+      case 'error':
+    return (
+          <div className="rounded-full border border-red-400/60 px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-red-200 backdrop-blur">
+            Error Loading Race
+      </div>
+    );
+      case 'empty':
+    return (
+          <div className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white/70 backdrop-blur">
+            Awaiting Selection
+      </div>
+    );
+      default:
+        return undefined;
+    }
+  })();
+
+  const isQualifyingSession = activeSession === 'qualifying' || activeSession === 'practice';
+
+  const baseHeaderPadding = 'px-3 py-3 2xl:px-4 2xl:py-3';
+  const baseCellPadding = 'px-3 py-3 2xl:px-4 2xl:py-3';
+
+  const tableColumns: DashboardTableColumn<F123DriverResult>[] = [
+    {
+      key: 'position',
+      label: 'Pos',
+      align: 'center',
+      headerClassName: clsx(baseHeaderPadding, 'w-16'),
+      className: clsx(baseCellPadding, 'w-16'),
+      render: (_: unknown, row) => {
+        const positionValue = isQualifyingSession
+          ? row.qualifyingPosition ?? (row as any).position ?? null
+          : row.racePosition ?? (row as any).position ?? null;
 
   return (
-    <div className="max-w-[2048px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="mb-6 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{raceData.trackName || 'Race'}</h1>
-        {raceData.track?.name && (
-          <p className="text-lg text-gray-600 dark:text-gray-400 mt-1">{raceData.track.name}</p>
-        )}
-      </div>
-
-      {/* Race Info */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 bg-red-600 rounded-lg flex items-center justify-center">
-              <Flag className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{raceData.trackName || 'Race'}</h2>
-              {raceData.track?.name && (
-              <div className="flex items-center space-x-2 mt-1">
-                <MapPin className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                  <span className="text-base text-gray-500 dark:text-gray-400">{raceData.track.name}</span>
+          <div className="flex justify-center">
+            <span className={getPositionBadgeClass(positionValue)}>
+              P{positionValue ?? '—'}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'driver',
+      label: 'Driver',
+      align: 'left' as const,
+      headerClassName: clsx(baseHeaderPadding, 'text-left'),
+      className: clsx(baseCellPadding, 'w-56'),
+      render: (_: unknown, row) => (
+        <div className="flex items-center justify-between">
+          <div className="text-base font-semibold text-slate-900 dark:text-slate-100">{row.name}</div>
+          {activeSession === 'race' && row.positionGain != null && (
+            <div className="ml-4 flex items-center space-x-1">
+              {row.positionGain > 0 ? (
+                <>
+                  <ArrowUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-normal text-green-600 dark:text-green-400">{row.positionGain}</span>
+                </>
+              ) : row.positionGain < 0 ? (
+                <>
+                  <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <span className="text-sm font-normal text-red-600 dark:text-red-400">{Math.abs(row.positionGain)}</span>
+                </>
+              ) : (
+                <>
+                  <Minus className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400">0</span>
+                </>
+              )}
               </div>
               )}
             </div>
-          </div>
-          <div className="text-right">
-            <div className="flex items-center space-x-2 text-base text-gray-500 dark:text-gray-400">
-              <Calendar className="w-5 h-5" />
-              <span>{raceData.raceDate ? new Date(raceData.raceDate).toLocaleDateString() : 'TBD'}</span>
-            </div>
-            <div className="text-base text-gray-500 dark:text-gray-400 mt-1">
-              {raceData.track?.length ? `${raceData.track.length}km` : ''} {raceData.track?.length ? '•' : ''} {raceData.laps || 0} laps
-            </div>
-          </div>
-        </div>
-        
-          <div className="flex items-center space-x-2">
-            <div className={`w-4 h-4 rounded-full ${raceData.status === 'completed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-            <span className="text-base font-medium text-gray-700 dark:text-gray-300 capitalize">{raceData.status}</span>
-        </div>
-      </div>
+      ),
+    },
+    {
+      key: 'team',
+      label: 'Team',
+      align: 'left' as const,
+      headerClassName: clsx(baseHeaderPadding, 'text-left'),
+      className: clsx(baseCellPadding, 'w-40'),
+      render: (_: unknown, row) => {
+        const teamColor = getTeamColorHex(row.team);
+        return (
+          <span
+            className="text-base font-medium"
+            style={{ color: teamColor }}
+          >
+            {row.team}
+          </span>
+        );
+      },
+    },
+  ];
 
+  if (activeSession === 'race') {
+    tableColumns.push(
+      {
+        key: 'grid',
+        label: 'Grid',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-16'),
+        className: clsx(baseCellPadding, 'w-16 text-lg text-gray-900 dark:text-white'),
+        render: (_: unknown, row) => (row.gridPosition != null ? row.gridPosition : '—'),
+      },
+      {
+        key: 'bestLap',
+        label: 'Best Lap',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-28'),
+        className: clsx(baseCellPadding, 'w-28'),
+        render: (_: unknown, row) => (
+          <span
+            className={`text-lg ${
+              row.fastestLap
+                ? 'text-purple-600 dark:text-purple-400 font-semibold'
+                : 'text-gray-900 dark:text-white'
+            }`}
+          >
+            {row.raceBestLapTime ? F123DataService.formatTimeFromMs(row.raceBestLapTime) : '--:--.---'}
+          </span>
+        ),
+      },
+      {
+        key: 'totalTime',
+        label: 'Total Time',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-28'),
+        className: clsx(baseCellPadding, 'w-28 text-lg text-gray-900 dark:text-white'),
+        render: (_: unknown, row) => formatRaceTotalTime(row),
+      },
+      {
+        key: 'penalty',
+        label: 'Penalty',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-20'),
+        className: clsx(baseCellPadding, 'w-20'),
+        render: (_: unknown, row) => renderPenaltyCell(row),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-24'),
+        className: clsx(baseCellPadding, 'w-24'),
+        render: (_: unknown, row) => (
+          <span
+            className={`inline-block rounded-full px-2 py-1 text-sm font-medium ${
+              row.status === 'finished'
+                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                : row.status === 'dnf'
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+            }`}
+          >
+            {row.status}
+          </span>
+        ),
+      },
+      {
+        key: 'tires',
+        label: 'Tires',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-24'),
+        className: clsx(baseCellPadding, 'w-24'),
+        render: (_: unknown, row) => renderRaceTiresCell(row),
+      },
+      {
+        key: 'points',
+        label: 'Points',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-16'),
+        className: clsx(baseCellPadding, 'w-16 text-lg text-gray-900 dark:text-white'),
+        render: (_: unknown, row) => (row.points != null ? row.points : '—'),
+      }
+    );
+  } else {
+    tableColumns.push(
+      {
+        key: 'time',
+        label: 'Time',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-28'),
+        className: clsx(baseCellPadding, 'w-28 text-lg text-gray-900 dark:text-white'),
+        render: (_: unknown, row) =>
+          row.qualifyingTime ? F123DataService.formatTimeFromMs(row.qualifyingTime) : '--:--.---',
+      },
+      {
+        key: 'gap',
+        label: 'Gap',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-24'),
+        className: clsx(baseCellPadding, 'w-24 text-lg text-gray-900 dark:text-white'),
+        render: (_: unknown, row) => {
+          if (row.qualifyingGap && row.qualifyingGap > 0) {
+            return '+' + F123DataService.formatGapTimeFromMs(row.qualifyingGap);
+          }
+          if (row.qualifyingPosition === 1) {
+            return activeSession === 'qualifying' ? 'Pole' : 'Leader';
+          }
+          return '--.---';
+        },
+      },
+      {
+        key: 's1',
+        label: 'S1',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-20'),
+        className: clsx(baseCellPadding, 'w-20 text-lg font-medium'),
+        render: (_: unknown, row) => {
+          const value = row.qualifyingSector1Time;
+          const isFastest = value != null && value === fastestS1 && fastestS1 !== Infinity;
+          return (
+            <span className={isFastest ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-white'}>
+              {value ? F123DataService.formatSectorTimeFromMs(value) : '--.---'}
+            </span>
+          );
+        },
+      },
+      {
+        key: 's2',
+        label: 'S2',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-20'),
+        className: clsx(baseCellPadding, 'w-20 text-lg font-medium'),
+        render: (_: unknown, row) => {
+          const value = row.qualifyingSector2Time;
+          const isFastest = value != null && value === fastestS2 && fastestS2 !== Infinity;
+          return (
+            <span className={isFastest ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-white'}>
+              {value ? F123DataService.formatSectorTimeFromMs(value) : '--.---'}
+            </span>
+          );
+        },
+      },
+      {
+        key: 's3',
+        label: 'S3',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-20'),
+        className: clsx(baseCellPadding, 'w-20 text-lg font-medium'),
+        render: (_: unknown, row) => {
+          const value = row.qualifyingSector3Time;
+          const isFastest = value != null && value === fastestS3 && fastestS3 !== Infinity;
+          return (
+            <span className={isFastest ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-white'}>
+              {value ? F123DataService.formatSectorTimeFromMs(value) : '--.---'}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'tire',
+        label: 'Tire',
+        align: 'center',
+        headerClassName: clsx(baseHeaderPadding, 'w-16'),
+        className: clsx(baseCellPadding, 'w-16'),
+        render: (_: unknown, row) => renderQualifyingTireCell(row),
+      }
+    );
+  }
+
+  const tableEmptyMessage =
+    activeSession === 'qualifying'
+      ? 'No qualifying results available.'
+      : activeSession === 'practice'
+        ? 'No practice results available.'
+        : 'No race results available.';
+
+  return (
+    <DashboardPage
+      hero={{ ...heroBase, content: heroStatus }}
+      isReady={viewState !== 'loading'}
+      contentClassName="space-y-6"
+    >
+      {viewState === 'error' && (
+        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-10 text-center text-sm text-red-200 backdrop-blur dark:border-red-400/40 dark:bg-red-500/15">
+          <p className="text-base font-semibold uppercase tracking-[0.3em]">Unable to load</p>
+          <p className="mt-2 text-sm text-red-200/80">{error}</p>
+          </div>
+      )}
+
+      {viewState === 'empty' && (
+        <div className="rounded-3xl border border-dashed border-white/20 bg-white/10 p-12 text-center text-sm text-white/70 backdrop-blur dark:border-white/15 dark:bg-slate-900/50">
+          <p className="text-base font-semibold uppercase tracking-[0.3em] text-white/80">No race selected</p>
+          <p className="mt-2 text-sm text-white/65">Choose a race to review classification, stints, and telemetry.</p>
+        </div>
+      )}
+
+      {viewState === 'ready' && (
+        <div className="space-y-6">
       {/* Session Toggle */}
       {(sessionTypes.hasRace || sessionTypes.hasQualifying || sessionTypes.hasPractice) && (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-        <div className="flex space-x-2">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex h-10 items-center rounded-xl bg-slate-100 p-1 text-sm font-medium dark:bg-slate-900">
               {sessionTypes.hasRace && (
           <button
             onClick={() => setActiveSession('race')}
-            className={`px-4 py-2 rounded-lg text-base font-semibold transition-colors ${
+            className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'race'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
             Race
@@ -871,10 +1313,10 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
               {sessionTypes.hasQualifying && (
           <button
             onClick={() => setActiveSession('qualifying')}
-            className={`px-4 py-2 rounded-lg text-base font-semibold transition-colors ${
+            className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'qualifying'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
             Qualifying
@@ -883,10 +1325,10 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
               {sessionTypes.hasPractice && (
           <button
             onClick={() => setActiveSession('practice')}
-            className={`px-4 py-2 rounded-lg text-base font-semibold transition-colors ${
+            className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'practice'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100'
             }`}
           >
             Practice
@@ -896,16 +1338,16 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
             {isAuthenticated && (
               <>
                 {isEditing ? (
-                  <div className="flex space-x-2">
+                <div className="flex items-center gap-2">
                     <button
                       onClick={handleCancelEdit}
-                      className="px-4 py-2 rounded-lg text-base font-semibold transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSaveAllChanges}
-                      className="px-4 py-2 rounded-lg text-base font-semibold transition-colors bg-green-600 text-white hover:bg-green-700"
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
                     >
                       Save
                     </button>
@@ -913,7 +1355,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
                 ) : (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 rounded-lg text-base font-semibold transition-colors flex items-center space-x-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     <Edit className="w-4 h-4" />
                     <span>Edit</span>
@@ -921,372 +1363,19 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
                 )}
               </>
             )}
-          </div>
         </div>
       )}
 
       {/* Results Table */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Pos</th>
-                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Driver</th>
-                <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Team</th>
-                {activeSession === 'race' && (
-                  <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Grid</th>
-                )}
-                {activeSession === 'qualifying' || activeSession === 'practice' ? (
-                  <>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Time</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Gap</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S1</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S2</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">S3</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Tire</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Best Lap</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Total Time</th>
-                    <th className="px-2 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">Penalty</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Status</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">Tires</th>
-                    <th className="px-3 py-3 text-center text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Points</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {drivers.length === 0 ? (
-                <tr>
-                  <td colSpan={activeSession === 'qualifying' || activeSession === 'practice' ? 10 : 9} className="px-4 py-8 text-center text-base text-gray-500 dark:text-gray-400">
-                    No {activeSession === 'qualifying' ? 'qualifying' : activeSession === 'practice' ? 'practice' : 'race'} results available
-                  </td>
-                </tr>
-              ) : (
-                drivers.map((driver) => (
-                <tr 
-                  key={driver.id} 
-                    className={`${!isEditing ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer' : ''} transition-colors`}
-                    onClick={() => !isEditing && handleDriverClick(driver)}
-                >
-                  <td className="px-3 py-4 whitespace-nowrap text-center w-16">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-normal mx-auto ${getPositionColor((activeSession === 'qualifying' || activeSession === 'practice' ? driver.qualifyingPosition : driver.racePosition) || 1)}`}>
-                      {activeSession === 'qualifying' || activeSession === 'practice' ? (driver.qualifyingPosition || 0) : (driver.racePosition || 0)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap w-56">
-                    <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm font-normal text-gray-700 dark:text-gray-300 mr-3">
-                        {driver.number}
-                      </div>
-                      <div>
-                        <div className="text-base font-medium text-gray-900 dark:text-white">{driver.name}</div>
-                      </div>
-                      </div>
-                      {/* Position gain indicator - only for race */}
-                      {activeSession === 'race' && driver.positionGain != null && (
-                        <div className="flex items-center space-x-1 ml-4">
-                          {driver.positionGain > 0 ? (
-                            <>
-                              <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                              <span className="text-sm font-normal text-green-600 dark:text-green-400">{driver.positionGain}</span>
-                            </>
-                          ) : driver.positionGain < 0 ? (
-                            <>
-                              <ArrowDown className="w-4 h-4 text-red-600 dark:text-red-400" />
-                              <span className="text-sm font-normal text-red-600 dark:text-red-400">{Math.abs(driver.positionGain)}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Minus className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                              <span className="text-sm font-normal text-gray-500 dark:text-gray-400">0</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap w-40">
-                    {(() => {
-                      const teamColor = getTeamColorHex(driver.team);
-                      const textColor = getContrastTextColor(teamColor);
-                      return (
-                        <span 
-                          className="text-base font-semibold px-2 py-1 rounded inline-block"
-                          style={{ 
-                            backgroundColor: teamColor,
-                            color: textColor
-                          }}
-                        >
-                          {driver.team}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  {activeSession === 'race' && (
-                    <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-16">
-                      {driver.gridPosition != null ? driver.gridPosition : '-'}
-                    </td>
-                  )}
-                  {activeSession === 'qualifying' || activeSession === 'practice' ? (
-                    <>
-                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-28">
-                        {driver.qualifyingTime ? (
-                          F123DataService.formatTimeFromMs(driver.qualifyingTime)
-                        ) : '--:--.---'}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-24">
-                        {driver.qualifyingGap && driver.qualifyingGap > 0 ? (
-                          '+' + F123DataService.formatGapTimeFromMs(driver.qualifyingGap)
-                        ) : driver.qualifyingPosition === 1 ? (
-                          activeSession === 'qualifying' ? 'Pole' : 'Leader'
-                        ) : (
-                          '--.---'
-                        )}
-                      </td>
-                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
-                        driver.qualifyingSector1Time === fastestS1
-                          ? 'text-purple-600 dark:text-purple-400'
-                          : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector1Time ? (
-                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector1Time)
-                        ) : '--.---'}
-                      </td>
-                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
-                        driver.qualifyingSector2Time === fastestS2
-                          ? 'text-purple-600 dark:text-purple-400'
-                          : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector2Time ? (
-                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector2Time)
-                        ) : '--.---'}
-                      </td>
-                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg font-medium w-20 ${
-                        driver.qualifyingSector3Time === fastestS3
-                          ? 'text-purple-600 dark:text-purple-400'
-                          : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.qualifyingSector3Time ? (
-                          F123DataService.formatSectorTimeFromMs(driver.qualifyingSector3Time)
-                        ) : '--.---'}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-16">
-                        {(() => {
-                          const tire = (driver as any).qualifyingTire;
-                          if (!tire) return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
-
-                          const tireValue = typeof tire === 'number' ? getTireCompound(tire) : tire;
-                          const icon = F123DataService.getTireCompoundIcon(tireValue);
-                          const label = F123DataService.getTireCompoundText(tireValue);
-                          const fullName = F123DataService.getTireCompoundFullName(tireValue);
-
-                          if (icon) {
-                          return (
-                              <div className="flex items-center justify-center">
-                                <img
-                                  src={icon}
-                                  alt={`${fullName} tire`}
-                                  className="h-6 w-6"
-                                />
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <span className="text-lg font-semibold text-gray-900 dark:text-white">
-                              {label}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className={`px-3 py-4 whitespace-nowrap text-center text-lg w-28 ${
-                        driver.fastestLap
-                          ? 'text-purple-600 dark:text-purple-400 font-semibold'
-                          : 'text-gray-900 dark:text-white'
-                      }`}>
-                        {driver.raceBestLapTime ? (
-                          F123DataService.formatTimeFromMs(driver.raceBestLapTime)
-                        ) : '--:--.---'}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-28">
-                        {(() => {
-                          // If already formatted (race session with gap calculation), use it directly
-                          if ((driver as any)._raceTimeFormatted && driver.raceTime) {
-                            return driver.raceTime;
-                          }
-                          // Otherwise, format the total race time
-                          const totalTimeMs = (driver as any)._totalRaceTimeMs;
-                          if (totalTimeMs && totalTimeMs > 0) {
-                            return F123DataService.formatTimeFromMs(totalTimeMs);
-                          }
-                          return '--:--.---';
-                        })()}
-                      </td>
-                      <td className="px-2 py-4 whitespace-nowrap text-center w-20">
-                        {isEditing ? (
-                          <div className="flex items-center justify-center">
-                            {/* Only show Add button - penalties are managed in modal */}
-                            {(() => {
-                              const hasExistingPenalties = driverHasExistingPenalties(driver);
-                              const buttonColor = hasExistingPenalties 
-                                ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-700 dark:hover:text-red-300 border-red-300 dark:border-red-700 hover:border-red-500 dark:hover:border-red-500'
-                                : 'text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-500';
-                              
-                              return (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    console.log('🔍 CLICKED ADD BUTTON - Driver object:', {
-                                      driver,
-                                      driver_keys: Object.keys(driver as any),
-                                      has_additional_data: !!(driver as any).additional_data,
-                                      has_additionalData: !!(driver as any).additionalData,
-                                      additional_data_sample: (driver as any).additional_data ? JSON.stringify((driver as any).additional_data).substring(0, 200) : 'MISSING',
-                                      additionalData_sample: (driver as any).additionalData ? JSON.stringify((driver as any).additionalData).substring(0, 200) : 'MISSING'
-                                    });
-                                    setSelectedDriver(driver);
-                                    setPenaltySeconds('5');
-                                    setPenaltyReason('');
-                                    setPendingPenaltyAdds([]);
-                                    setPendingPenaltyRemovals([]);
-                                    setPenaltyModalOpen(true);
-                                    // Refresh penalty history when opening modal
-                                    const driverSessionResultId = getDriverSessionResultId(driver);
-                                    if (driverSessionResultId) {
-                                      await fetchDriverPenalties(driverSessionResultId);
-                                    } else {
-                                      await fetchSessionPenalties();
-                                    }
-                                  }}
-                                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${buttonColor}`}
-                                >
-                                  Add
-                                </button>
-                              );
-                            })()}
-                          </div>
-                        ) : (
-                          (driver as any).totalPenalties != null && (driver as any).totalPenalties > 0 ? (
-                            <div 
-                              className="relative inline-block group"
-                              onMouseEnter={(e) => {
-                                // Show tooltip on hover
-                                const tooltip = e.currentTarget.querySelector('.penalty-tooltip') as HTMLElement;
-                                if (tooltip) {
-                                  tooltip.style.opacity = '1';
-                                  tooltip.style.visibility = 'visible';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                // Hide tooltip on leave
-                                const tooltip = e.currentTarget.querySelector('.penalty-tooltip') as HTMLElement;
-                                if (tooltip) {
-                                  tooltip.style.opacity = '0';
-                                  tooltip.style.visibility = 'hidden';
-                                }
-                              }}
-                            >
-                              <span className="text-base font-normal text-red-600 dark:text-red-400 cursor-help underline decoration-dotted">
-                                {(driver as any).totalPenalties}s
-                              </span>
-                              {/* Tooltip */}
-                              {(driver as any).penaltyReason && (
-                                <div className="penalty-tooltip absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 invisible transition-all duration-200 pointer-events-none whitespace-nowrap z-50">
-                                  {(driver as any).penaltyReason}
-                                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+        <DashboardTable
+          columns={tableColumns}
+          rows={drivers}
+          rowKey={(row) => getDriverSessionResultId(row) ?? row.id ?? row.name}
+          onRowClick={!isEditing ? (row) => handleDriverClick(row) : undefined}
+          emptyMessage={tableEmptyMessage}
+        />
                                 </div>
                               )}
-                            </div>
-                          ) : (
-                            <span className="text-base text-gray-500 dark:text-gray-400">-</span>
-                          )
-                        )}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-24">
-                        <span className={`px-2 py-1 rounded-full text-sm font-medium inline-block ${
-                          driver.status === 'finished' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                          driver.status === 'dnf' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                        }`}>
-                          {driver.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center w-24">
-                        {(() => {
-                          const tiresUsed = (driver as any).raceTiresUsed;
-                          if (!tiresUsed || (Array.isArray(tiresUsed) && tiresUsed.length === 0)) {
-                            return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
-                          }
-                          // If it's an array of tire compounds, format them (these should be visual compounds)
-                          if (Array.isArray(tiresUsed)) {
-                            const tireStrings = tiresUsed.map(t => {
-                              if (typeof t === 'number') {
-                                return getTireCompound(t);
-                              }
-                              // Handle visual compound strings like "Soft", "Medium", "Hard", etc.
-                              const tireStr = String(t).toLowerCase();
-                              if (tireStr.includes('soft')) return 'S';
-                              if (tireStr.includes('medium')) return 'M';
-                              if (tireStr.includes('hard')) return 'H';
-                              if (tireStr.includes('intermediate')) return 'I';
-                              if (tireStr.includes('wet')) return 'W';
-                              return String(t);
-                            });
-                            return (
-                              <div className="flex items-center justify-center gap-1">
-                                {tireStrings.map((tireStr, idx) => {
-                                  const icon = F123DataService.getTireCompoundIcon(tireStr);
-                                  const fullName = F123DataService.getTireCompoundFullName(tireStr);
-                                  const label = F123DataService.getTireCompoundText(tireStr);
-                                  return icon ? (
-                                    <img
-                                      key={`${tireStr}-${idx}`}
-                                      src={icon}
-                                      alt={`${fullName} tire`}
-                                      className="h-6 w-6"
-                                    />
-                                  ) : (
-                                    <span key={`${tireStr}-${idx}`} className="text-lg font-semibold text-gray-900 dark:text-white">
-                                      {label}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }
-                          // If it's a string, just display it
-                          const icon = F123DataService.getTireCompoundIcon(tiresUsed);
-                          const fullName = F123DataService.getTireCompoundFullName(tiresUsed);
-                          const label = F123DataService.getTireCompoundText(tiresUsed);
-                          return icon ? (
-                            <div className="flex items-center justify-center">
-                              <img src={icon} alt={`${fullName} tire`} className="h-6 w-6" />
-                            </div>
-                          ) : (
-                            <span className="text-lg text-gray-900 dark:text-white">{label}</span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-center text-lg text-gray-900 dark:text-white w-16">
-                        {driver.points}
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* Penalty Modal */}
       {penaltyModalOpen && selectedDriver && (
@@ -1478,6 +1567,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
           </div>
         </div>
       )}
-    </div>
+    </DashboardPage>
   );
 };

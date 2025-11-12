@@ -1,12 +1,10 @@
 import { Server } from 'socket.io';
-import { TelemetryService, F123TelemetryData } from '../services/TelemetryService';
-import { SessionExportService } from '../services/SessionExportService';
+import { TelemetryService } from '../services/TelemetryService';
 
 export function setupSocketHandlers(
   io: Server,
   services: {
     telemetryService: TelemetryService;
-    sessionExportService: SessionExportService;
   }
 ) {
   io.on('connection', (socket) => {
@@ -116,35 +114,6 @@ export function setupSocketHandlers(
 
   services.telemetryService.on('event:lightsOut', (data) => {
     io.emit('event:lightsOut', data);
-  });
-
-  // Set up session completion handling
-  services.telemetryService.on('sessionCompleted', async (sessionData) => {
-    try {
-      console.log('Session completed, exporting data...');
-      
-      // Export session data
-      await services.sessionExportService.exportSessionData(sessionData);
-      
-      // Notify all clients
-      io.emit('sessionCompleted', {
-        sessionType: sessionData.sessionType,
-        sessionTypeName: sessionData.sessionTypeName,
-        trackName: sessionData.trackName || 'Unknown Track',
-        drivers: sessionData.drivers.length,
-        message: `${sessionData.sessionTypeName} session completed and data exported`
-      });
-      
-      console.log('Session data exported and clients notified');
-    } catch (error) {
-      console.error('Error handling session completion:', error);
-      
-      // Notify clients of error
-      io.emit('sessionError', {
-        message: 'Failed to export session data',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
   });
 
   // Set up session change forwarding to clients

@@ -68,9 +68,9 @@ export function DashboardTable<TRow>({
                     'px-6 py-3 2xl:px-8 2xl:py-4',
                     column.align === 'right'
                       ? 'text-right'
-                      : column.align === 'center'
-                        ? 'text-center'
-                        : 'text-left',
+                      : column.align === 'left'
+                        ? 'text-left'
+                        : 'text-center',
                     column.headerClassName
                   )}
                 >
@@ -110,9 +110,9 @@ export function DashboardTable<TRow>({
                             'px-6 py-4 2xl:px-8 2xl:py-5',
                             column.align === 'right'
                               ? 'text-right'
-                              : column.align === 'center'
-                                ? 'text-center'
-                                : 'text-left',
+                              : column.align === 'left'
+                                ? 'text-left'
+                                : 'text-center',
                             column.className
                           )}
                         >

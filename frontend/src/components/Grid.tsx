@@ -71,11 +71,15 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       {
         key: 'name',
         label: 'Driver',
+        align: 'left' as const,
+        headerClassName: 'text-left',
         className: 'font-medium text-slate-900 dark:text-slate-100',
       },
       {
         key: 'team',
         label: 'Team',
+        align: 'left' as const,
+        headerClassName: 'text-left',
         render: (_: string | undefined, row: DriverSeasonSummary) => (
           <span
             className="font-medium"
@@ -88,7 +92,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       {
         key: 'points',
         label: 'Points',
-        align: 'right' as const,
         render: (_: number, row: DriverSeasonSummary) => (
           <span className="font-semibold text-slate-900 dark:text-slate-100">{formatNumber(row.points)} pts</span>
         ),
@@ -96,19 +99,16 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       {
         key: 'wins',
         label: 'Wins',
-        align: 'right' as const,
         className: 'text-slate-500 dark:text-slate-400',
       },
       {
         key: 'podiums',
         label: 'Podiums',
-        align: 'right' as const,
         className: 'text-slate-500 dark:text-slate-400',
       },
       {
         key: 'averageFinish',
         label: 'Avg Finish',
-        align: 'right' as const,
         render: (_: number | undefined, row: DriverSeasonSummary) =>
           row.averageFinish ? `P${row.averageFinish.toFixed(1)}` : '—',
         className: 'text-slate-500 dark:text-slate-400',
@@ -116,7 +116,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       {
         key: 'consistency',
         label: 'Consistency',
-        align: 'right' as const,
         render: (_: number, row: DriverSeasonSummary) => `${row.consistency.toFixed(1)}%`,
         className: 'text-slate-500 dark:text-slate-400',
       },
