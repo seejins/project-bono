@@ -110,20 +110,20 @@ export const useDriverRaceData = (driverId: string, raceId: string): UseDriverRa
 
         const hasDriverData = sessionsData.some((session) => session.driver);
         if (!hasDriverData) {
-          // Check if jsonDriverId is available for cross-session matching
-          const hasJsonDriverId = canonicalIdentifiers.jsonDriverId != null;
+          // Check if driverName is available for cross-session matching
+          const hasDriverName = canonicalIdentifiers.driverName != null;
           const sessionNames = sessionsData.map(s => s.sessionName || s.sessionTypeName).join(', ');
           
-          if (!hasJsonDriverId) {
+          if (!hasDriverName) {
             throw new Error(
-              `Driver with id ${driverId} not found. Missing json_driver_id for cross-session matching. ` +
+              `Driver with id ${driverId} not found. Missing json_driver_name for cross-session matching. ` +
               `Available sessions: ${sessionNames}`
             );
           } else {
             throw new Error(
-              `Driver with id ${driverId} (json_driver_id: ${canonicalIdentifiers.jsonDriverId}) not found in any session results. ` +
+              `Driver with id ${driverId} (json_driver_name: ${canonicalIdentifiers.driverName}) not found in any session results. ` +
               `Available sessions: ${sessionNames}. ` +
-              `The driver may not exist in this race or json_driver_id may not match.`
+              `The driver may not exist in this race or json_driver_name may not match.`
             );
           }
         }
@@ -401,15 +401,22 @@ const deriveCanonicalDriverIdentifiers = (
     const extractedSessionResultId = extractSessionResultId(result);
     const mappedUserId = normalizeIdentifier(result?.mapped_user_id ?? result?.mappedUserId ?? result?.user_id ?? result?.userId);
     
+    // Extract driver name from multiple sources, prioritizing json_driver_name
+    const driverName = normalizeIdentifier(
+      result?.json_driver_name ?? 
+      result?.jsonDriverName ?? 
+      result?.driver_name ?? 
+      result?.mapping_driver_name ?? 
+      result?.name,
+      true // lowercase for consistent matching
+    );
+    
     return {
       driverId: driverIdStr,
       sessionResultId: extractedSessionResultId ?? driverIdStr,
       mappedUserId: mappedUserId,
-      jsonDriverId: normalizeIdentifier(result?.json_driver_id ?? result?.jsonDriverId),
-      driverName: normalizeIdentifier(
-        result?.json_driver_name ?? result?.driver_name ?? result?.mapping_driver_name ?? result?.name,
-        true
-      ),
+      jsonDriverId: normalizeIdentifier(result?.json_driver_id ?? result?.jsonDriverId), // Keep for backwards compatibility but not used
+      driverName: driverName,
       carNumber: normalizeIdentifier(result?.json_car_number ?? result?.driver_number ?? result?.number),
     };
   }
@@ -431,9 +438,6 @@ const doesResultMatchDriver = (result: any, identifiers: CanonicalDriverIdentifi
     return false;
   }
 
-  // ONLY match by driver_session_result_id OR json_driver_id - no fallbacks
-  // If we can't find the driver by these identifiers, throw an error instead of guessing
-
   // 1. Match by driver_session_result_id (exact match for the clicked session)
   const resultSessionId = extractSessionResultId(result);
   if (identifiers.sessionResultId && resultSessionId) {
@@ -442,11 +446,17 @@ const doesResultMatchDriver = (result: any, identifiers: CanonicalDriverIdentifi
     }
   }
 
-  // 2. For cross-session matching, use json_driver_id (unique per game driver)
+  // 2. For cross-session matching, use json_driver_name (unique per game driver)
   // This finds the same game driver (e.g., Verstappen) in other sessions
-  if (identifiers.jsonDriverId) {
-    const resultJsonDriverId = normalizeIdentifier(result?.json_driver_id ?? result?.jsonDriverId);
-    if (resultJsonDriverId && resultJsonDriverId === identifiers.jsonDriverId) {
+  if (identifiers.driverName) {
+    const resultDriverName = normalizeIdentifier(
+      result?.json_driver_name ?? 
+      result?.jsonDriverName ?? 
+      result?.driver_name ?? 
+      result?.name,
+      true // lowercase for case-insensitive comparison
+    );
+    if (resultDriverName && resultDriverName === identifiers.driverName) {
       return true; // Same game driver in different session
     }
   }

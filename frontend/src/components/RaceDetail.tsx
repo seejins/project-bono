@@ -1543,7 +1543,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     ? `${new Date(raceData.raceDate).toLocaleDateString()} • ${distanceLabel} • ${lapsLabel}`
     : `${distanceLabel} • ${lapsLabel}`;
   const heroBase = {
-    imageSrc: '/hero/94mliza3aat71.jpg',
+    imageSrc: '/raw/images/SI202510260512-Aangepast.jpg',
     title: heroTitle,
     subtitle: heroSubtitle,
     description: heroDescription,

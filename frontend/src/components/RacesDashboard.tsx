@@ -417,7 +417,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
   return (
     <DashboardPage
       hero={{
-        imageSrc: '/hero/94mliza3aat71.jpg',
+        imageSrc: '/raw/images/M12_5309-Aangepast.jpg',
         title: 'Season Schedule',
         subtitle: events.length ? `${events.length} Events` : 'Season Calendar',
         description: 'Track every race weekend, session type, and status update across the entire campaign.',

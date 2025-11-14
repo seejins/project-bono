@@ -74,6 +74,31 @@ const PODIUM_TEXT_COLOR_MAP: Record<number, string> = {
 
 export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
   ({ onExplore }, ref) => {
+    // Video playlist - randomly selects one on each page refresh
+    const HERO_VIDEOS = [
+      {
+        src: '/raw/videos/aus-edit.mp4',
+        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
+      },
+      {
+        src: '/raw/videos/bahrainstar.mp4',
+        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
+      },
+      {
+        src: '/raw/videos/f1-edit.mp4',
+        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
+      },
+      {
+        src: '/raw/videos/lewfinal.mp4',
+        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
+      },
+    ];
+
+    // Pick a random video on mount (only runs once per page load)
+    const getRandomVideo = () => {
+      return HERO_VIDEOS[Math.floor(Math.random() * HERO_VIDEOS.length)];
+    };
+
     const { currentSeason } = useSeason();
     const [raceLabel, setRaceLabel] = useState('Season Leaders');
     const [seasonTag, setSeasonTag] = useState<string | null>(null);
@@ -92,6 +117,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     const [buttonVisible, setButtonVisible] = useState(false);
     const [videoRevealed, setVideoRevealed] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedVideo] = useState(() => getRandomVideo()); // Random video selected once on mount
 
     const HERO_DELAY_MS = 350;
     const PODIUM_ANIMATION_DURATION_MS = 1000;
@@ -452,8 +478,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
       >
         <video
           className="absolute inset-0 h-full w-full object-cover"
-          src="/hero/YTDown.com_YouTube_Lewis-Hamilton-s-First-Lap-As-A-Ferrari_Media_8FNO2ZupdZI_001_1080p.mp4"
-          poster="/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg"
+          src={selectedVideo.src}
+          poster={selectedVideo.poster}
           autoPlay
           muted
           loop
@@ -466,6 +492,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           )}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent" />
 
         <div className="relative z-10 flex min-h-[100dvh] w-full justify-center">
           <div className="flex w-full max-w-[2560px] flex-col px-6 py-10 md:px-12 md:py-12 lg:px-20 lg:py-16">

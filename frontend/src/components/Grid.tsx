@@ -151,7 +151,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
   return (
     <DashboardPage
       hero={{
-        imageSrc: '/hero/94mliza3aat71.jpg',
+        imageSrc: '/raw/images/wp10068761-f1-rain-wallpapers.jpg',
         title: 'Driver Grid',
         subtitle: currentSeason?.name ?? 'F1 25',
         description: 'Analyze the full driver lineup, compare stats, and explore season performance at a glance.',

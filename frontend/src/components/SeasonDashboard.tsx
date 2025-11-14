@@ -232,7 +232,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   return (
     <DashboardPage
       hero={{
-        imageSrc: '/hero/94mliza3aat71.jpg',
+        imageSrc: '/raw/images/94mliza3aat71.jpg',
         title: 'Season Dashboard',
         subtitle: currentSeason?.name ?? 'F1 25',
         description:
