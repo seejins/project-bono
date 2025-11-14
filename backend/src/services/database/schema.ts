@@ -17,6 +17,8 @@ export const CREATE_TABLES_SQL = `
     name VARCHAR(100) NOT NULL,
     country VARCHAR(100) NOT NULL,
     length_km DECIMAL(5,3) NOT NULL,
+    event_name VARCHAR(120),
+    short_event_name VARCHAR(60),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -43,6 +45,7 @@ export const CREATE_TABLES_SQL = `
     track_id UUID REFERENCES tracks(id),
     track_name VARCHAR(100) NOT NULL,
     race_date DATE, -- Changed to allow NULL
+    order_index INTEGER,
     status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled')),
     session_type INTEGER,
     session_types TEXT,
@@ -51,6 +54,7 @@ export const CREATE_TABLES_SQL = `
     weather_track_temp INTEGER,
     weather_rain_percentage INTEGER,
     session_config JSONB, -- New column for dynamic session rendering
+    primary_session_result_id UUID REFERENCES session_results(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );

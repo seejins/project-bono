@@ -1000,7 +1000,13 @@ export class RaceJSONImportService {
       // Mark event as completed if this was a race session
       if (sessionType === 10) {
         await this.dbService.updateEventInSeason(targetRaceId, {
-          status: 'completed'
+          status: 'completed',
+          primarySessionResultId: sessionResultId,
+          race_date: sessionDate
+        });
+      } else if (sessionType && sessionType > 0) {
+        await this.dbService.updateEventInSeason(targetRaceId, {
+          primarySessionResultId: sessionResultId
         });
       }
       

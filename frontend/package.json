@@ -13,13 +13,12 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@types/react-beautiful-dnd": "^13.1.8",
+    "@hello-pangea/dnd": "^16.5.0",
     "clsx": "^2.0.0",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.294.0",
     "project-bono": "file:..",
     "react": "^18.2.0",
-    "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.9.4",
     "recharts": "^2.8.0",
@@ -27,6 +26,7 @@
     "tailwind-merge": "^2.0.0"
   },
   "devDependencies": {
+    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",

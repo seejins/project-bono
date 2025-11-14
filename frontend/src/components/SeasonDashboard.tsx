@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Trophy, Calendar, Award, Star, Flag } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
@@ -47,6 +48,7 @@ const formatEventMeta = (event: SeasonEventSummary | null) => {
 export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, onDriverSelect, onScheduleView }) => {
   const { currentSeason } = useSeason();
   const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
+  const navigate = useNavigate();
 
   const driverSummaries: DriverSeasonSummary[] = useMemo(() => {
     if (!analysis) {
@@ -63,10 +65,8 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const highlights = analysis?.summary.highlights;
   const nextEvent = analysis?.nextEvent ?? null;
 
-  const handleHighlightClick = (highlight: SeasonAnalysisHighlight | null | undefined) => {
-    if (highlight?.id && onDriverSelect) {
-      onDriverSelect(highlight.id);
-    }
+  const handleNavigateToGrid = () => {
+    navigate('/grid');
   };
 
   const handleNextEventClick = () => {
@@ -129,7 +129,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       meta: formatHighlightMeta(highlights?.mostWins, 'wins'),
       icon: <Award className="w-5 h-5" />,
       accentClass: 'text-purple-400 dark:text-purple-300',
-      onClick: () => handleHighlightClick(highlights?.mostWins),
+      onClick: handleNavigateToGrid,
     },
     {
       id: 'most-poles',
@@ -138,7 +138,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       meta: formatHighlightMeta(highlights?.mostPoles, 'poles'),
       icon: <Star className="w-5 h-5" />,
       accentClass: 'text-amber-400 dark:text-amber-300',
-      onClick: () => handleHighlightClick(highlights?.mostPoles),
+      onClick: handleNavigateToGrid,
     },
     {
       id: 'most-podiums',
@@ -147,12 +147,16 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       meta: formatHighlightMeta(highlights?.mostPodiums, 'podiums'),
       icon: <Flag className="w-5 h-5" />,
       accentClass: 'text-emerald-400 dark:text-emerald-300',
-      onClick: () => handleHighlightClick(highlights?.mostPodiums),
+      onClick: handleNavigateToGrid,
     },
     {
       id: 'next-event',
       title: 'Next Event',
-      value: nextEvent?.trackName || 'To be announced',
+      value:
+        nextEvent?.shortEventName ||
+        nextEvent?.eventName ||
+        nextEvent?.trackName ||
+        'To be announced',
       meta: formatEventMeta(nextEvent),
       icon: <Calendar className="w-5 h-5" />,
       accentClass: 'text-sky-400 dark:text-sky-300',
@@ -279,6 +283,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
               <PreviousRaceResultsComponent 
                 seasonId={currentSeason?.id || ''} 
                 onRaceSelect={onRaceSelect}
+                onDriverSelect={onDriverSelect}
               />
             </div>
           </div>

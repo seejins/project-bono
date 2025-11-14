@@ -289,7 +289,7 @@ export class TelemetryService extends EventEmitter {
   constructor() {
     super();
     this.f123 = new F123UDP({
-      port: process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT) : 20777,
+      port: process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT, 10) : 20999,
       address: process.env.F1_UDP_ADDR || '127.0.0.1'
     });
     this.setupF123Handlers();

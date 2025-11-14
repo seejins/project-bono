@@ -68,10 +68,20 @@ setupSocketHandlers(io, { telemetryService });
 // Start telemetry service only in development/local mode
 const isProduction = process.env.NODE_ENV === 'production';
 const disableUDP = process.env.DISABLE_UDP === 'true';
+const udpPort = process.env.F1_UDP_PORT ? parseInt(process.env.F1_UDP_PORT, 10) : 20999;
+const udpAddress = process.env.F1_UDP_ADDR || '127.0.0.1';
 
 if (!isProduction && !disableUDP) {
-  telemetryService.start();
-  console.log('📡 UDP Telemetry service started (local mode)');
+  try {
+    telemetryService.start();
+    console.log(`📡 UDP Telemetry service started (local mode) on ${udpAddress}:${udpPort}`);
+  } catch (error: any) {
+    if (error?.code === 'EADDRINUSE') {
+      console.log(`⚠️ UDP port ${udpPort} conflict detected, continuing without UDP service...`);
+    } else {
+      throw error;
+    }
+  }
 } else {
   console.log('📡 UDP Telemetry service disabled (production mode)');
 }

@@ -52,6 +52,8 @@ export interface Track {
   city: string;
   length: number;
   laps: number;
+  eventName?: string | null;
+  shortEventName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,14 +64,20 @@ export interface TrackData {
   city?: string;
   circuitLength: number;
   laps: number;
+  eventName?: string;
+  shortEventName?: string;
 }
 
 export interface Race {
   id: string;
   seasonId: string;
   trackId: string;
-  raceDate: string;
+  raceDate: string | null;
   status: 'scheduled' | 'completed' | 'cancelled';
+  sessionType?: number | null;
+  sessionTypes?: string | null;
+  primarySessionResultId?: string | null;
+  orderIndex?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,8 +86,17 @@ export interface RaceData {
   seasonId: string;
   trackId: string;
   trackName?: string; // Optional - will be looked up from track if not provided
-  raceDate: string;
+  raceDate?: string | null;
   status?: 'scheduled' | 'completed' | 'cancelled';
+  sessionType?: number;
+  sessionTypes?: string | null;
+  primarySessionResultId?: string | null;
+  sessionDuration?: number | null;
+  weatherAirTemp?: number | null;
+  weatherTrackTemp?: number | null;
+  weatherRainPercentage?: number | null;
+  sessionConfig?: any;
+  orderIndex?: number | null;
 }
 
 export interface DriverMapping {

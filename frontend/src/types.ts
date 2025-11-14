@@ -140,16 +140,53 @@ export interface RaceHistoryEntry {
 export interface PreviousRaceResults {
   raceId: string;
   raceName: string;
+  eventName?: string | null;
+  shortEventName?: string | null;
   trackName: string;
   date: string;
+  circuit?: string | null;
+  status?: string | null;
   drivers: Array<{
     position: number;
     name: string;
-    abbreviation: string;
-    teamColor: string;
+    abbreviation?: string;
+    teamColor?: string;
     points: number;
     fastestLap: boolean;
-    status?: string;
+    status?: string | null;
+    team?: string | null;
+    driverId?: string | null;
+  }>;
+  summary?: {
+    topFinishers: Array<{
+      position: number;
+      name: string;
+      team: string | null;
+      points: number;
+      driverId?: string | null;
+    }>;
+    qualifyingHighlights: Array<{
+      position: number;
+      name: string;
+      team: string | null;
+      lapTimeMs: number | null;
+      driverId?: string | null;
+    }>;
+    fastestLaps: Array<{
+      position: number;
+      name: string;
+      team: string | null;
+      bestLapTimeMs: number | null;
+      fastestLap?: boolean;
+      driverId?: string | null;
+    }>;
+    averageLapTimes: Array<{
+      position: number;
+      name: string;
+      team: string | null;
+      averageLapTimeMs: number | null;
+      driverId?: string | null;
+    }>;
   }>;
 }
 

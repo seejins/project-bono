@@ -169,13 +169,25 @@ export const seasonMethods = {
 
     const events = (eventsRaw ?? []).map((event: any) => {
       const raceDate = event.race_date || event.raceDate || null;
+      const trackName =
+        event.track_name ||
+        event.track?.name ||
+        event.trackName ||
+        'Unknown Track';
+      const eventName =
+        event.event_name ||
+        event.track?.eventName ||
+        null;
+      const shortEventName =
+        event.short_event_name ||
+        event.track?.shortEventName ||
+        null;
+
       return {
         id: event.id,
-        trackName:
-          event.track_name ||
-          event.track?.name ||
-          event.trackName ||
-          'Unknown Track',
+        trackName,
+        eventName: eventName ?? trackName,
+        shortEventName,
         status: event.status || 'scheduled',
         raceDate,
         sessionTypes: event.session_types || event.sessionTypes || null,
@@ -437,14 +449,18 @@ export const seasonMethods = {
         r.track_name,
         r.race_date,
         r.status,
+        t.name as track_name_full,
+        t.event_name as track_event_name,
+        t.short_event_name as track_short_event_name,
         sr.id as session_result_id,
         sr.session_type,
         sr.session_name,
         sr.completed_at
       FROM races r
+      LEFT JOIN tracks t ON r.track_id = t.id
       LEFT JOIN session_results sr ON sr.race_id = r.id AND sr.session_type = 10
       WHERE r.season_id = $1 AND r.status = 'completed'
-      ORDER BY r.race_date DESC
+      ORDER BY r.race_date DESC, r.updated_at DESC
       LIMIT 1
     `,
       [seasonId],
@@ -455,14 +471,210 @@ export const seasonMethods = {
     }
 
     const race = result.rows[0];
-    const driverResults = await this.getDriverSessionResults(race.session_result_id);
+    const eventName =
+      race.track_event_name ||
+      race.track_name ||
+      race.track_short_event_name ||
+      race.track_name_full ||
+      'Unknown Event';
+    const shortEventName = race.track_short_event_name || null;
+    const circuitName = race.track_name_full || race.track_name || eventName;
+    const sessionId = race.session_result_id;
+    let driverResults: any[] = [];
+    let lapHistoryByDriver: Map<string, any[]> | null = null;
+
+    const normalizeDriverIdentity = (row: any) => ({
+      name:
+        row.driver_name ||
+        row.mapping_driver_name ||
+        row.json_driver_name ||
+        'Unknown Driver',
+      team:
+        row.driver_team ||
+        row.mapping_team_name ||
+        row.json_team_name ||
+        null,
+    });
+
+    if (sessionId) {
+      const rawResults = await this.getDriverSessionResults(sessionId, true);
+
+      driverResults = rawResults
+        .filter((row: any) => !!row.user_id) // league drivers only
+        .map((row: any) => {
+          const identity = normalizeDriverIdentity(row);
+
+          return {
+            position: row.position ?? 0,
+            name: identity.name,
+            team: identity.team,
+            points: Number(row.points ?? 0),
+            fastestLap: row.fastest_lap === true,
+            status: row.result_status ?? null,
+            bestLapTimeMs:
+              row.best_lap_time_ms != null ? Number(row.best_lap_time_ms) : null,
+            gridPosition:
+              row.grid_position != null ? Number(row.grid_position) : null,
+            driverSessionResultId: row.id,
+            userId: row.user_id,
+            driverId: row.user_id,
+          };
+        });
+
+      // Prepare lap history map for average lap calculations
+      lapHistoryByDriver = new Map();
+      for (const row of rawResults) {
+        if (!row.user_id || !row.lap_times) continue;
+        const laps = Array.isArray(row.lap_times) ? row.lap_times : [];
+        lapHistoryByDriver.set(String(row.user_id), laps);
+      }
+    }
+
+    // Helper: Top finishers (positions 1-3)
+    const topFinishers = driverResults
+      .filter((driver) => driver.position != null && driver.position > 0)
+      .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+      .slice(0, 3)
+      .map((driver) => ({
+        position: driver.position,
+        name: driver.name,
+        team: driver.team,
+        points: driver.points,
+        driverId: driver.driverId ?? driver.userId ?? null,
+      }));
+
+    // Helper: Fastest laps (top 3)
+    const fastestLaps = driverResults
+      .filter(
+        (driver) =>
+          driver.bestLapTimeMs != null && Number(driver.bestLapTimeMs) > 0,
+      )
+      .sort(
+        (a, b) =>
+          (a.bestLapTimeMs ?? Number.POSITIVE_INFINITY) -
+          (b.bestLapTimeMs ?? Number.POSITIVE_INFINITY),
+      )
+      .slice(0, 3)
+      .map((driver) => ({
+        position: driver.position,
+        name: driver.name,
+        team: driver.team,
+        bestLapTimeMs: driver.bestLapTimeMs ?? null,
+        fastestLap: driver.fastestLap === true,
+        driverId: driver.driverId ?? driver.userId ?? null,
+      }));
+
+    // Helper: Average lap time (top 3)
+    const averageLapTimes =
+      lapHistoryByDriver && lapHistoryByDriver.size > 0
+        ? Array.from(lapHistoryByDriver.entries())
+            .map(([userId, laps]) => {
+              const validLaps = laps.filter(
+                (lap: any) =>
+                  lap &&
+                  typeof lap.lap_time_ms === 'number' &&
+                  lap.lap_time_ms > 0,
+              );
+              if (validLaps.length === 0) {
+                return null;
+              }
+
+              const totalMs = validLaps.reduce(
+                (sum: number, lap: any) => sum + lap.lap_time_ms,
+                0,
+              );
+              const averageMs = totalMs / validLaps.length;
+
+              const driver = driverResults.find(
+                (entry) => String(entry.userId) === userId,
+              );
+
+              if (!driver) return null;
+
+              return {
+                position: driver.position,
+                name: driver.name,
+                team: driver.team,
+                averageLapTimeMs: averageMs,
+                driverId: driver.driverId ?? driver.userId ?? null,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => !!item)
+            .sort(
+              (a, b) =>
+                (a.averageLapTimeMs ?? Number.POSITIVE_INFINITY) -
+                (b.averageLapTimeMs ?? Number.POSITIVE_INFINITY),
+            )
+            .slice(0, 3)
+        : [];
+
+    // Helper: Qualifying (pole + 2 runner-ups)
+    let qualifyingHighlights: Array<{
+      position: number;
+      name: string;
+      team: string | null;
+      lapTimeMs: number | null;
+    }> = [];
+
+    const qualifyingSession = await this.db.query(
+      `SELECT id, session_type
+       FROM session_results
+       WHERE race_id = $1 AND session_type BETWEEN 5 AND 9
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [race.id],
+    );
+
+    if (qualifyingSession.rows.length > 0) {
+      const qualifyingSessionId = qualifyingSession.rows[0].id;
+      const qualifyingResults = await this.getDriverSessionResults(
+        qualifyingSessionId,
+      );
+
+      qualifyingHighlights = qualifyingResults
+        .filter((result: any) => !!result.user_id)
+        .sort(
+          (a: any, b: any) =>
+            (a.position ?? Number.POSITIVE_INFINITY) -
+            (b.position ?? Number.POSITIVE_INFINITY),
+        )
+        .slice(0, 3)
+        .map((result: any) => {
+          const identity = normalizeDriverIdentity(result);
+          return {
+            position: result.position ?? 0,
+            name: identity.name,
+            team: identity.team,
+            lapTimeMs:
+              result.best_lap_time_ms != null
+                ? Number(result.best_lap_time_ms)
+                : null,
+            driverId: result.user_id ?? null,
+          };
+        });
+    }
+
+    const raceDateNormalized =
+      race.race_date && typeof race.race_date !== 'string'
+        ? race.race_date.toISOString().split('T')[0]
+        : (race.race_date as string | null | undefined) ?? null;
 
     return {
       raceId: race.id,
-      trackName: race.track_name,
-      date: race.race_date,
+      raceName: eventName,
+      eventName,
+      shortEventName,
+      trackName: circuitName,
+      circuit: circuitName,
+      date: raceDateNormalized,
       status: race.status,
-      results: driverResults,
+      drivers: driverResults,
+      summary: {
+        topFinishers,
+        qualifyingHighlights,
+        fastestLaps,
+        averageLapTimes,
+      },
     };
   },
 } satisfies Partial<Record<keyof DatabaseService, unknown>>;

@@ -123,6 +123,103 @@ export class DatabaseInitializer {
         `);
       });
 
+      await this.runMigration('add_event_name_to_tracks', async () => {
+        await this.addColumnIfNotExists('tracks', 'event_name', 'VARCHAR(120)');
+        await this.addColumnIfNotExists('tracks', 'short_event_name', 'VARCHAR(60)');
+
+        const trackEventMap: Array<[string, string, string]> = [
+          ['Bahrain International Circuit', 'Bahrain Grand Prix', 'Bahrain GP'],
+          ['Jeddah Corniche Circuit', 'Saudi Arabian Grand Prix', 'Saudi Arabian GP'],
+          ['Albert Park Circuit', 'Australian Grand Prix', 'Australian GP'],
+          ['Baku City Circuit', 'Azerbaijan Grand Prix', 'Azerbaijan GP'],
+          ['Miami International Autodrome', 'Miami Grand Prix', 'Miami GP'],
+          ['Circuit de Monaco', 'Monaco Grand Prix', 'Monaco GP'],
+          ['Circuit de Barcelona-Catalunya', 'Spanish Grand Prix', 'Spanish GP'],
+          ['Circuit Gilles Villeneuve', 'Canadian Grand Prix', 'Canadian GP'],
+          ['Red Bull Ring', 'Austrian Grand Prix', 'Austrian GP'],
+          ['Silverstone Circuit', 'British Grand Prix', 'British GP'],
+          ['Hungaroring', 'Hungarian Grand Prix', 'Hungarian GP'],
+          ['Spa-Francorchamps', 'Belgian Grand Prix', 'Belgian GP'],
+          ['Zandvoort', 'Dutch Grand Prix', 'Dutch GP'],
+          ['Monza', 'Italian Grand Prix', 'Italian GP'],
+          ['Marina Bay Street Circuit', 'Singapore Grand Prix', 'Singapore GP'],
+          ['Suzuka Circuit', 'Japanese Grand Prix', 'Japanese GP'],
+          ['Lusail International Circuit', 'Qatar Grand Prix', 'Qatar GP'],
+          ['Circuit of the Americas', 'United States Grand Prix', 'United States GP'],
+          ['Autódromo Hermanos Rodríguez', 'Mexico City Grand Prix', 'Mexico City GP'],
+          ['Interlagos', 'São Paulo Grand Prix', 'São Paulo GP'],
+          ['Las Vegas Strip Circuit', 'Las Vegas Grand Prix', 'Las Vegas GP'],
+          ['Yas Marina Circuit', 'Abu Dhabi Grand Prix', 'Abu Dhabi GP'],
+        ];
+
+        for (const [trackName, eventName, shortName] of trackEventMap) {
+          await this.db.query(
+            `UPDATE tracks
+             SET event_name = $2,
+                 short_event_name = $3
+             WHERE name = $1
+               AND (event_name IS DISTINCT FROM $2 OR short_event_name IS DISTINCT FROM $3)`,
+            [trackName, eventName, shortName],
+          );
+        }
+      });
+
+      await this.runMigration('add_primary_session_result_id_to_races', async () => {
+        await this.addColumnIfNotExists('races', 'primary_session_result_id', 'UUID');
+
+        await this.db.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_constraint
+              WHERE conname = 'races_primary_session_result_id_fkey'
+            ) THEN
+              ALTER TABLE races
+              ADD CONSTRAINT races_primary_session_result_id_fkey
+              FOREIGN KEY (primary_session_result_id)
+              REFERENCES session_results(id)
+              ON DELETE SET NULL;
+            END IF;
+          END $$;
+        `);
+
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_races_primary_session_result_id
+            ON races(primary_session_result_id)
+        `);
+      });
+
+      await this.runMigration('allow_nullable_race_date', async () => {
+        await this.db.query(`
+          ALTER TABLE races
+          ALTER COLUMN race_date DROP NOT NULL
+        `);
+      });
+
+      await this.runMigration('add_order_index_to_races', async () => {
+        await this.addColumnIfNotExists('races', 'order_index', 'INTEGER');
+
+        await this.db.query(`
+          WITH ordered AS (
+            SELECT
+              id,
+              season_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY season_id
+                ORDER BY
+                  COALESCE(race_date, created_at)
+              ) AS rn
+            FROM races
+          )
+          UPDATE races r
+          SET order_index = ordered.rn
+          FROM ordered
+          WHERE r.id = ordered.id
+            AND (r.order_index IS NULL OR r.order_index = 0)
+        `);
+      });
+
       await this.runMigration('add_driver_session_result_id_to_edit_history', async () => {
         await this.addColumnIfNotExists(
           'race_edit_history',

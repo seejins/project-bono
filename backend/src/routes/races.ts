@@ -50,11 +50,13 @@ let raceJSONImportService: RaceJSONImportService;
 const setupRacesRoutes = (
   databaseService: DatabaseService,
   raceEditor: RaceResultsEditor,
-  io: Server
+  io: Server,
+  options?: { raceJsonImportService?: RaceJSONImportService }
 ) => {
   dbService = databaseService;
   raceResultsEditor = raceEditor;
-  raceJSONImportService = new RaceJSONImportService(databaseService, io);
+  raceJSONImportService =
+    options?.raceJsonImportService ?? new RaceJSONImportService(databaseService, io);
 };
 
 export { setupRacesRoutes };
@@ -261,6 +263,58 @@ router.delete('/driver-results/:driverSessionResultId/penalties/:penaltyId', asy
     console.error('Remove penalty error:', error);
     res.status(500).json({ 
       error: 'Failed to remove penalty',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Update driver-to-user mapping for a driver session result
+router.put('/driver-results/:driverSessionResultId/mapping', async (req, res) => {
+  try {
+    const { driverSessionResultId } = req.params;
+    const { userId, editedBy, reason } = req.body ?? {};
+
+    if (!editedBy || typeof editedBy !== 'string') {
+      return res.status(400).json({
+        error: 'Missing required field: editedBy'
+      });
+    }
+
+    await dbService.ensureInitialized();
+
+    const normalizedUserId =
+      userId === null || userId === undefined || userId === ''
+        ? null
+        : String(userId);
+
+    const updates = await raceResultsEditor.updateDriverUserMapping(
+      driverSessionResultId,
+      normalizedUserId,
+      editedBy,
+      typeof reason === 'string' ? reason : undefined
+    );
+
+    res.json({
+      success: true,
+      updates
+    });
+  } catch (error) {
+    console.error('Update driver mapping error:', error);
+    const errorCode = (error as any)?.code;
+    if (errorCode === 'USER_ALREADY_MAPPED') {
+      return res.status(409).json({
+        error: 'User already mapped to another driver in this session',
+        conflictDriverSessionResultId: (error as any)?.conflictDriverSessionResultId
+      });
+    }
+    if (errorCode === 'DRIVER_RESULT_NOT_FOUND') {
+      return res.status(404).json({
+        error: 'Driver session result not found'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to update driver mapping',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

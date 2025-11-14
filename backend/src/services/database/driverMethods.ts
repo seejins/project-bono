@@ -291,7 +291,7 @@ export const driverMethods = {
         `
         SELECT DISTINCT s.id, s.name, s.year
         FROM seasons s
-        JOIN driver_session_results dsr ON dsr.driver_id = $1
+        JOIN driver_session_results dsr ON dsr.user_id = $1
         JOIN session_results sr ON sr.id = dsr.session_result_id
         JOIN races r ON r.id = sr.race_id
         WHERE r.season_id = s.id
@@ -336,7 +336,7 @@ export const driverMethods = {
         FROM driver_session_results dsr
         JOIN session_results sr ON sr.id = dsr.session_result_id
         JOIN races r ON r.id = sr.race_id
-        WHERE dsr.driver_id = $1 AND r.season_id = $2 AND sr.session_type = 10
+        WHERE dsr.user_id = $1 AND r.season_id = $2 AND sr.session_type = 10
       `,
         [driverId, seasonId],
       );
@@ -408,10 +408,15 @@ export const driverMethods = {
         COUNT(*) FILTER (WHERE dsr.position = 1) AS wins,
         COUNT(*) FILTER (WHERE dsr.position <= 3) AS podiums
       FROM drivers d
-        LEFT JOIN driver_session_results dsr ON dsr.user_id = d.id
-        LEFT JOIN session_results sr ON sr.id = dsr.session_result_id AND sr.session_type = 10
-        LEFT JOIN races r ON r.id = sr.race_id AND r.season_id = $1
+        LEFT JOIN driver_session_results dsr 
+          ON dsr.user_id = d.id
+        LEFT JOIN session_results sr 
+          ON sr.id = dsr.session_result_id
+        LEFT JOIN races r 
+          ON r.id = sr.race_id
       WHERE d.season_id = $1
+        AND sr.session_type = 10
+        AND r.season_id = $1
       GROUP BY d.id, d.name, d.team, d.number
       ORDER BY points DESC, wins DESC, podiums DESC, d.name ASC
       `,
@@ -460,7 +465,7 @@ export const driverMethods = {
         FROM driver_session_results dsr
         JOIN session_results sr ON sr.id = dsr.session_result_id
         JOIN races r ON r.id = sr.race_id
-        WHERE dsr.driver_id = $1
+        WHERE dsr.user_id = $1
           AND sr.session_type = 10
       `;
 

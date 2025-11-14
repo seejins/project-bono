@@ -14,14 +14,27 @@ interface EventSummary {
   id: string;
   name?: string | null;
   track_name?: string | null;
+  event_name?: string | null;
+  short_event_name?: string | null;
   race_date?: string | null;
   status?: string;
   updated_at?: string | null;
   completed_at?: string | null;
+  order_index?: number | null;
+  track_length?: number | null;
   track?: {
     name?: string | null;
+    length?: number | null;
   };
 }
+
+const getEventDisplayName = (event?: EventSummary | null) =>
+  event?.short_event_name ||
+  event?.event_name ||
+  event?.track?.name ||
+  event?.track_name ||
+  event?.name ||
+  null;
 
 interface RawDriverResult {
   position?: number | string | null;
@@ -144,30 +157,66 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
           const eventsPayload = await eventsResponse.json();
           const events: EventSummary[] = eventsPayload.events || [];
-          const now = new Date();
+          const nowTimestamp = Date.now();
 
-          const completedEvents = events
-            .filter((event) => event.status === 'completed')
+          const indexedEvents = events.map((event, index) => ({ event, index }));
+          const normalizeStatus = (status?: string | null) => (status ?? '').toLowerCase();
+          const getOrderIndex = (entry: { event: EventSummary; index: number }) => {
+            if (typeof entry.event.order_index === 'number' && Number.isFinite(entry.event.order_index)) {
+              return entry.event.order_index as number;
+            }
+            return entry.index;
+          };
+          const getTimestamp = (value?: string | null) => {
+            if (!value) return Number.POSITIVE_INFINITY;
+            const parsed = Date.parse(value);
+            return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+          };
+          const getCompletedTimestamp = (event: EventSummary) => {
+            const candidates = [event.completed_at, event.race_date, event.updated_at];
+            let best = Number.NEGATIVE_INFINITY;
+            for (const candidate of candidates) {
+              if (!candidate) continue;
+              const parsed = Date.parse(candidate);
+              if (!Number.isNaN(parsed)) {
+                best = Math.max(best, parsed);
+              }
+            }
+            return best;
+          };
+
+          const upcomingEvents = indexedEvents
+            .filter(({ event }) => normalizeStatus(event.status) === 'scheduled')
             .sort((a, b) => {
-              const dateA = a.race_date || a.completed_at || a.updated_at || '';
-              const dateB = b.race_date || b.completed_at || b.updated_at || '';
-              return new Date(dateB).getTime() - new Date(dateA).getTime();
-            });
+              const timeA = getTimestamp(a.event.race_date);
+              const timeB = getTimestamp(b.event.race_date);
+              if (timeA !== timeB) {
+                return timeA - timeB;
+              }
+              return getOrderIndex(a) - getOrderIndex(b);
+            })
+            .map(({ event }) => event);
 
-          const upcomingEvents = events
-            .filter(
-              (event) =>
-                event.status === 'scheduled' &&
-                (!event.race_date || new Date(event.race_date).getTime() > now.getTime()),
-            )
+          const nextScheduledEvent =
+            upcomingEvents.find((event) => {
+              if (!event.race_date) return false;
+              const parsed = Date.parse(event.race_date);
+              return !Number.isNaN(parsed) && parsed >= nowTimestamp;
+            }) ?? upcomingEvents[0] ?? null;
+
+          const completedEvents = indexedEvents
+            .filter(({ event }) => normalizeStatus(event.status) === 'completed')
             .sort((a, b) => {
-              const dateA = a.race_date || '';
-              const dateB = b.race_date || '';
-              return new Date(dateA).getTime() - new Date(dateB).getTime();
-            });
+              const timeA = getCompletedTimestamp(a.event);
+              const timeB = getCompletedTimestamp(b.event);
+              if (timeA !== timeB) {
+                return timeB - timeA;
+              }
+              return getOrderIndex(a) - getOrderIndex(b);
+            })
+            .map(({ event }) => event);
 
-          const latestCompletedEvent = completedEvents[0] || null;
-          const nextScheduledEvent = upcomingEvents[0] || null;
+          const latestCompletedEvent = completedEvents[0] ?? null;
 
           setPreviousEvent(latestCompletedEvent);
           setNextEvent(nextScheduledEvent);
@@ -310,6 +359,75 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
     const subtitle = seasonTag ?? formattedRaceDate ?? null;
 
+    const nextEventName = useMemo(
+      () => getEventDisplayName(nextEvent) ?? 'TBD',
+      [nextEvent],
+    );
+
+    const nextEventDateLabel = useMemo(() => {
+      if (!nextEvent?.race_date) {
+        return 'Date TBD';
+      }
+
+      const parsed = new Date(nextEvent.race_date);
+      if (Number.isNaN(parsed.getTime())) {
+        return 'Date TBD';
+      }
+
+      return parsed.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }, [nextEvent]);
+
+    const formatTrackDistanceKm = (length?: number | string | null) => {
+      if (length === null || length === undefined) {
+        return null;
+      }
+
+      const numericLength =
+        typeof length === 'string' ? parseFloat(length) : typeof length === 'number' ? length : NaN;
+
+      if (!Number.isFinite(numericLength) || numericLength <= 0) {
+        return null;
+      }
+
+      let kmValue = numericLength;
+      if (kmValue > 50) {
+        kmValue = kmValue / 1000;
+      }
+
+      return `${kmValue.toFixed(kmValue >= 10 ? 1 : 2)} km`;
+    };
+
+    const nextEventTrackLabel = useMemo(() => {
+      if (!nextEvent) {
+        return {
+          circuit: 'Track TBD',
+          distance: null as string | null,
+        };
+      }
+
+      const circuitName =
+        nextEvent.track?.name ||
+        nextEvent.track_name ||
+        (nextEvent.track as any)?.eventName ||
+        getEventDisplayName(nextEvent);
+
+      const trackDistance =
+        nextEvent.track?.length ??
+        (nextEvent as any).track_length ??
+        (nextEvent as any).track_length_km ??
+        (nextEvent as any).track_length_meters ??
+        null;
+
+      return {
+        circuit: circuitName || 'Track TBD',
+        distance: formatTrackDistanceKm(trackDistance),
+      };
+    }, [nextEvent]);
+
     const displayPodium = useMemo(() => {
       return [1, 2, 3].map((position) => {
         const match = podiumEntries.find((entry) => entry.position === position);
@@ -347,7 +465,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
             videoRevealed ? 'opacity-0' : 'opacity-100'
           )}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/60 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/15" />
 
         <div className="relative z-10 flex min-h-[100dvh] w-full justify-center">
           <div className="flex w-full max-w-[2560px] flex-col px-6 py-10 md:px-12 md:py-12 lg:px-20 lg:py-16">
@@ -417,30 +535,25 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
             <div
               className={clsx(
-                'mt-10 grid w-full gap-4 transition-all duration-[1300ms] ease-out lg:mt-14 lg:grid-cols-3 lg:gap-6',
+                'hidden w-full gap-4 transition-all duration-[1300ms] ease-out lg:mt-14 lg:grid lg:grid-cols-3 lg:gap-6',
                 cardsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
               )}
             >
               <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
                   Next Event
                 </h3>
                 {nextEvent ? (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-lg font-semibold text-white">
-                      {nextEvent.track_name || nextEvent.name || 'TBD'}
+                  <div className="mt-3 space-y-1.5">
+                    <p className="text-base font-medium leading-tight text-white/90">
+                      {nextEventName}
                     </p>
-                    {nextEvent.race_date && (
-                      <p className="text-sm text-white/70">
-                        {new Date(nextEvent.race_date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </p>
-                    )}
-                    <p className="text-sm text-white/60">
-                      {nextEvent.status === 'scheduled' ? 'Scheduled' : nextEvent.status ?? 'Pending'}
+                    <p className="text-sm text-white/70 leading-tight">{nextEventDateLabel}</p>
+                    <p className="text-sm text-white/60 leading-tight">
+                      {nextEventTrackLabel.circuit}
+                      {nextEventTrackLabel.distance ? (
+                        <span className="text-white/55"> • {nextEventTrackLabel.distance}</span>
+                      ) : null}
                     </p>
                   </div>
                 ) : (
@@ -453,30 +566,30 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                   Last Race Podium
                 </h3>
                 {previousEvent ? (
-                    <p className="mt-2 text-base text-white/75">
-                    {previousEvent.track_name || previousEvent.name || 'Previous Race'}
+                  <p className="mt-2 text-base text-white/75">
+                    {getEventDisplayName(previousEvent) ?? 'Previous Race'}
                   </p>
                 ) : null}
-                <ul className="mt-2 space-y-1">
+                <ul className="mt-1 space-y-2">
                   {previousRacePodium.length > 0 ? (
                     previousRacePodium.map((entry) => (
-                      <li key={entry.position} className="flex items-center justify-between py-1 text-base">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex w-16 justify-center text-xs font-medium uppercase tracking-[0.3em] text-white/70">
+                      <li key={entry.position} className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex min-w-[2.5rem] justify-center text-xs font-medium uppercase tracking-[0.3em] text-white/70">
                             {PODIUM_LABEL_MAP[entry.position] ?? `${entry.position}TH`}
                           </span>
                           <span
                             className="inline-block h-5 w-0.5 rounded-full"
                             style={{ backgroundColor: entry.teamColor }}
                           />
-                          <span className="text-sm font-semibold text-white/85 leading-tight">
+                          <span className="text-sm font-medium leading-tight text-white/85">
                             {entry.driver}
                           </span>
                         </div>
                       </li>
                     ))
                   ) : (
-                    <li className="text-sm text-white/70">No completed race yet.</li>
+                    <li className="text-sm text-white/70 leading-tight">No completed race yet.</li>
                   )}
                 </ul>
               </article>

@@ -31,6 +31,67 @@ export class RaceResultsEditor {
     }
   }
 
+  async updateDriverUserMapping(
+    driverSessionResultId: string,
+    userId: string | null,
+    editedBy: string,
+    reason?: string,
+  ): Promise<
+    Array<{
+      driverSessionResultId: string;
+      sessionResultId: string;
+      oldUserId: string | null;
+      newUserId: string | null;
+    }>
+  > {
+    try {
+      const cascadedUpdates =
+        await this.dbService.updateDriverUserMapping(driverSessionResultId, userId);
+      const now = new Date().toISOString();
+
+      for (const update of cascadedUpdates) {
+        await this.dbService.query(
+          `INSERT INTO race_edit_history (
+            id,
+            session_result_id,
+            driver_session_result_id,
+            user_id,
+            edit_type,
+            old_value,
+            new_value,
+            reason,
+            edited_by,
+            created_at
+          )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            uuidv4(),
+            update.sessionResultId,
+            update.driverSessionResultId,
+            update.newUserId,
+            'user_mapping',
+            update.oldUserId ? { user_id: update.oldUserId } : null,
+            update.newUserId ? { user_id: update.newUserId } : null,
+            reason ?? (update.newUserId ? 'Mapped race result to user' : 'Cleared race result mapping'),
+            editedBy,
+            now,
+          ],
+        );
+
+        console.log(
+          `✅ Updated driver mapping for result ${update.driverSessionResultId}: ${update.oldUserId ?? 'none'} → ${
+            update.newUserId ?? 'none'
+          }`,
+        );
+      }
+
+      return cascadedUpdates;
+    } catch (error) {
+      console.error('❌ Error updating driver mapping:', error);
+      throw error;
+    }
+  }
+
   // Change driver position
   async changePosition(sessionResultId: string, driverId: string, newPosition: number, reason: string, editedBy: string): Promise<void> {
     try {
@@ -68,7 +129,7 @@ export class RaceResultsEditor {
       
       // Log the edit
       await this.dbService.query(
-        `INSERT INTO race_edit_history (id, session_result_id, driver_id, edit_type, old_value, new_value, reason, edited_by, created_at)
+        `INSERT INTO race_edit_history (id, session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           uuidv4(), sessionResultId, driverId, 'disqualification',

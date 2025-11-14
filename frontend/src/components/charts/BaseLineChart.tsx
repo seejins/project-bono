@@ -36,13 +36,18 @@ export interface LineConfig<T extends Record<string, unknown> = Record<string, u
   isAnimationActive?: boolean;
   strokeDasharray?: string;
   yAxisId?: string;
+  strokeOpacity?: number;
+  activeDot?: boolean | object;
 }
 
 export interface ReferenceLineConfig {
-  y: number;
+  x?: number;
+  y?: number;
   stroke?: string;
   strokeDasharray?: string;
+  strokeWidth?: number;
   label?: any;
+  ifFront?: boolean;
 }
 
 export interface ReferenceAreaConfig {
@@ -123,6 +128,10 @@ export interface BaseLineChartProps<T extends Record<string, unknown> = Record<s
   overlays?: ChartOverlayConfig[];
   overlayStyles?: Record<string, Partial<OverlayStyle>>;
   ariaLabel?: string;
+  enableSeriesHighlight?: boolean;
+  dimmedOpacity?: number;
+  onSeriesHoverStart?: (dataKey: string) => void;
+  onSeriesHoverEnd?: () => void;
 }
 
 export function BaseLineChart<T extends Record<string, unknown>>({
@@ -147,8 +156,13 @@ export function BaseLineChart<T extends Record<string, unknown>>({
   overlays,
   overlayStyles,
   ariaLabel,
+  enableSeriesHighlight = false,
+  dimmedOpacity = 0.18,
+  onSeriesHoverStart,
+  onSeriesHoverEnd,
 }: BaseLineChartProps<T>): React.ReactElement {
   const chartInstanceId = React.useId();
+  const [hoveredSeries, setHoveredSeries] = React.useState<string | null>(null);
 
   const mergedMargin = React.useMemo(
     () => ({
@@ -227,6 +241,25 @@ export function BaseLineChart<T extends Record<string, unknown>>({
     }
     return <Tooltip {...tooltipProps} />;
   }, [tooltipContent, tooltipProps]);
+
+  const handleSeriesMouseEnter = React.useCallback(
+    (key: string) => {
+      if (!enableSeriesHighlight) {
+        return;
+      }
+      setHoveredSeries(key);
+      onSeriesHoverStart?.(key);
+    },
+    [enableSeriesHighlight, onSeriesHoverStart]
+  );
+
+  const handleSeriesMouseLeave = React.useCallback(() => {
+    if (!enableSeriesHighlight) {
+      return;
+    }
+    setHoveredSeries(null);
+    onSeriesHoverEnd?.();
+  }, [enableSeriesHighlight, onSeriesHoverEnd]);
 
   return (
     <div className={className} role="img" aria-label={ariaLabel} style={{ width: '100%', height }}>
@@ -309,21 +342,33 @@ export function BaseLineChart<T extends Record<string, unknown>>({
               />
             );
           })}
-          {lines.map((line) => (
-            <Line
-              key={line.dataKey}
-              type={line.type ?? 'monotone'}
-              dataKey={line.dataKey as string}
-              name={line.name}
-              stroke={line.stroke}
-              strokeWidth={line.strokeWidth ?? 2}
-              dot={line.dot ?? false}
-              connectNulls={line.connectNulls ?? true}
-              isAnimationActive={line.isAnimationActive ?? false}
-              strokeDasharray={line.strokeDasharray}
-              yAxisId={line.yAxisId}
-            />
-          ))}
+          {lines.map((line) => {
+            const baseOpacity = line.strokeOpacity ?? 1;
+            const isDimmed =
+              enableSeriesHighlight &&
+              hoveredSeries !== null &&
+              hoveredSeries !== (line.dataKey as string);
+
+            return (
+              <Line
+                key={line.dataKey}
+                type={line.type ?? 'monotone'}
+                dataKey={line.dataKey as string}
+                name={line.name}
+                stroke={line.stroke}
+                strokeWidth={line.strokeWidth ?? 2}
+                dot={line.dot ?? false}
+                connectNulls={line.connectNulls ?? true}
+                isAnimationActive={line.isAnimationActive ?? false}
+                strokeDasharray={line.strokeDasharray}
+                yAxisId={line.yAxisId}
+                strokeOpacity={isDimmed ? baseOpacity * dimmedOpacity : baseOpacity}
+                activeDot={line.activeDot}
+                onMouseEnter={() => handleSeriesMouseEnter(line.dataKey as string)}
+                onMouseLeave={handleSeriesMouseLeave}
+              />
+            );
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -1,5 +1,6 @@
 import { F123DataService } from '../../services/F123DataService';
 import { BRAND_COLORS, STATUS_COLORS } from '../../theme/colors';
+import type { ReferenceLineConfig } from '../charts/BaseLineChart';
 
 export const sanitizeLapTimeMs = (value: any): number | null => {
   if (value === undefined || value === null) return null;
@@ -78,5 +79,48 @@ export const formatSecondsDifference = (seconds?: number | null): string => {
     return `${sign}${F123DataService.formatTimeFromMs(Math.round(absolute * 1000))}`;
   }
   return `${sign}${absolute.toFixed(3)}s`;
+};
+
+export const isPitStopFlag = (value: any): boolean => {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'pit';
+  }
+  return false;
+};
+
+export const buildPitReferenceLines = (lapNumbers: number[]): ReferenceLineConfig[] => {
+  const unique = Array.from(
+    new Set(
+      lapNumbers.filter(
+        (lap) => typeof lap === 'number' && Number.isFinite(lap) && lap > 0
+      )
+    )
+  ).sort((a, b) => a - b);
+
+  return unique.map((lap) => ({
+    x: lap,
+    stroke: 'rgba(255,255,255,0.7)',
+    strokeWidth: 1.2,
+    strokeDasharray: '3 3',
+    ifFront: true,
+    label: {
+      position: 'top',
+      value: 'PIT',
+      fill: '#ffffff',
+      fontSize: 9,
+      fontWeight: 600,
+      dy: 2,
+    },
+  }));
 };
 

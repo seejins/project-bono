@@ -38,6 +38,8 @@ export interface DriverSeasonSummary {
 export interface SeasonEventSummary {
   id: string;
   trackName: string;
+  eventName?: string | null;
+  shortEventName?: string | null;
   raceDate: string | null;
   status: string;
   sessionTypes: string | null;
@@ -46,6 +48,8 @@ export interface SeasonEventSummary {
     name?: string;
     country?: string;
     length?: number;
+    eventName?: string | null;
+    shortEventName?: string | null;
   } | null;
 }
 

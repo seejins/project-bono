@@ -200,6 +200,10 @@ export class RaceRepository {
     return this.service.removeEventFromSeason(eventId);
   }
 
+  updateEventOrder(seasonId: string, orderedEventIds: string[]) {
+    return this.service.updateEventOrder(seasonId, orderedEventIds);
+  }
+
   findActiveEventByTrack(trackName: string) {
     return this.service.findActiveEventByTrack(trackName);
   }

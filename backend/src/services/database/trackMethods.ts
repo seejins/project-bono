@@ -9,9 +9,17 @@ export const trackMethods = {
     const now = new Date().toISOString();
 
     await this.db.query(
-      `INSERT INTO tracks (id, name, country, length_km, created_at) 
-         VALUES ($1, $2, $3, $4, $5)`,
-      [id, data.name, data.country, data.circuitLength, now],
+      `INSERT INTO tracks (id, name, country, length_km, event_name, short_event_name, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        id,
+        data.name,
+        data.country,
+        data.circuitLength,
+        data.eventName ?? data.name,
+        data.shortEventName ?? null,
+        now,
+      ],
     );
 
     return id;
@@ -19,7 +27,7 @@ export const trackMethods = {
 
   async getAllTracks(this: DatabaseService): Promise<Track[]> {
     const result = await this.db.query(
-      `SELECT id, name, country, length_km as length, created_at as "createdAt"
+      `SELECT id, name, country, length_km as length, event_name, short_event_name, created_at as "createdAt"
        FROM tracks ORDER BY name`,
     );
 
@@ -27,13 +35,15 @@ export const trackMethods = {
       ...row,
       city: '',
       laps: 0,
+      eventName: row.event_name ?? null,
+      shortEventName: row.short_event_name ?? null,
       updatedAt: row.createdAt,
     }));
   },
 
   async getTrackById(this: DatabaseService, id: string): Promise<Track | null> {
     const result = await this.db.query(
-      `SELECT id, name, country, length_km as length, created_at as "createdAt"
+      `SELECT id, name, country, length_km as length, event_name, short_event_name, created_at as "createdAt"
        FROM tracks WHERE id = $1`,
       [id],
     );
@@ -43,6 +53,8 @@ export const trackMethods = {
         ...result.rows[0],
         city: '',
         laps: 0,
+        eventName: result.rows[0].event_name ?? null,
+        shortEventName: result.rows[0].short_event_name ?? null,
         updatedAt: result.rows[0].createdAt,
       };
     }
@@ -60,29 +72,35 @@ export const trackMethods = {
     );
 
     if (existing.rows[0]) {
+      const existingId = existing.rows[0].id;
+
       if (lengthKm && lengthKm > 0) {
-        const currentLength = await this.db.query(
-          'SELECT length_km FROM tracks WHERE id = $1',
-          [existing.rows[0].id],
+        await this.db.query(
+          `UPDATE tracks
+             SET length_km = COALESCE(NULLIF(length_km, 0), $1)
+           WHERE id = $2`,
+          [lengthKm, existingId],
         );
-        if (!currentLength.rows[0]?.length_km || currentLength.rows[0].length_km === 0) {
-          await this.db.query(
-            'UPDATE tracks SET length_km = $1 WHERE id = $2',
-            [lengthKm, existing.rows[0].id],
-          );
-          console.log(`✅ Updated track length for ${trackName} to ${lengthKm}km`);
-        }
       }
-      return existing.rows[0].id;
+
+      return existingId;
     }
 
     const id = uuidv4();
     const now = new Date().toISOString();
 
     await this.db.query(
-      `INSERT INTO tracks (id, name, country, length_km, created_at) 
-         VALUES ($1, $2, $3, $4, $5)`,
-      [id, trackName, 'Unknown', lengthKm || 0, now],
+      `INSERT INTO tracks (id, name, country, length_km, event_name, short_event_name, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        id,
+        trackName,
+        'Unknown',
+        lengthKm || 0,
+        trackName,
+        null,
+        now,
+      ],
     );
 
     return id;

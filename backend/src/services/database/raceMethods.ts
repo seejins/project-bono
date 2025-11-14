@@ -4,6 +4,17 @@ import type { DatabaseService } from '../DatabaseService';
 import { Race, RaceData } from './types';
 
 export const raceMethods = {
+  async getNextOrderIndex(this: DatabaseService, seasonId: string): Promise<number> {
+    const result = await this.db.query<{ next_index: number }>(
+      `SELECT COALESCE(MAX(order_index), 0) + 1 AS next_index
+       FROM races
+       WHERE season_id = $1`,
+      [seasonId],
+    );
+
+    return result.rows[0]?.next_index ?? 1;
+  },
+
   async createRace(this: DatabaseService, data: RaceData): Promise<string> {
     const id = uuidv4();
     const now = new Date().toISOString();
@@ -11,19 +22,60 @@ export const raceMethods = {
     let trackName = data.trackName;
     if (!trackName && data.trackId) {
       const track = await this.getTrackById(data.trackId);
-      trackName = track?.name || 'Unknown Track';
+      trackName = track?.eventName || track?.name || 'Unknown Track';
+    }
+
+    const raceDate =
+      data.raceDate === undefined || data.raceDate === null || data.raceDate === ''
+        ? null
+        : new Date(data.raceDate).toISOString().split('T')[0];
+
+    let orderIndex = data.orderIndex ?? null;
+    if (orderIndex === null || orderIndex === undefined) {
+      orderIndex = await this.getNextOrderIndex(data.seasonId);
     }
 
     await this.db.query(
-      `INSERT INTO races (id, season_id, track_id, track_name, race_date, status, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO races (
+         id,
+         season_id,
+         track_id,
+         track_name,
+         race_date,
+         order_index,
+         status,
+         session_type,
+         session_types,
+         session_duration,
+         weather_air_temp,
+         weather_track_temp,
+         weather_rain_percentage,
+         session_config,
+         primary_session_result_id,
+         created_at,
+         updated_at
+       ) 
+       VALUES (
+         $1, $2, $3, $4, $5, $6,
+         $7, $8, $9, $10, $11, $12,
+         $13, $14, $15, $16, $17
+       )`,
       [
         id,
         data.seasonId,
         data.trackId,
         trackName || 'Unknown Track',
-        data.raceDate,
+        raceDate,
+        orderIndex,
         data.status || 'scheduled',
+        data.sessionType ?? null,
+        data.sessionTypes ?? null,
+        data.sessionDuration ?? null,
+        data.weatherAirTemp ?? null,
+        data.weatherTrackTemp ?? null,
+        data.weatherRainPercentage ?? null,
+        data.sessionConfig ?? null,
+        data.primarySessionResultId ?? null,
         now,
         now,
       ],
@@ -40,17 +92,26 @@ export const raceMethods = {
         r.track_id as "trackId",
         r.track_name as "trackName",
         r.race_date as "raceDate",
+        r.order_index as "orderIndex",
         r.status,
+        r.session_type as "sessionType",
         r.session_types as "sessionTypes",
+        r.primary_session_result_id as "primarySessionResultId",
         r.created_at as "createdAt",
         r.updated_at as "updatedAt",
         t.name as track_name,
         t.country as track_country,
-        t.length_km as track_length
+        t.length_km as track_length,
+        t.event_name as track_event_name,
+        t.short_event_name as track_short_event_name
        FROM races r
        LEFT JOIN tracks t ON r.track_id = t.id
        WHERE r.season_id = $1 
-       ORDER BY r.race_date`,
+       ORDER BY 
+         CASE WHEN r.order_index IS NULL THEN 1 ELSE 0 END,
+         r.order_index,
+         r.race_date ASC NULLS LAST,
+         r.created_at ASC`,
       [seasonId],
     );
 
@@ -76,19 +137,23 @@ export const raceMethods = {
               name: race.track_name,
               length: race.track_length || 0,
               country: race.track_country || 'Unknown',
+              eventName: race.track_event_name || null,
+              shortEventName: race.track_short_event_name || null,
             }
           : undefined;
 
+        const normalizedRaceDate =
+          race.raceDate && typeof race.raceDate !== 'string'
+            ? race.raceDate.toISOString().split('T')[0]
+            : (race.raceDate as string | null | undefined) ?? null;
+
         return {
           ...race,
-          trackName: race.trackName || 'Unknown Track',
+          trackName: race.trackName || trackInfo?.eventName || 'Unknown Event',
           country: race.track_country || 'Unknown',
           track: trackInfo,
-          date: race.raceDate
-            ? typeof race.raceDate === 'string'
-              ? race.raceDate
-              : race.raceDate.toISOString()
-            : new Date().toISOString(),
+          date: normalizedRaceDate,
+          orderIndex: race.orderIndex ?? null,
           time: '14:00:00',
           type: sessionTypes.includes('race')
             ? 'race'
@@ -209,11 +274,20 @@ export const raceMethods = {
 
   async getEventsBySeason(this: DatabaseService, seasonId: string): Promise<any[]> {
     const result = await this.db.query(
-      `SELECT r.*, t.name as track_name_full, t.country, t.length_km 
+      `SELECT r.*, 
+              t.name as track_name_full, 
+              t.country, 
+              t.length_km,
+              t.event_name,
+              t.short_event_name
        FROM races r 
        LEFT JOIN tracks t ON r.track_id = t.id 
        WHERE r.season_id = $1 
-       ORDER BY r.race_date ASC`,
+       ORDER BY 
+         CASE WHEN r.order_index IS NULL THEN 1 ELSE 0 END,
+         r.order_index,
+         r.race_date ASC NULLS LAST,
+         r.created_at ASC`,
       [seasonId],
     );
 
@@ -274,18 +348,35 @@ export const raceMethods = {
           }
         }
 
+        const eventName =
+          row.event_name ||
+          row.track_name ||
+          row.short_event_name ||
+          row.track_name_full ||
+          'Unknown Event';
+        const circuitName = row.track_name_full || row.track_name || eventName;
+        const raceDateNormalized =
+          row.race_date && typeof row.race_date !== 'string'
+            ? row.race_date.toISOString().split('T')[0]
+            : (row.race_date as string | null | undefined) ?? null;
+
         return {
           id: row.id,
           season_id: row.season_id,
           track_id: row.track_id,
-          track_name: row.track_name,
+          event_name: eventName,
+          short_event_name: row.short_event_name || row.event_name || null,
+          track_name: circuitName,
+          order_index: row.order_index,
           track: {
             id: row.track_id,
-            name: row.track_name_full || 'Unknown Track',
+            name: circuitName,
             country: row.country || '',
             length: row.length_km || 0,
+            eventName: row.event_name || null,
+            shortEventName: row.short_event_name || null,
           },
-          race_date: row.race_date,
+          race_date: raceDateNormalized,
           status: row.status,
           session_type: row.session_type,
           session_types: finalSessionTypes,
@@ -297,6 +388,7 @@ export const raceMethods = {
           updated_at: row.updated_at,
           session_config: row.session_config,
           total_laps: totalLaps,
+          primary_session_result_id: row.primary_session_result_id,
         };
       }),
     );
@@ -311,11 +403,12 @@ export const raceMethods = {
   ): Promise<string> {
     console.log(`Adding event to season ${seasonId}:`, eventData);
 
-    if (!eventData.track_name) {
-      throw new Error('Track name is required for events');
+    if (!eventData.track_name && !eventData.event_name) {
+      throw new Error('Event or track name is required for events');
     }
 
     let trackId: string;
+    let trackRecord: Awaited<ReturnType<typeof this.getTrackById>> | null = null;
     if (eventData.track_id) {
       trackId = eventData.track_id;
     } else if (eventData.full_track_name) {
@@ -324,26 +417,81 @@ export const raceMethods = {
       trackId = await this.findOrCreateTrack(eventData.track_name);
     }
 
+    trackRecord = await this.getTrackById(trackId);
+
+    const displayName =
+      eventData.event_name ||
+      eventData.track_name ||
+      trackRecord?.eventName ||
+      trackRecord?.name ||
+      'Unknown Event';
+
+    const now = new Date().toISOString();
+    const rawStatus = eventData.status;
+    const normalizedStatus =
+      typeof rawStatus === 'string' ? rawStatus.toLowerCase() : rawStatus;
+    const statusToStore = normalizedStatus || 'scheduled';
+
+    let raceDate: string | null = null;
+    const rawDate = eventData.date;
+    if (rawDate !== undefined && rawDate !== null && rawDate !== '') {
+      const parsedDate = new Date(rawDate);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        raceDate = parsedDate.toISOString().split('T')[0];
+      }
+    } else if (normalizedStatus === 'completed') {
+      raceDate = new Date().toISOString().split('T')[0];
+    }
+
+    let orderIndex =
+      eventData.order_index ??
+      eventData.orderIndex ??
+      (await this.getNextOrderIndex(seasonId));
+
     const eventId = uuidv4();
     await this.db.query(
       `INSERT INTO races (
-        id, season_id, track_id, track_name, race_date, status, session_type, session_duration, 
-        weather_air_temp, weather_track_temp, weather_rain_percentage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         id,
+         season_id,
+         track_id,
+         track_name,
+         race_date,
+         order_index,
+         status,
+         session_type,
+         session_types,
+         session_duration,
+         weather_air_temp,
+         weather_track_temp,
+         weather_rain_percentage,
+         session_config,
+         primary_session_result_id,
+         created_at,
+         updated_at
+       )
+       VALUES (
+         $1, $2, $3, $4, $5, $6,
+         $7, $8, $9, $10, $11, $12,
+         $13, $14, $15, $16, $17
+       )`,
       [
         eventId,
         seasonId,
         trackId,
-        eventData.track_name,
-        eventData.date
-          ? new Date(eventData.date).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0],
-        eventData.status || 'scheduled',
+        displayName,
+        raceDate,
+        orderIndex,
+        statusToStore,
         eventData.session_type || 10,
+        eventData.session_types || null,
         eventData.session_duration || 0,
-        eventData.weather_air_temp || 0,
-        eventData.weather_track_temp || 0,
-        eventData.weather_rain_percentage || 0,
+        eventData.weather_air_temp || null,
+        eventData.weather_track_temp || null,
+        eventData.weather_rain_percentage || null,
+        eventData.session_config || null,
+        null,
+        now,
+        now,
       ],
     );
 
@@ -358,29 +506,48 @@ export const raceMethods = {
   ): Promise<void> {
     console.log(`Updating event ${eventId}:`, eventData);
 
-    const event = await this.db.query('SELECT id FROM races WHERE id = $1', [eventId]);
+    const event = await this.db.query(
+      'SELECT id, status, race_date FROM races WHERE id = $1',
+      [eventId],
+    );
     if (event.rows.length === 0) {
       throw new Error(`Event with ID ${eventId} not found`);
     }
+    const existingStatus: string | null = event.rows[0].status ?? null;
+    const existingRaceDate: string | null = event.rows[0].race_date ?? null;
 
     const updates: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
 
-    if (eventData.track_name !== undefined) {
+    const nextTrackName = eventData.event_name ?? eventData.track_name;
+    if (nextTrackName !== undefined) {
       updates.push(`track_name = $${paramCount++}`);
-      values.push(eventData.track_name);
+      values.push(nextTrackName);
     }
-    if (eventData.date !== undefined && eventData.date !== '') {
+    if (eventData.date !== undefined) {
       updates.push(`race_date = $${paramCount++}`);
-      values.push(new Date(eventData.date).toISOString());
-    } else if (eventData.date === '') {
-      updates.push(`race_date = $${paramCount++}`);
-      values.push(null);
+      if (eventData.date === '' || eventData.date === null) {
+        values.push(null);
+      } else {
+        values.push(new Date(eventData.date).toISOString().split('T')[0]);
+      }
+    }
+    let normalizedStatus: string | undefined;
+    if (eventData.order_index !== undefined) {
+      updates.push(`order_index = $${paramCount++}`);
+      values.push(eventData.order_index);
+    } else if (eventData.orderIndex !== undefined) {
+      updates.push(`order_index = $${paramCount++}`);
+      values.push(eventData.orderIndex);
     }
     if (eventData.status !== undefined) {
+      normalizedStatus =
+        typeof eventData.status === 'string'
+          ? eventData.status.toLowerCase()
+          : eventData.status;
       updates.push(`status = $${paramCount++}`);
-      values.push(eventData.status);
+      values.push(normalizedStatus ?? eventData.status);
     }
     if (eventData.session_type !== undefined) {
       updates.push(`session_type = $${paramCount++}`);
@@ -398,6 +565,13 @@ export const raceMethods = {
       updates.push(`session_config = $${paramCount++}`);
       values.push(eventData.session_config);
     }
+    if (eventData.primarySessionResultId !== undefined) {
+      updates.push(`primary_session_result_id = $${paramCount++}`);
+      values.push(eventData.primarySessionResultId);
+    } else if (eventData.primary_session_result_id !== undefined) {
+      updates.push(`primary_session_result_id = $${paramCount++}`);
+      values.push(eventData.primary_session_result_id);
+    }
     if (eventData.weather_air_temp !== undefined) {
       updates.push(`weather_air_temp = $${paramCount++}`);
       values.push(eventData.weather_air_temp);
@@ -409,6 +583,26 @@ export const raceMethods = {
     if (eventData.weather_rain_percentage !== undefined) {
       updates.push(`weather_rain_percentage = $${paramCount++}`);
       values.push(eventData.weather_rain_percentage);
+    }
+    if (eventData.race_date !== undefined) {
+      updates.push(`race_date = $${paramCount++}`);
+      values.push(
+        eventData.race_date === '' || eventData.race_date === null
+          ? null
+          : new Date(eventData.race_date).toISOString().split('T')[0],
+      );
+    }
+
+    const hasExplicitDateUpdate =
+      eventData.date !== undefined || eventData.race_date !== undefined;
+    if (
+      !hasExplicitDateUpdate &&
+      normalizedStatus === 'completed' &&
+      existingStatus !== 'completed' &&
+      (existingRaceDate === null || existingRaceDate === undefined)
+    ) {
+      updates.push(`race_date = $${paramCount++}`);
+      values.push(new Date().toISOString().split('T')[0]);
     }
 
     if (updates.length === 0) {
@@ -426,6 +620,63 @@ export const raceMethods = {
     );
 
     console.log(`✅ Event ${eventId} updated successfully`);
+  },
+
+  async updateEventOrder(
+    this: DatabaseService,
+    seasonId: string,
+    orderedEventIds: string[],
+  ): Promise<void> {
+    if (!Array.isArray(orderedEventIds) || orderedEventIds.length === 0) {
+      throw new Error('Event order payload must include at least one event id');
+    }
+
+    const trimmedIds = orderedEventIds.map((id) => id?.trim()).filter(Boolean) as string[];
+    if (trimmedIds.length !== orderedEventIds.length) {
+      throw new Error('Event order payload contains invalid event ids');
+    }
+
+    const existingEvents = await this.db.query<{ id: string }>(
+      'SELECT id FROM races WHERE season_id = $1 ORDER BY order_index ASC NULLS LAST, race_date ASC NULLS LAST, created_at ASC',
+      [seasonId],
+    );
+
+    const existingIds = existingEvents.rows.map((row) => row.id);
+
+    const unknownIds = trimmedIds.filter((id) => !existingIds.includes(id));
+    if (unknownIds.length > 0) {
+      throw new Error(`Event order payload references unknown events: ${unknownIds.join(', ')}`);
+    }
+
+    const uniqueIds = new Set(trimmedIds);
+    if (uniqueIds.size !== trimmedIds.length) {
+      throw new Error('Event order payload contains duplicate event ids');
+    }
+
+    const remainingIds = existingIds.filter((id) => !uniqueIds.has(id));
+    const finalOrdering = [...trimmedIds, ...remainingIds];
+
+    await this.withTransaction(async (tx) => {
+      for (let index = 0; index < trimmedIds.length; index++) {
+        const eventId = trimmedIds[index];
+        await tx.query(
+          `UPDATE races 
+             SET order_index = $1, updated_at = NOW()
+           WHERE id = $2 AND season_id = $3`,
+          [index + 1, eventId, seasonId],
+        );
+      }
+
+      for (let offset = trimmedIds.length; offset < finalOrdering.length; offset++) {
+        const eventId = finalOrdering[offset];
+        await tx.query(
+          `UPDATE races 
+             SET order_index = $1, updated_at = NOW()
+           WHERE id = $2 AND season_id = $3`,
+          [offset + 1, eventId, seasonId],
+        );
+      }
+    });
   },
 
   async removeEventFromSeason(this: DatabaseService, eventId: string): Promise<void> {
@@ -446,7 +697,11 @@ export const raceMethods = {
       `SELECT id FROM races 
        WHERE track_name = $1 
        AND status = 'scheduled' 
-       ORDER BY created_at DESC 
+       ORDER BY 
+         CASE WHEN order_index IS NULL THEN 1 ELSE 0 END,
+         order_index,
+         race_date ASC NULLS LAST,
+         created_at ASC
        LIMIT 1`,
       [trackName],
     );
@@ -458,14 +713,17 @@ export const raceMethods = {
     const result = await this.db.query(
       `SELECT id FROM races 
        WHERE season_id = $1 AND status = 'scheduled' 
-       ORDER BY race_date ASC 
+       ORDER BY 
+         CASE WHEN order_index IS NULL THEN 1 ELSE 0 END,
+         order_index,
+         race_date ASC NULLS LAST,
+         created_at ASC 
        LIMIT 1`,
       [seasonId],
     );
 
     return result.rows[0]?.id || null;
   },
-
   async getSeasonIdFromEvent(this: DatabaseService, eventId: string): Promise<string> {
     const result = await this.db.query('SELECT season_id FROM races WHERE id = $1', [eventId]);
 

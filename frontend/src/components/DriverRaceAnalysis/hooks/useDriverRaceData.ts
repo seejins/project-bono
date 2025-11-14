@@ -152,9 +152,20 @@ export const useDriverRaceData = (driverId: string, raceId: string): UseDriverRa
 const transformDriverResult = (result: any): DriverResultWithMeta => {
   const additionalData = parseAdditionalData(result.additional_data);
 
+  const mappedName =
+    result.driver_name ||
+    result.mapping_driver_name ||
+    additionalData?.participantData?.name ||
+    null;
+
+  const displayName =
+    mappedName ||
+    result.json_driver_name ||
+    'Unknown Driver';
+
   return {
     id: result.id,
-    name: result.json_driver_name || result.driver_name || result.mapping_driver_name || 'Unknown Driver',
+    name: displayName,
     team: result.json_team_name || result.mapping_team_name || result.driver_team || 'Unknown Team',
     number: result.json_car_number || result.driver_number || result.mapping_driver_number || result.position || 0,
     additional_data: additionalData,

@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Plus, Edit, Trash2, Users, Calendar, Trophy, Flag } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ArrowLeft, Plus, Edit, Trash2, Users, Calendar, Flag, GripVertical } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import type {
+  DropResult,
+  DroppableProvided,
+  DroppableStateSnapshot,
+  DraggableProvided,
+  DraggableStateSnapshot,
+} from '@hello-pangea/dnd';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
-import { F123_TRACKS, F123Track } from '../data/f123Tracks';
+import { F123_TRACKS } from '../data/f123Tracks';
 import { F123_TEAMS } from '../data/f123Teams';
 
 const TEAM_OPTIONS = F123_TEAMS.map((team) => team.name);
@@ -39,6 +47,8 @@ interface Event {
   season_id: string;
   track_id: string;
   track_name: string;
+  event_name?: string | null;
+  short_event_name?: string | null;
   race_date?: string;
   status: 'scheduled' | 'completed' | 'cancelled';
   session_type?: number;
@@ -54,7 +64,10 @@ interface Event {
     name: string;
     country: string;
     length: number;
+    eventName?: string | null;
+    shortEventName?: string | null;
   };
+  order_index?: number | null;
 }
 
 interface SeasonDetailProps {
@@ -99,6 +112,21 @@ const editTeamOptions = useMemo(() => {
   return [...teamOptions, currentTeam];
 }, [teamOptions, editingParticipant]);
 
+  const formatEventDate = (value?: string | null) => {
+    if (!value) {
+      return 'TBD';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'TBD';
+    }
+    return parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
   const getMemberDisplayName = (member: Member) => {
     const parts = [member.firstName, member.lastName].filter(
       (part) => !!part && part.trim().length > 0
@@ -126,20 +154,26 @@ const editTeamOptions = useMemo(() => {
 
   const [newEvent, setNewEvent] = useState({
     track_id: '',
+    event_name: '',
+    date: '',
+    status: 'scheduled' as Event['status'],
     session_types: {
       practice: false,
       qualifying: false,
-      race: false
-    }
+      race: false,
+    },
   });
 
   const [editEvent, setEditEvent] = useState({
     track_id: '',
+    event_name: '',
+    date: '',
+    status: 'scheduled' as Event['status'],
     session_types: {
       practice: false,
       qualifying: false,
-      race: false
-    }
+      race: false,
+    },
   });
 
   useEffect(() => {
@@ -174,7 +208,19 @@ const editTeamOptions = useMemo(() => {
 
       if (eventsRes.ok) {
         const eventsData = await eventsRes.json();
-        setEvents(eventsData.events || []);
+        const fetchedEvents: Event[] = eventsData.events || [];
+        const sortedEvents = fetchedEvents
+          .slice()
+          .sort((a, b) => {
+            const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
+            const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            const aDate = a.race_date ? Date.parse(a.race_date) : Number.POSITIVE_INFINITY;
+            const bDate = b.race_date ? Date.parse(b.race_date) : Number.POSITIVE_INFINITY;
+            if (aDate !== bDate) return aDate - bDate;
+            return a.created_at.localeCompare(b.created_at);
+          });
+        setEvents(sortedEvents);
       }
 
       if (seasonsRes.ok) {
@@ -305,12 +351,18 @@ const editTeamOptions = useMemo(() => {
         throw new Error('Please select at least one session type');
       }
 
-      const response = await apiPost(`/api/seasons/${season.id}/events`, {
-        track_name: selectedTrack.name,
+      const trimmedEventName = newEvent.event_name.trim();
+      const payload = {
+        track_name: trimmedEventName || selectedTrack.name,
+        event_name: trimmedEventName || selectedTrack.name,
         track_id: selectedTrack.id,
+        status: newEvent.status,
+        date: newEvent.date || null,
         session_types: sessionTypes.join(', '), // Store as comma-separated string
-        session_type: 10 // Default to Race for now, can be enhanced later
-      });
+        session_type: 10, // Default to Race for now, can be enhanced later
+      };
+
+      const response = await apiPost(`/api/seasons/${season.id}/events`, payload);
 
       if (response.ok) {
         setStatus('success');
@@ -318,7 +370,10 @@ const editTeamOptions = useMemo(() => {
         setShowAddEventModal(false);
         setNewEvent({
           track_id: '',
-          session_types: { practice: false, qualifying: false, race: false }
+          event_name: '',
+          date: '',
+          status: 'scheduled',
+          session_types: { practice: false, qualifying: false, race: false },
         });
         loadData(); // Reload the data
       } else {
@@ -331,25 +386,66 @@ const editTeamOptions = useMemo(() => {
     }
   };
 
-  const handleEditEvent = (event: any) => {
-    // Find the track ID from F123_TRACKS based on track name
-    const track = F123_TRACKS.find(t => t.name === event.track_name);
-    
-    // Parse session types from the comma-separated string
+  const handleEditEvent = (event: Event) => {
+    const track =
+      F123_TRACKS.find((t) => t.id === event.track_id) ||
+      F123_TRACKS.find((t) => t.name === event.track?.name);
+
     const sessionTypes = event.session_types ? event.session_types.split(', ') : [];
-    
+
     setEditEvent({
       track_id: track?.id || '',
+      event_name: event.event_name || event.short_event_name || event.track?.eventName || event.track_name || '',
+      date: event.race_date || '',
+      status: event.status ?? 'scheduled',
       session_types: {
         practice: sessionTypes.includes('Practice'),
         qualifying: sessionTypes.includes('Qualifying'),
-        race: sessionTypes.includes('Race')
-      }
+        race: sessionTypes.includes('Race'),
+      },
     });
-    
+
     setEditingEvent(event);
     setShowEditEventModal(true);
   };
+
+  const handleEventReorder = useCallback(
+    async (result: DropResult) => {
+      if (!result.destination || result.destination.index === result.source.index) {
+        return;
+      }
+
+      const previousEvents = events.slice();
+      const updatedEvents = events.slice();
+      const [moved] = updatedEvents.splice(result.source.index, 1);
+      updatedEvents.splice(result.destination.index, 0, moved);
+
+      setEvents(updatedEvents);
+      // Clear any previous inline status; we only surface messages on failure.
+      setStatus('idle');
+      setStatusMessage('');
+
+      try {
+        const response = await apiPost(`/api/seasons/${season.id}/events/reorder`, {
+          orderedEventIds: updatedEvents.map((event) => event.id),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || 'Failed to update event order');
+        }
+
+        setStatus('idle');
+        setStatusMessage('');
+      } catch (error) {
+        console.error('Failed to reorder events', error);
+        setStatus('error');
+        setStatusMessage(error instanceof Error ? error.message : 'Failed to update event order');
+        setEvents(previousEvents);
+      }
+    },
+    [events, season.id],
+  );
 
   const handleUpdateEvent = async () => {
     if (!editingEvent) return;
@@ -374,10 +470,14 @@ const editTeamOptions = useMemo(() => {
         throw new Error('Please select at least one session type');
       }
 
+      const trimmedEventName = editEvent.event_name.trim();
       const response = await apiPut(`/api/seasons/${season.id}/events/${editingEvent.id}`, {
-        track_name: selectedTrack.name,
+        track_name: trimmedEventName || selectedTrack.name,
+        event_name: trimmedEventName || selectedTrack.name,
+        status: editEvent.status,
+        date: editEvent.date || null,
         session_types: sessionTypes.join(', '), // Store as comma-separated string
-        session_type: 10 // Default to Race for now, can be enhanced later
+        session_type: 10, // Default to Race for now, can be enhanced later
       });
 
       if (response.ok) {
@@ -387,7 +487,10 @@ const editTeamOptions = useMemo(() => {
         setEditingEvent(null);
         setEditEvent({
           track_id: '',
-          session_types: { practice: false, qualifying: false, race: false }
+          event_name: '',
+          date: '',
+          status: 'scheduled',
+          session_types: { practice: false, qualifying: false, race: false },
         });
         loadData(); // Reload data
       } else {
@@ -736,44 +839,81 @@ const editTeamOptions = useMemo(() => {
               </div>
 
           {events.length > 0 ? (
-            <div className="flex flex-col gap-3">
-              {events.map((event) => (
-                <div 
-                  key={event.id} 
-                  className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                  onClick={() => handleEditEvent(event)}
-                >
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                      <Flag className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-gray-900 dark:text-white font-medium">{event.track_name}</p>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span>Sessions: {event.session_types || getSessionTypeName(event.session_type || 0)}</span>
-                        {event.track && event.track.length && (
-                          <span>
-                            {event.track.length}km {event.track.name ? `• ${event.track.name}` : ''}
-                          </span>
-                        )}
-                        <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
-                          {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                        </span>
-                      </div>
-                    </div>
+            <DragDropContext onDragEnd={handleEventReorder}>
+              <Droppable droppableId="season-events">
+                {(droppableProvided: DroppableProvided, _snapshot: DroppableStateSnapshot) => (
+                  <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
+                    className="flex flex-col gap-3"
+                  >
+                    {events.map((event, index) => {
+                      const displayName =
+                        event.short_event_name ||
+                        event.event_name ||
+                        event.track?.eventName ||
+                        event.track_name ||
+                        'Event TBD';
+                      const circuitLabel = event.track?.name || event.track_name || 'Circuit TBD';
+                      const formattedDate = formatEventDate(event.race_date);
+
+                      return (
+                        <Draggable key={event.id} draggableId={event.id} index={index}>
+                          {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              onClick={() => handleEditEvent(event)}
+                              className={`flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                                snapshot.isDragging ? 'shadow-lg ring-2 ring-red-400 dark:ring-red-500' : ''
+                              }`}
+                            >
+                              <div className="flex items-center space-x-3 flex-1">
+                                <div
+                                  {...dragProvided.dragHandleProps}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-gray-600 transition hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                                >
+                                  <GripVertical className="w-4 h-4" />
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                                    <Flag className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-900 dark:text-white font-medium">{displayName}</p>
+                                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                                      <span>{circuitLabel}</span>
+                                      <span>{formattedDate}</span>
+                                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(event.status)}`}>
+                                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                      Sessions: {event.session_types || getSessionTypeName(event.session_type || 0)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                                <button 
+                                  onClick={() => handleDeleteEvent(event.id)}
+                                  className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {droppableProvided.placeholder}
                   </div>
-                  <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <button 
-                      onClick={() => handleDeleteEvent(event.id)}
-                      className="text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded text-sm flex items-center space-x-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-              </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           ) : (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -966,7 +1106,15 @@ const editTeamOptions = useMemo(() => {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700"
                   value={newEvent.track_id}
-                  onChange={(e) => setNewEvent({ ...newEvent, track_id: e.target.value })}
+                  onChange={(e) => {
+                    const nextTrackId = e.target.value;
+                    const selected = F123_TRACKS.find((track) => track.id === nextTrackId);
+                    setNewEvent((prev) => ({
+                      ...prev,
+                      track_id: nextTrackId,
+                      event_name: prev.event_name || selected?.name || '',
+                    }));
+                  }}
                 >
                   <option value="">-- Select a track --</option>
                   {F123_TRACKS.map((track) => (
@@ -975,6 +1123,62 @@ const editTeamOptions = useMemo(() => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Event Name
+                </label>
+                <input
+                  type="text"
+                  value={newEvent.event_name}
+                  onChange={(e) =>
+                    setNewEvent((prev) => ({
+                      ...prev,
+                      event_name: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Austrian Grand Prix"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Event Date (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={newEvent.date}
+                    onChange={(e) =>
+                      setNewEvent((prev) => ({
+                        ...prev,
+                        date: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={newEvent.status}
+                    onChange={(e) =>
+                      setNewEvent((prev) => ({
+                        ...prev,
+                        status: e.target.value as Event['status'],
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-red-500 focus:border-red-500"
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -1030,7 +1234,10 @@ const editTeamOptions = useMemo(() => {
                   setShowAddEventModal(false);
                   setNewEvent({
                     track_id: '',
-                    session_types: { practice: false, qualifying: false, race: false }
+                    event_name: '',
+                    date: '',
+                    status: 'scheduled',
+                    session_types: { practice: false, qualifying: false, race: false },
                   });
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1039,10 +1246,16 @@ const editTeamOptions = useMemo(() => {
               </button>
               <button
                 onClick={handleAddEvent}
-                disabled={!newEvent.track_id || (!newEvent.session_types.practice && !newEvent.session_types.qualifying && !newEvent.session_types.race)}
+                disabled={
+                  status === 'loading' ||
+                  !newEvent.track_id ||
+                  (!newEvent.session_types.practice &&
+                    !newEvent.session_types.qualifying &&
+                    !newEvent.session_types.race)
+                }
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                Add Event
+                {status === 'loading' ? 'Saving...' : 'Add Event'}
               </button>
             </div>
           </div>
@@ -1063,7 +1276,15 @@ const editTeamOptions = useMemo(() => {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700"
                   value={editEvent.track_id}
-                  onChange={(e) => setEditEvent({ ...editEvent, track_id: e.target.value })}
+                  onChange={(e) => {
+                    const nextTrackId = e.target.value;
+                    const selected = F123_TRACKS.find((track) => track.id === nextTrackId);
+                    setEditEvent((prev) => ({
+                      ...prev,
+                      track_id: nextTrackId,
+                      event_name: prev.event_name || selected?.name || '',
+                    }));
+                  }}
                 >
                   <option value="">-- Select a track --</option>
                   {F123_TRACKS.map((track) => (
@@ -1072,6 +1293,62 @@ const editTeamOptions = useMemo(() => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Event Name
+                </label>
+                <input
+                  type="text"
+                  value={editEvent.event_name}
+                  onChange={(e) =>
+                    setEditEvent((prev) => ({
+                      ...prev,
+                      event_name: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Austrian Grand Prix"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Event Date (optional)
+                  </label>
+                    <input
+                      type="date"
+                      value={editEvent.date}
+                      onChange={(e) =>
+                        setEditEvent((prev) => ({
+                          ...prev,
+                          date: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={editEvent.status}
+                    onChange={(e) =>
+                      setEditEvent((prev) => ({
+                        ...prev,
+                        status: e.target.value as Event['status'],
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -1128,7 +1405,10 @@ const editTeamOptions = useMemo(() => {
                   setEditingEvent(null);
                   setEditEvent({
                     track_id: '',
-                    session_types: { practice: false, qualifying: false, race: false }
+                    event_name: '',
+                    date: '',
+                    status: 'scheduled',
+                    session_types: { practice: false, qualifying: false, race: false },
                   });
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1137,10 +1417,16 @@ const editTeamOptions = useMemo(() => {
               </button>
               <button
                 onClick={handleUpdateEvent}
-                disabled={!editEvent.track_id || (!editEvent.session_types.practice && !editEvent.session_types.qualifying && !editEvent.session_types.race)}
+                disabled={
+                  status === 'loading' ||
+                  !editEvent.track_id ||
+                  (!editEvent.session_types.practice &&
+                    !editEvent.session_types.qualifying &&
+                    !editEvent.session_types.race)
+                }
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                Update Event
+                {status === 'loading' ? 'Saving...' : 'Update Event'}
               </button>
             </div>
           </div>

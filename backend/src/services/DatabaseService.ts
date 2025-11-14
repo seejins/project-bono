@@ -53,6 +53,7 @@ export class DatabaseService extends RepositoryBase {
   public deactivateAllOtherSeasons!: (currentSeasonId: string) => Promise<void>;
   public setCurrentSeason!: (seasonId: string) => Promise<void>;
   public getActiveSeason!: () => Promise<Season | null>;
+  public getSeasonAnalysis!: (seasonId: string) => Promise<any>;
   public getHistoricInsights!: () => Promise<any>;
   public getSeasonsForHistory!: () => Promise<any[]>;
   public getPreviousRaceResults!: (seasonId: string) => Promise<any>;
@@ -106,10 +107,12 @@ export class DatabaseService extends RepositoryBase {
   public getEventsBySeason!: (seasonId: string) => Promise<any[]>;
   public addEventToSeason!: (seasonId: string, eventData: any) => Promise<string>;
   public updateEventInSeason!: (eventId: string, eventData: any) => Promise<void>;
+  public updateEventOrder!: (seasonId: string, orderedEventIds: string[]) => Promise<void>;
   public removeEventFromSeason!: (eventId: string) => Promise<void>;
   public findActiveEventByTrack!: (trackName: string) => Promise<string | null>;
   public getCurrentEventForSeason!: (seasonId: string) => Promise<string | null>;
   public getSeasonIdFromEvent!: (eventId: string) => Promise<string>;
+  public getNextOrderIndex!: (seasonId: string) => Promise<number>;
   public importSessionResults!: (
     raceId: string,
     results: SessionResult[],
@@ -150,6 +153,17 @@ export class DatabaseService extends RepositoryBase {
     reason: string,
     editedBy: string,
   ) => Promise<any>;
+  public updateDriverUserMapping!: (
+    driverSessionResultId: string,
+    userId: string | null,
+  ) => Promise<
+    Array<{
+      driverSessionResultId: string;
+      sessionResultId: string;
+      oldUserId: string | null;
+      newUserId: string | null;
+    }>
+  >;
   public removePenalty!: (driverSessionResultId: string, penaltyId: string) => Promise<void>;
   public recalculatePositions!: (sessionResultId: string) => Promise<void>;
   public changePosition!: (
@@ -234,7 +248,10 @@ export class DatabaseService extends RepositoryBase {
       raceDate: dbRow.race_date,
       status: dbRow.status,
       sessionType: dbRow.session_type,
+      sessionTypes: dbRow.session_types,
       sessionDuration: dbRow.session_duration,
+      primarySessionResultId: dbRow.primary_session_result_id,
+      orderIndex: dbRow.order_index,
       weatherAirTemp: dbRow.weather_air_temp,
       weatherTrackTemp: dbRow.weather_track_temp,
       weatherRainPercentage: dbRow.weather_rain_percentage,

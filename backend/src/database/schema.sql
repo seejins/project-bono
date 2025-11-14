@@ -48,15 +48,18 @@ CREATE TABLE races (
   season_id UUID REFERENCES seasons(id) ON DELETE CASCADE,
   track_id UUID REFERENCES tracks(id),
   track_name VARCHAR(100) NOT NULL,
-  race_date DATE NOT NULL,
+  race_date DATE,
   status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled')),
   
   -- F1 23 session data
   session_type INTEGER, -- 0=unknown, 1=practice1, 2=practice2, 3=practice3, 4=short practice, 5=qualifying1, 6=qualifying2, 7=qualifying3, 8=short qualifying, 9=osq, 10=race, 11=race2, 12=time trial
+  session_types TEXT,
   session_duration INTEGER, -- in seconds
   weather_air_temp INTEGER,
   weather_track_temp INTEGER,
   weather_rain_percentage INTEGER,
+  session_config JSONB,
+  primary_session_result_id UUID REFERENCES session_results(id) ON DELETE SET NULL,
   
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -271,29 +274,29 @@ CREATE INDEX IF NOT EXISTS idx_driver_penalties_driver_session_result_id
   ON driver_penalties(driver_session_result_id);
 
 -- Insert default tracks
-INSERT INTO tracks (name, country, length_km) VALUES
-('Bahrain International Circuit', 'Bahrain', 5.412),
-('Jeddah Corniche Circuit', 'Saudi Arabia', 6.174),
-('Albert Park Circuit', 'Australia', 5.278),
-('Baku City Circuit', 'Azerbaijan', 6.003),
-('Miami International Autodrome', 'USA', 5.410),
-('Circuit de Monaco', 'Monaco', 3.337),
-('Circuit de Barcelona-Catalunya', 'Spain', 4.675),
-('Circuit Gilles Villeneuve', 'Canada', 4.361),
-('Red Bull Ring', 'Austria', 4.318),
-('Silverstone Circuit', 'Great Britain', 5.891),
-('Hungaroring', 'Hungary', 4.381),
-('Spa-Francorchamps', 'Belgium', 7.004),
-('Zandvoort', 'Netherlands', 4.259),
-('Monza', 'Italy', 5.793),
-('Marina Bay Street Circuit', 'Singapore', 5.063),
-('Suzuka Circuit', 'Japan', 5.807),
-('Lusail International Circuit', 'Qatar', 5.380),
-('Circuit of the Americas', 'USA', 5.513),
-('Autódromo Hermanos Rodríguez', 'Mexico', 4.304),
-('Interlagos', 'Brazil', 4.309),
-('Las Vegas Strip Circuit', 'USA', 6.201),
-('Yas Marina Circuit', 'UAE', 5.281);
+INSERT INTO tracks (name, country, length_km, event_name, short_event_name) VALUES
+('Bahrain International Circuit', 'Bahrain', 5.412, 'Bahrain Grand Prix', 'Bahrain GP'),
+('Jeddah Corniche Circuit', 'Saudi Arabia', 6.174, 'Saudi Arabian Grand Prix', 'Saudi Arabian GP'),
+('Albert Park Circuit', 'Australia', 5.278, 'Australian Grand Prix', 'Australian GP'),
+('Baku City Circuit', 'Azerbaijan', 6.003, 'Azerbaijan Grand Prix', 'Azerbaijan GP'),
+('Miami International Autodrome', 'USA', 5.410, 'Miami Grand Prix', 'Miami GP'),
+('Circuit de Monaco', 'Monaco', 3.337, 'Monaco Grand Prix', 'Monaco GP'),
+('Circuit de Barcelona-Catalunya', 'Spain', 4.675, 'Spanish Grand Prix', 'Spanish GP'),
+('Circuit Gilles Villeneuve', 'Canada', 4.361, 'Canadian Grand Prix', 'Canadian GP'),
+('Red Bull Ring', 'Austria', 4.318, 'Austrian Grand Prix', 'Austrian GP'),
+('Silverstone Circuit', 'Great Britain', 5.891, 'British Grand Prix', 'British GP'),
+('Hungaroring', 'Hungary', 4.381, 'Hungarian Grand Prix', 'Hungarian GP'),
+('Spa-Francorchamps', 'Belgium', 7.004, 'Belgian Grand Prix', 'Belgian GP'),
+('Zandvoort', 'Netherlands', 4.259, 'Dutch Grand Prix', 'Dutch GP'),
+('Monza', 'Italy', 5.793, 'Italian Grand Prix', 'Italian GP'),
+('Marina Bay Street Circuit', 'Singapore', 5.063, 'Singapore Grand Prix', 'Singapore GP'),
+('Suzuka Circuit', 'Japan', 5.807, 'Japanese Grand Prix', 'Japanese GP'),
+('Lusail International Circuit', 'Qatar', 5.380, 'Qatar Grand Prix', 'Qatar GP'),
+('Circuit of the Americas', 'USA', 5.513, 'United States Grand Prix', 'United States GP'),
+('Autódromo Hermanos Rodríguez', 'Mexico', 4.304, 'Mexico City Grand Prix', 'Mexico City GP'),
+('Interlagos', 'Brazil', 4.309, 'São Paulo Grand Prix', 'São Paulo GP'),
+('Las Vegas Strip Circuit', 'USA', 6.201, 'Las Vegas Grand Prix', 'Las Vegas GP'),
+('Yas Marina Circuit', 'UAE', 5.281, 'Abu Dhabi Grand Prix', 'Abu Dhabi GP');
 
 -- Season events table
 CREATE TABLE season_events (

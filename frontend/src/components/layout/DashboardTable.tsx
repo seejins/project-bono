@@ -65,7 +65,7 @@ export function DashboardTable<TRow>({
                 <th
                   key={column.key as string}
                   className={clsx(
-                    'px-6 py-3 2xl:px-8 2xl:py-4',
+                    'px-4 py-3 2xl:px-5 2xl:py-4',
                     column.align === 'right'
                       ? 'text-right'
                       : column.align === 'left'
@@ -84,7 +84,7 @@ export function DashboardTable<TRow>({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-6 py-10 text-center text-sm 2xl:text-base text-slate-500 dark:text-slate-400"
+                  className="px-4 py-10 text-center text-sm 2xl:text-base text-slate-500 dark:text-slate-400"
                 >
                   {emptyMessage}
                 </td>
@@ -107,7 +107,7 @@ export function DashboardTable<TRow>({
                         <td
                           key={`${key}-${column.key as string}`}
                           className={clsx(
-                            'px-6 py-4 2xl:px-8 2xl:py-5',
+                            'px-4 py-4 2xl:px-5 2xl:py-5',
                             column.align === 'right'
                               ? 'text-right'
                               : column.align === 'left'

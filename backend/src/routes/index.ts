@@ -9,6 +9,7 @@ import sessionsRoutes from './sessions';
 import driversRoutes from './drivers';
 import tracksRoutes from './tracks';
 import racesRoutes, { setupRacesRoutes } from './races';
+import { RaceJSONImportService } from '../services/RaceJSONImportService';
 
 export function setupRoutes(
   app: Express,
@@ -20,6 +21,7 @@ export function setupRoutes(
   }
 ) {
   const repositories = services.databaseService.repositories;
+  const raceJsonImportService = new RaceJSONImportService(services.databaseService, io);
   // Health check endpoint
   app.get('/health', (req, res) => {
     res.json({
@@ -49,7 +51,7 @@ export function setupRoutes(
   app.use('/api/upload', uploadRoutes(services.databaseService));
   
   // Seasons management routes
-  app.use('/api/seasons', seasonsRoutes(services.databaseService, repositories));
+  app.use('/api/seasons', seasonsRoutes(services.databaseService, repositories, raceJsonImportService));
   
   // Drivers management routes
   app.use('/api/drivers', driversRoutes(services.databaseService, repositories));
@@ -61,6 +63,8 @@ export function setupRoutes(
   app.use('/api/sessions', sessionsRoutes(services.databaseService, repositories));
   
   // Race results and editing routes
-  setupRacesRoutes(services.databaseService, services.raceResultsEditor, io);
+  setupRacesRoutes(services.databaseService, services.raceResultsEditor, io, {
+    raceJsonImportService,
+  });
   app.use('/api/races', racesRoutes);
 }

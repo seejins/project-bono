@@ -155,7 +155,7 @@ function SeasonDashboardPage() {
   };
 
   const handleDriverSelect = (driverId: string) => {
-    navigate(`/history/driver/${driverId}`);
+    navigate(`/grid/${driverId}`);
   };
 
   const handleScheduleView = () => {

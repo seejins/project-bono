@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { BarChart3, TrendingUp, Activity, Award } from 'lucide-react';
+import { BarChart3, TrendingUp, Award, LineChart } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
 import { F123DataService } from '../services/F123DataService';
@@ -8,16 +8,23 @@ import { useLapAnalytics } from './DriverRaceAnalysis/hooks/useLapAnalytics';
 import { useStintAnalytics } from './DriverRaceAnalysis/hooks/useStintAnalytics';
 import { useRaceStats } from './DriverRaceAnalysis/hooks/useRaceStats';
 import { DriverRaceAnalysisProps, LapStatusType, LapData } from './DriverRaceAnalysis/types';
-import { formatSecondsValue, formatSecondsDifference, getCompoundKey, getCompoundDisplayName } from './DriverRaceAnalysis/utils';
+import {
+  formatSecondsValue,
+  formatSecondsDifference,
+  getCompoundKey,
+  getCompoundDisplayName,
+  isPitStopFlag,
+  buildPitReferenceLines,
+} from './DriverRaceAnalysis/utils';
 import { BRAND_COLORS, STATUS_COLORS } from '../theme/colors';
 import { OverviewTab } from './DriverRaceAnalysis/tabs/OverviewTab';
-import { PaceTab } from './DriverRaceAnalysis/tabs/PaceTab';
+import { PaceTab as ComparisonTab } from './DriverRaceAnalysis/tabs/PaceTab';
 import { StrategyTab } from './DriverRaceAnalysis/tabs/StrategyTab';
-import { TelemetryTab } from './DriverRaceAnalysis/tabs/TelemetryTab';
+import { PaceGraphsTab } from './DriverRaceAnalysis/tabs/PaceGraphsTab';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 import { motion } from 'framer-motion';
 
-type AnalyticsTab = 'overview' | 'pace' | 'strategy' | 'telemetry';
+type AnalyticsTab = 'overview' | 'pace' | 'comparison' | 'strategy';
 
 export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, initialSessionType }) => {
   const { raceData, sessions, defaultSessionId, loading, error } = useDriverRaceData(driverId, raceId);
@@ -86,8 +93,30 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   const sessionKind = selectedSession ? determineSessionKind(selectedSession.sessionType) : null;
 
   const getTeamColor = (team: string) => F123DataService.getTeamColor(team);
+  const getTeamColorHex = (team?: string | null) => F123DataService.getTeamColorHex(team ?? '');
   const getTireCompoundColor = (compound?: string) => F123DataService.getTireCompoundColor(compound);
   const getTireCompoundText = (compound?: string) => F123DataService.getTireCompoundText(compound);
+
+  const pitLapNumbers = useMemo(
+    () =>
+      lapData
+        .filter((lap) =>
+          isPitStopFlag(
+            (lap as any)?.pit_stop ??
+              (lap as any)?.pitStop ??
+              (lap as any)?.pit ??
+              (lap as any)?.isPitStop
+          )
+        )
+        .map((lap) => lap.lap_number)
+        .filter((lap): lap is number => typeof lap === 'number' && Number.isFinite(lap) && lap > 0),
+    [lapData]
+  );
+
+  const pitReferenceLines = useMemo(
+    () => buildPitReferenceLines(pitLapNumbers),
+    [pitLapNumbers]
+  );
 
   const getDriverDisplayName = (driverResult: any): string => {
     return (
@@ -173,7 +202,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         const lapNumber = payload?.lap;
         const info = lapNumber != null ? stintStartLapInfo.get(lapNumber) : undefined;
         if (!info || info.compoundKey !== compoundKey) {
-          return <g />;
+          return <g key={`stint-dot-placeholder-${compoundKey}-${lapNumber ?? 'na'}`} />;
         }
         const x = typeof cx === 'number' ? cx : 0;
         const y = typeof cy === 'number' ? cy : 0;
@@ -187,7 +216,10 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
 
         if (icon) {
           return (
-            <g pointerEvents="none">
+            <g
+              key={`stint-dot-icon-${compoundKey}-${lapNumber ?? 'na'}`}
+              pointerEvents="none"
+            >
               <image
                 href={icon}
                 x={x - halfSize}
@@ -202,6 +234,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
 
         return (
           <text
+            key={`stint-dot-text-${compoundKey}-${lapNumber ?? 'na'}`}
             x={x}
             y={y}
             textAnchor="middle"
@@ -222,7 +255,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     return compoundLineSetup.lines.map((line) => ({
       ...line,
       dot: createStintDotRenderer(line.dataKey),
-      connectNulls: false,
+      connectNulls: true,
     }));
   }, [compoundLineSetup.lines, createStintDotRenderer]);
 
@@ -673,7 +706,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     sessionKind === 'race'
       ? driver?.raceTime ?? '--:--.---'
       : fastestLapDisplay;
-  const teamColorHex = F123DataService.getTeamColorHex(driverTeamLabel);
+  const teamColorHex = getTeamColorHex(driverTeamLabel);
   const fallbackGlow = 'rgba(255,255,255,0.28)';
   const glowGradient = teamColorHex
     ? teamColorHex.trim().startsWith('#')
@@ -692,7 +725,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
 
   const easing: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
-  return (
+                    return (
     <div className="relative -mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0">
          <div
@@ -713,9 +746,11 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">Race Analysis</p>
-          <h1 className="text-4xl font-black uppercase tracking-[0.18em] text-slate-900 dark:text-white sm:text-5xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
             {driverNameLabel}
+          </p>
+          <h1 className="text-4xl font-black uppercase tracking-[0.18em] text-slate-900 dark:text-white sm:text-5xl">
+            Race Analysis
           </h1>
           <span className="text-sm font-medium uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
             {eventName}
@@ -738,7 +773,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-6">
             <button
               onClick={() => setActiveTab('overview')}
-                 className={`pt-4 pb-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'overview'
                   ? 'border-red-600 text-red-600'
                   : 'border-transparent text-gray-500 hover:text-gray-400 hover:border-gray-300'
@@ -751,20 +786,33 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             </button>
             <button
               onClick={() => setActiveTab('pace')}
-                 className={`pt-4 pb-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'pace'
                   ? 'border-red-600 text-red-600'
                   : 'border-transparent text-gray-500 hover:text-gray-400 hover:border-gray-300'
               }`}
             >
           <div className="flex items-center space-x-2">
-                <TrendingUp className="w-4 h-4" />
+                <LineChart className="w-4 h-4" />
                 <span>Pace</span>
           </div>
             </button>
             <button
+              onClick={() => setActiveTab('comparison')}
+              className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
+                activeTab === 'comparison'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-400 hover:border-gray-300'
+              }`}
+            >
+          <div className="flex items-center space-x-2">
+                <TrendingUp className="w-4 h-4" />
+                <span>Comparison</span>
+          </div>
+            </button>
+            <button
               onClick={() => setActiveTab('strategy')}
-                 className={`pt-4 pb-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'strategy'
                   ? 'border-red-600 text-red-600'
                   : 'border-transparent text-gray-500 hover:text-gray-400 hover:border-gray-300'
@@ -772,26 +820,13 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             >
           <div className="flex items-center space-x-2">
                 <Award className="w-4 h-4" />
-                   <span>Strategy</span>
-          </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('telemetry')}
-                 className={`pt-4 pb-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'telemetry'
-                  ? 'border-red-600 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-400 hover:border-gray-300'
-              }`}
-            >
-          <div className="flex items-center space-x-2">
-                <Activity className="w-4 h-4" />
-                <span>Telemetry</span>
+                <span>Strategy</span>
         </div>
             </button>
       </div>
             <div className="w-full md:w-auto">
                {sessions.length > 1 ? (
-                   <select
+                  <select
                   className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/40"
                    value={selectedSessionId ?? ''}
                    onChange={(event) => handleSelectSession(event.target.value || null)}
@@ -843,7 +878,26 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
               />
             )}
             {activeTab === 'pace' && (
-              <PaceTab
+              <PaceGraphsTab
+                driverName={driver?.name ?? 'Driver'}
+                lapData={lapData}
+                sessionDrivers={sessionDrivers}
+                formatSecondsValue={formatSecondsValue}
+                getTeamColorHex={getTeamColorHex}
+                pitLaps={pitLapNumbers}
+                primaryDriverId={
+                  driver
+                    ? (driver as any)?.id ??
+                      (driver as any)?.driver_id ??
+                      (driver as any)?.driverId ??
+                      (driver as any)?.member_id ??
+                      null
+                    : null
+                }
+              />
+          )}
+            {activeTab === 'comparison' && (
+              <ComparisonTab
                 driverName={driver?.name ?? 'Driver'}
                 comparisonDriverName={comparisonDriverName}
                 comparisonDriverId={comparisonDriverId}
@@ -858,9 +912,10 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 LapTimeTooltipContent={LapTimeTooltipContent}
                 DeltaTooltipContent={DeltaTooltipContent}
                 hexToRgba={hexToRgba}
+                pitReferenceLines={pitReferenceLines}
               />
-            )}
-            {activeTab === 'strategy' && (
+          )}
+          {activeTab === 'strategy' && (
               <StrategyTab
                 averageLapSeconds={averageLapSeconds}
                 compoundLineSetup={compoundLineSetup}
@@ -870,9 +925,9 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 formatSecondsValue={formatSecondsValue}
                 StintLapTooltip={StintLapTooltip}
                 CompoundBarTooltip={CompoundBarTooltip}
+                pitReferenceLines={pitReferenceLines}
               />
             )}
-            {activeTab === 'telemetry' && <TelemetryTab />}
           </motion.div>
 
           <motion.div

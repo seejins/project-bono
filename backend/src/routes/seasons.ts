@@ -1,7 +1,11 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { DatabaseService } from '../services/DatabaseService';
 import type { AppRepositories } from '../services/database/repositories';
 import type { SeasonData, SeasonStatus } from '../services/database/types';
+import { RaceJSONImportService } from '../services/RaceJSONImportService';
 
 const normalizeSeasonStatus = (value: any): SeasonStatus | undefined => {
   if (typeof value !== 'string') {
@@ -16,9 +20,41 @@ const normalizeSeasonStatus = (value: any): SeasonStatus | undefined => {
   return undefined;
 };
 
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../data/race-json-files');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `schedule-import-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+
+const scheduleUpload = multer({
+  storage: uploadStorage,
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.json'];
+    const fileExt = path.extname(file.originalname).toLowerCase();
+
+    if (allowedTypes.includes(fileExt)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JSON files are allowed'));
+    }
+  },
+});
+
 export default function createSeasonsRoutes(
   _dbService: DatabaseService,
   repositories: AppRepositories,
+  raceJsonImportService: RaceJSONImportService,
 ) {
   const router = express.Router();
   const { seasons, drivers, tracks, races } = repositories;
@@ -618,16 +654,29 @@ export default function createSeasonsRoutes(
   router.post('/:id/events', async (req, res) => {
     try {
       const { id } = req.params;
-      const { track_name, date, session_type, session_types, session_duration, weather_air_temp, weather_track_temp, weather_rain_percentage } = req.body;
+      const {
+        track_name,
+        event_name,
+        status,
+        date,
+        session_type,
+        session_types,
+        session_duration,
+        weather_air_temp,
+        weather_track_temp,
+        weather_rain_percentage,
+      } = req.body;
       
-      if (!track_name) {
-        return res.status(400).json({ error: 'Track name is required' });
+      if (!track_name && !event_name) {
+        return res.status(400).json({ error: 'Event or track name is required' });
       }
 
       await seasons.ensureInitialized();
       const eventId = await races.addEventToSeason(id, {
         track_name,
-        date: date || new Date().toISOString(), // Default to current date if not provided
+        event_name,
+        status,
+        date: date ?? null,
         session_type: session_type || 10, // Default to Race
         session_types: session_types || null, // Store the comma-separated session types
         session_duration: session_duration || 0,
@@ -646,6 +695,32 @@ export default function createSeasonsRoutes(
       res.status(500).json({ 
         error: 'Failed to add event to season',
         details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Reorder events in a season
+  router.post('/:id/events/reorder', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orderedEventIds } = req.body;
+
+      if (!Array.isArray(orderedEventIds) || orderedEventIds.length === 0) {
+        return res.status(400).json({ error: 'orderedEventIds must be a non-empty array' });
+      }
+
+      await seasons.ensureInitialized();
+      await races.updateEventOrder(id, orderedEventIds);
+
+      res.json({
+        success: true,
+        message: 'Event order updated successfully',
+      });
+    } catch (error) {
+      console.error('Reorder events error:', error);
+      res.status(500).json({
+        error: 'Failed to reorder events',
+        details: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -691,6 +766,61 @@ export default function createSeasonsRoutes(
       });
     }
   });
+
+  router.post(
+    '/:id/events/:eventId/upload',
+    scheduleUpload.single('resultsFile'),
+    async (req, res) => {
+      const cleanupFile = () => {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      };
+
+      try {
+        const { id, eventId } = req.params;
+
+        if (!req.file) {
+          return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        await seasons.ensureInitialized();
+        const eventSeasonId = await races.getSeasonIdFromEvent(eventId);
+        if (eventSeasonId !== id) {
+          cleanupFile();
+          return res.status(400).json({ error: 'Event does not belong to provided season' });
+        }
+
+        const validation = await raceJsonImportService.validateJSONFile(req.file.path);
+        if (!validation.valid) {
+          cleanupFile();
+          return res.status(400).json({
+            error: 'Invalid JSON file',
+            details: validation.errors,
+          });
+        }
+
+        const result = await raceJsonImportService.importRaceJSON(req.file.path, id, eventId);
+
+        cleanupFile();
+
+        res.json({
+          success: true,
+          message: 'Event results imported successfully',
+          raceId: result.raceId,
+          sessionResultId: result.sessionResultId,
+          importedCount: result.importedCount,
+        });
+      } catch (error) {
+        console.error('Upload event results error:', error);
+        cleanupFile();
+        res.status(500).json({
+          error: 'Failed to upload event results',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    },
+  );
 
   // Get active season
   router.get('/active', async (req, res) => {

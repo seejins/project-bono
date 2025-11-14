@@ -852,6 +852,184 @@ export const sessionMethods = {
     return insertResult.rows[0];
   },
 
+  async updateDriverUserMapping(
+    this: DatabaseService,
+    driverSessionResultId: string,
+    userId: string | null,
+  ): Promise<
+    Array<{
+      driverSessionResultId: string;
+      sessionResultId: string;
+      oldUserId: string | null;
+      newUserId: string | null;
+    }>
+  > {
+    const normalizedUserId = userId ? String(userId) : null;
+    const updates: Array<{
+      driverSessionResultId: string;
+      sessionResultId: string;
+      oldUserId: string | null;
+      newUserId: string | null;
+    }> = [];
+
+    await this.withTransaction(async (tx) => {
+      const current = await tx.query(
+        `SELECT 
+           dsr.session_result_id,
+           dsr.user_id,
+           dsr.json_driver_id,
+           dsr.json_driver_name,
+           sr.race_id
+         FROM driver_session_results dsr
+         JOIN session_results sr ON sr.id = dsr.session_result_id
+         WHERE dsr.id = $1`,
+        [driverSessionResultId],
+      );
+
+      if (!current.rows[0]) {
+        const error: any = new Error('Driver session result not found');
+        error.code = 'DRIVER_RESULT_NOT_FOUND';
+        throw error;
+      }
+
+      const {
+        session_result_id: sessionResultId,
+        user_id: previousUserIdRaw,
+        json_driver_id: jsonDriverId,
+        json_driver_name: jsonDriverName,
+        race_id: raceId,
+      } = current.rows[0];
+      const previousUserId: string | null = previousUserIdRaw || null;
+
+      let matchingDriverRows;
+      if (jsonDriverId !== null && jsonDriverId !== undefined) {
+        matchingDriverRows = await tx.query(
+          `SELECT dsr.id, dsr.session_result_id, dsr.user_id
+           FROM driver_session_results dsr
+           JOIN session_results sr ON sr.id = dsr.session_result_id
+           WHERE sr.race_id = $1
+             AND dsr.json_driver_id = $2`,
+          [raceId, jsonDriverId],
+        );
+      } else {
+        matchingDriverRows = await tx.query(
+          `SELECT dsr.id, dsr.session_result_id, dsr.user_id
+           FROM driver_session_results dsr
+           JOIN session_results sr ON sr.id = dsr.session_result_id
+           WHERE sr.race_id = $1
+             AND dsr.json_driver_id IS NULL
+             AND dsr.json_driver_name = $2`,
+          [raceId, jsonDriverName],
+        );
+      }
+
+      const now = new Date().toISOString();
+
+      for (const row of matchingDriverRows.rows) {
+        const targetId: string = row.id;
+        const targetSessionResultId: string = row.session_result_id;
+        const currentUserId: string | null = row.user_id || null;
+
+        if (targetId !== driverSessionResultId) {
+          if (
+            currentUserId &&
+            normalizedUserId &&
+            currentUserId !== normalizedUserId
+          ) {
+            const conflictError: any = new Error(
+              'User already mapped to another driver in this session',
+            );
+            conflictError.code = 'USER_ALREADY_MAPPED';
+            conflictError.conflictDriverSessionResultId = targetId;
+            throw conflictError;
+          }
+          if (normalizedUserId) {
+            const conflict = await tx.query(
+              `SELECT id
+               FROM driver_session_results
+               WHERE session_result_id = $1
+                 AND user_id = $2
+                 AND id <> $3
+               LIMIT 1`,
+              [targetSessionResultId, normalizedUserId, targetId],
+            );
+
+            if (conflict.rows.length > 0) {
+              const conflictError: any = new Error(
+                'User already mapped to another driver in this session',
+              );
+              conflictError.code = 'USER_ALREADY_MAPPED';
+              conflictError.conflictDriverSessionResultId = conflict.rows[0].id;
+              throw conflictError;
+            }
+          }
+        } else {
+          if (
+            normalizedUserId &&
+            normalizedUserId === currentUserId
+          ) {
+            // Already mapped as requested; continue but still cascade to others.
+          } else if (normalizedUserId) {
+            const conflict = await tx.query(
+              `SELECT id
+               FROM driver_session_results
+               WHERE session_result_id = $1
+                 AND user_id = $2
+                 AND id <> $3
+               LIMIT 1`,
+              [targetSessionResultId, normalizedUserId, targetId],
+            );
+
+            if (conflict.rows.length > 0) {
+              const conflictError: any = new Error(
+                'User already mapped to another driver in this session',
+              );
+              conflictError.code = 'USER_ALREADY_MAPPED';
+              conflictError.conflictDriverSessionResultId = conflict.rows[0].id;
+              throw conflictError;
+            }
+          }
+        }
+
+        if (currentUserId === normalizedUserId) {
+          updates.push({
+            driverSessionResultId: targetId,
+            sessionResultId: targetSessionResultId,
+            oldUserId: currentUserId,
+            newUserId: normalizedUserId,
+          });
+          continue;
+        }
+
+        await tx.query(
+          `UPDATE driver_session_results
+           SET user_id = $1,
+               updated_at = $2
+           WHERE id = $3`,
+          [normalizedUserId, now, targetId],
+        );
+
+        updates.push({
+          driverSessionResultId: targetId,
+          sessionResultId: targetSessionResultId,
+          oldUserId: currentUserId,
+          newUserId: normalizedUserId,
+        });
+      }
+
+      if (!matchingDriverRows.rows.some((row) => row.id === driverSessionResultId)) {
+        updates.push({
+          driverSessionResultId,
+          sessionResultId,
+          oldUserId: previousUserId,
+          newUserId: normalizedUserId,
+        });
+      }
+    });
+
+    return updates;
+  },
+
   async removePenalty(
     this: DatabaseService,
     driverSessionResultId: string,
@@ -931,7 +1109,7 @@ export const sessionMethods = {
     );
 
     await this.db.query(
-      `INSERT INTO race_edit_history (id, session_result_id, driver_id, edit_type, old_value, new_value, reason, edited_by, created_at)
+      `INSERT INTO race_edit_history (id, session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         uuidv4(),
@@ -989,7 +1167,7 @@ export const sessionMethods = {
     );
 
     await this.db.query(
-      `INSERT INTO race_edit_history (id, session_result_id, driver_id, edit_type, old_value, new_value, reason, edited_by, created_at)
+      `INSERT INTO race_edit_history (id, session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         uuidv4(),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
@@ -30,6 +30,24 @@ type PendingPenaltyRemoval = {
   driverSessionResultId: string;
 };
 
+type RaceDriverRow = F123DriverResult & {
+  driver_session_result_id?: string | null;
+  user_id?: string | null;
+  mappedUserId?: string | null;
+  mappedUserName?: string | null;
+  jsonDriverName?: string | null;
+  mappingDriverName?: string | null;
+  isHumanDriver?: boolean;
+  participantIsAi?: boolean | null;
+};
+
+type DriverMemberOption = {
+  id: string;
+  name: string;
+  number?: number | null;
+  team?: string | null;
+};
+
 interface RaceDetailProps {
   raceId: string;
   onDriverSelect: (driverId: string, raceId: string, initialSessionType?: 'race' | 'qualifying' | 'practice') => void;
@@ -39,18 +57,24 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const { isAuthenticated } = useAdmin();
   const [activeSession, setActiveSession] = useState<'practice' | 'qualifying' | 'race'>('race');
   const [raceData, setRaceData] = useState<any>(null);
-  const [drivers, setDrivers] = useState<F123DriverResult[]>([]);
+  const [drivers, setDrivers] = useState<RaceDriverRow[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [penaltyModalOpen, setPenaltyModalOpen] = useState(false);
-  const [selectedDriver, setSelectedDriver] = useState<F123DriverResult | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<RaceDriverRow | null>(null);
   const [penaltySeconds, setPenaltySeconds] = useState<string>('5');
   const [penaltyReason, setPenaltyReason] = useState<string>('');
   const [penaltiesByDriver, setPenaltiesByDriver] = useState<Record<string, DriverPenalty[]>>({});
   const [pendingPenaltyAdds, setPendingPenaltyAdds] = useState<PendingPenaltyAdd[]>([]);
   const [pendingPenaltyRemovals, setPendingPenaltyRemovals] = useState<PendingPenaltyRemoval[]>([]);
+  const [driverOptions, setDriverOptions] = useState<DriverMemberOption[]>([]);
+  const driverOptionsLoadedRef = useRef(false);
+  const [driverOptionsLoading, setDriverOptionsLoading] = useState(false);
+  const [mappingBusy, setMappingBusy] = useState<Record<string, boolean>>({});
+  const [mappingErrors, setMappingErrors] = useState<Record<string, string | null>>({});
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
   const normalizePenalties = useCallback((penalties: any, driverSessionResultId: string): DriverPenalty[] => {
     let list = penalties;
@@ -82,6 +106,45 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   useEffect(() => {
     fetchRaceData();
   }, [raceId]);
+
+  const fetchDriverOptions = useCallback(async () => {
+    if (driverOptionsLoadedRef.current || driverOptionsLoading) {
+      return;
+    }
+
+    setDriverOptionsLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/drivers`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch drivers: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const driverList = Array.isArray(data.drivers) ? data.drivers : [];
+      const options: DriverMemberOption[] = driverList.map((driver: any) => ({
+        id: String(driver.id),
+        name: driver.name ?? 'Unknown Driver',
+        number: driver.number ?? null,
+        team: driver.team ?? null,
+      }));
+      setDriverOptions(options);
+      driverOptionsLoadedRef.current = true;
+    } catch (error) {
+      console.error('Error fetching driver options:', error);
+    } finally {
+      setDriverOptionsLoading(false);
+    }
+  }, [apiUrl, driverOptionsLoading]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isEditing) {
+      return;
+    }
+    if (driverOptionsLoadedRef.current) {
+      return;
+    }
+    fetchDriverOptions();
+  }, [isAuthenticated, isEditing, fetchDriverOptions]);
 
   // Memoize session type checks (computed once, reused everywhere)
   const sessionTypes = useMemo(() => ({
@@ -145,7 +208,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
 
     // Transform the backend data to match F123DriverResult interface
     // Note: DB already returns sorted by position, no need to sort again
-    const transformedDrivers: F123DriverResult[] = session.results.map((result: any, index: number) => {
+    const transformedDrivers: RaceDriverRow[] = session.results.map((result: any, index: number) => {
       // Parse additional_data ONCE and reuse
       let additionalData = null;
       if (result.additional_data) {
@@ -189,12 +252,69 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         }
       }
       
+      const participantData =
+        additionalData?.participantData ||
+        additionalData?.participant_data ||
+        additionalData?.ParticipantData ||
+        null;
+
+      const aiIndicators = [
+        participantData?.['ai-controlled'],
+        participantData?.aiControlled,
+        participantData?.ai_controlled,
+        participantData?.isAiControlled,
+        participantData?.isAI,
+        result.ai_controlled,
+        result.aiControlled,
+        result.is_ai_controlled,
+      ];
+
+      let aiControlled: boolean | null = null;
+      for (const indicator of aiIndicators) {
+        if (indicator === undefined || indicator === null) {
+          continue;
+        }
+        if (typeof indicator === 'boolean') {
+          aiControlled = indicator;
+          break;
+        }
+        if (typeof indicator === 'number') {
+          aiControlled = indicator === 1;
+          break;
+        }
+        if (typeof indicator === 'string') {
+          const normalized = indicator.trim().toLowerCase();
+          if (['true', '1', 'yes', 'y', 'ai'].includes(normalized)) {
+            aiControlled = true;
+            break;
+          }
+          if (['false', '0', 'no', 'n', 'human'].includes(normalized)) {
+            aiControlled = false;
+            break;
+          }
+        }
+      }
+
+      const mappedUserId = result.user_id ? String(result.user_id) : null;
+      const mappedUserName = result.driver_name || null;
+      const jsonDriverName = result.json_driver_name || null;
+      const fallbackMappingName = result.mapping_driver_name || null;
+      const preferredDisplayName =
+        mappedUserName || jsonDriverName || fallbackMappingName || 'Unknown Driver';
+      const isHumanDriver = aiControlled === null ? Boolean(mappedUserId) : !aiControlled;
+      
       const driver: any = {
         id: result.id, // Use driver_session_results.id as primary identifier (UUID)
         driver_session_result_id: result.id, // Primary key from driver_session_results table (always a UUID)
         user_id: result.user_id, // Tournament participant/user (NULL until mapped)
         json_driver_id: result.json_driver_id ? String(result.json_driver_id) : null, // In-game driver ID from column
-        name: result.json_driver_name || result.driver_name || result.mapping_driver_name || 'Unknown Driver',
+        mappedUserId,
+        mappedUserName,
+        jsonDriverName,
+        mappingDriverName: fallbackMappingName,
+        isHumanDriver,
+        participantIsAi: aiControlled,
+        name: preferredDisplayName,
         team: result.json_team_name || result.mapping_team_name || result.driver_team || 'Unknown Team',
         number: result.json_car_number || result.driver_number || result.mapping_driver_number || result.position || 0,
         
@@ -370,7 +490,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     if (!sessionId) return;
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/api/races/sessions/${sessionId}/penalties`);
 
       if (response.ok) {
@@ -410,7 +529,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     if (!driverSessionResultId) return;
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/api/races/driver-results/${driverSessionResultId}/penalties`);
 
       if (!response.ok) {
@@ -450,8 +568,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const fetchRaceData = async () => {
     try {
       setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
       // Fetch race data
       const raceResponse = await fetch(`${apiUrl}/api/races/${raceId}`);
       if (raceResponse.ok) {
@@ -509,14 +625,145 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300 2xl:text-sm';
   };
 
-  const handleDriverClick = (driver: F123DriverResult) => {
+  const handleDriverClick = (driver: RaceDriverRow) => {
     onDriverSelect(driver.id, raceId, activeSession);
   };
 
   // Get driver_session_result_id (UUID) - this is the primary identifier for all operations
-  const getDriverSessionResultId = (driver: F123DriverResult): string | null => {
+  const getDriverSessionResultId = (driver: RaceDriverRow): string | null => {
     return (driver as any).driver_session_result_id || (driver as any).id || null;
   };
+
+  const handleDriverMappingChange = useCallback(
+    async (driver: RaceDriverRow, nextUserId: string | null) => {
+      const driverSessionResultId = getDriverSessionResultId(driver);
+      if (!driverSessionResultId) {
+        return;
+      }
+
+      const normalizedNextUserId = nextUserId ? String(nextUserId) : null;
+      const currentMappedId =
+        driver.mappedUserId ??
+        driver.user_id ??
+        (driver as any)?.mappedUserId ??
+        (driver as any)?.user_id ??
+        null;
+
+      if ((currentMappedId ?? '') === (normalizedNextUserId ?? '')) {
+        return;
+      }
+
+      if (mappingBusy[driverSessionResultId]) {
+        return;
+      }
+
+      setMappingBusy((prev) => ({ ...prev, [driverSessionResultId]: true }));
+      setMappingErrors((prev) => ({ ...prev, [driverSessionResultId]: null }));
+
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/races/driver-results/${driverSessionResultId}/mapping`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: normalizedNextUserId,
+              editedBy: 'admin',
+              reason: normalizedNextUserId
+                ? `Mapped to ${
+                    driverOptions.find((option) => option.id === normalizedNextUserId)?.name ??
+                    'league driver'
+                  }`
+                : 'Cleared driver mapping',
+            }),
+          },
+        );
+
+        const data = await response.json();
+        if (response.status === 409) {
+          throw new Error(
+            data.error ||
+              'That league driver is already mapped to another result. Unassign them first.',
+          );
+        }
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || data.details || 'Failed to update driver mapping');
+        }
+
+        const selectedOption = normalizedNextUserId
+          ? driverOptions.find((option) => option.id === normalizedNextUserId) ?? null
+          : null;
+        const nextDisplayName =
+          selectedOption?.name ??
+          driver.mappedUserName ??
+          driver.jsonDriverName ??
+          driver.mappingDriverName ??
+          driver.name;
+
+        setDrivers((prev) =>
+          prev.map((row) => {
+            if (getDriverSessionResultId(row) !== driverSessionResultId) {
+              return row;
+            }
+
+            const updated: RaceDriverRow = {
+              ...row,
+              user_id: normalizedNextUserId,
+              mappedUserId: normalizedNextUserId,
+              mappedUserName: selectedOption?.name ?? null,
+              name: nextDisplayName,
+            };
+            return updated;
+          }),
+        );
+
+        setSessions((prevSessions) =>
+          prevSessions.map((session: any) => {
+            if (!Array.isArray(session?.results)) {
+              return session;
+            }
+
+            const updatedResults = session.results.map((result: any) => {
+              const resultId = result?.id || result?.driver_session_result_id;
+              if (resultId !== driverSessionResultId) {
+                return result;
+              }
+
+              return {
+                ...result,
+                user_id: normalizedNextUserId,
+                driver_name: selectedOption?.name ?? null,
+              };
+            });
+
+            return {
+              ...session,
+              results: updatedResults,
+            };
+          }),
+        );
+
+        setMappingErrors((prev) => {
+          const next = { ...prev };
+          delete next[driverSessionResultId];
+          return next;
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to update driver mapping';
+        setMappingErrors((prev) => ({ ...prev, [driverSessionResultId]: message }));
+      } finally {
+        setMappingBusy((prev) => {
+          const next = { ...prev };
+          delete next[driverSessionResultId];
+          return next;
+        });
+      }
+    },
+    [apiUrl, driverOptions, mappingBusy, setDrivers, setSessions],
+  );
 
   // Memoize penalty map for O(1) lookups instead of O(n) array iterations
   const penaltyMap = useMemo(() => {
@@ -547,6 +794,145 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return map;
   }, [penaltiesByDriver, pendingPenaltyAdds, pendingPenaltyRemovals]);
 
+  const usedMappedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    drivers.forEach((driver) => {
+      const mappedId =
+        driver.mappedUserId ??
+        driver.user_id ??
+        (driver as any)?.mappedUserId ??
+        (driver as any)?.user_id ??
+        null;
+      if (mappedId) {
+        ids.add(String(mappedId));
+      }
+    });
+    return ids;
+  }, [drivers]);
+
+  const renderDriverCell = useCallback(
+    (_: unknown, driver: RaceDriverRow) => {
+      const driverSessionResultId = getDriverSessionResultId(driver);
+      const mappedUserId =
+        driver.mappedUserId ??
+        driver.user_id ??
+        (driver as any)?.mappedUserId ??
+        (driver as any)?.user_id ??
+        null;
+      const currentMappedIdValue = mappedUserId ?? '';
+      const isSaving =
+        driverSessionResultId != null && Boolean(mappingBusy[driverSessionResultId]);
+      const errorMessage =
+        driverSessionResultId != null ? mappingErrors[driverSessionResultId] : null;
+
+      const combinedOptions =
+        mappedUserId &&
+        !driverOptions.some((option) => option.id === String(mappedUserId))
+          ? [
+              ...driverOptions,
+              {
+                id: String(mappedUserId),
+                name:
+                  driver.mappedUserName ??
+                  driver.jsonDriverName ??
+                  (driver as any)?.json_driver_name ??
+                  'Mapped Driver',
+                number: null,
+                team: null,
+              },
+            ]
+          : driverOptions;
+
+      return (
+        <div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                {driver.name}
+              </span>
+              {isAuthenticated && isEditing && driverSessionResultId && (
+                <select
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:border-slate-400 focus:border-red-600 focus:outline-none focus:ring-0 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:focus:border-red-400"
+                  value={currentMappedIdValue}
+                  disabled={isSaving || driverOptionsLoading}
+                  onChange={(event) => {
+                    handleDriverMappingChange(driver, event.target.value || null);
+                  }}
+                >
+                  <option value="">Unassigned</option>
+                  {combinedOptions.map((option) => {
+                    const optionDisabled =
+                      option.id !== currentMappedIdValue && usedMappedUserIds.has(option.id);
+                    const labelParts = [
+                      option.name,
+                      option.number != null ? `#${option.number}` : null,
+                      option.team ?? null,
+                    ].filter(Boolean);
+                    return (
+                      <option key={option.id} value={option.id} disabled={optionDisabled}>
+                        {labelParts.join(' • ')}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              {isSaving && (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500">Saving…</span>
+              )}
+            </div>
+
+            {activeSession === 'race' && driver.positionGain != null && (
+              <div className="flex items-center space-x-1">
+                {driver.positionGain > 0 ? (
+                  <>
+                    <ArrowUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="text-sm text-green-600 dark:text-green-400">
+                      {driver.positionGain}
+                    </span>
+                  </>
+                ) : driver.positionGain < 0 ? (
+                  <>
+                    <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <span className="text-sm text-red-600 dark:text-red-400">
+                      {Math.abs(driver.positionGain)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Minus className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">0</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          {errorMessage && isAuthenticated && isEditing && (
+            <div className="mt-1 text-xs text-red-500 dark:text-red-400">{errorMessage}</div>
+          )}
+        </div>
+      );
+    },
+    [
+      activeSession,
+      driverOptions,
+      driverOptionsLoading,
+      handleDriverMappingChange,
+      isAuthenticated,
+      isEditing,
+      mappingBusy,
+      mappingErrors,
+      usedMappedUserIds,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isEditing) {
+      setMappingErrors({});
+      setMappingBusy({});
+    }
+  }, [isEditing]);
+
+
   // Memoize fastest sectors calculation (use reduce to avoid stack overflow with large arrays)
   // MUST be before any early returns to follow Rules of Hooks
   const fastestSectors = useMemo(() => ({
@@ -570,7 +956,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
 
   // Helper function to check if a driver has existing penalties
   // Uses driver_session_result_id (UUID) for direct matching
-  const driverHasExistingPenalties = useCallback((driver: F123DriverResult): boolean => {
+  const driverHasExistingPenalties = useCallback((driver: RaceDriverRow): boolean => {
     const driverSessionResultId = getDriverSessionResultId(driver);
     
     // Silently return false if we can't identify the driver
@@ -594,7 +980,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return matchingPendingAdd;
   }, [penaltyMap, pendingPenaltyAdds]);
 
-  const formatRaceTotalTime = (driver: F123DriverResult) => {
+  const formatRaceTotalTime = (driver: RaceDriverRow) => {
     if ((driver as any)._raceTimeFormatted && driver.raceTime) {
       return (driver as any).raceTime;
     }
@@ -607,7 +993,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return '--:--.---';
   };
 
-  const renderPenaltyCell = (driver: F123DriverResult) => {
+  const renderPenaltyCell = (driver: RaceDriverRow) => {
     if (isEditing) {
       const hasExistingPenalties = driverHasExistingPenalties(driver);
       const buttonColor = hasExistingPenalties
@@ -685,7 +1071,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return <span className="text-base text-gray-500 dark:text-gray-400">-</span>;
   };
 
-  const renderRaceTiresCell = (driver: F123DriverResult) => {
+  const renderRaceTiresCell = (driver: RaceDriverRow) => {
     const tiresUsed = (driver as any).raceTiresUsed;
     if (!tiresUsed || (Array.isArray(tiresUsed) && tiresUsed.length === 0)) {
       return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
@@ -740,7 +1126,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     );
   };
 
-  const renderQualifyingTireCell = (driver: F123DriverResult) => {
+  const renderQualifyingTireCell = (driver: RaceDriverRow) => {
     const tire = (driver as any).qualifyingTire;
     if (!tire) {
       return <span className="text-lg text-gray-500 dark:text-gray-400">-</span>;
@@ -768,7 +1154,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
 
   // Helper function to get all penalties for a driver (for modal display)
   // Uses driver_session_result_id (UUID) for direct matching with Map lookup
-  const getDriverPenalties = useCallback((driver: F123DriverResult): DriverPenalty[] => {
+  const getDriverPenalties = useCallback((driver: RaceDriverRow): DriverPenalty[] => {
     const driverSessionResultId = getDriverSessionResultId(driver);
     
     if (!driverSessionResultId) return [];
@@ -847,8 +1233,6 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   };
 
   const handleSaveAllChanges = async () => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
     try {
       // Apply all pending penalty additions (use driverSessionResultId)
       for (const penalty of pendingPenaltyAdds) {
@@ -934,7 +1318,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     console.log('Edit mode cancelled - all pending changes discarded');
   };
 
-  const handleRemovePenaltyById = (driver: F123DriverResult, penalty: DriverPenalty) => {
+  const handleRemovePenaltyById = (driver: RaceDriverRow, penalty: DriverPenalty) => {
     // Add to pending removals instead of applying immediately
     // Use driver_session_result_id (UUID) for matching
     const driverSessionResultId = getDriverSessionResultId(driver);
@@ -1025,7 +1409,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const baseHeaderPadding = 'px-3 py-3 2xl:px-4 2xl:py-3';
   const baseCellPadding = 'px-3 py-3 2xl:px-4 2xl:py-3';
 
-  const tableColumns: DashboardTableColumn<F123DriverResult>[] = [
+  const tableColumns: DashboardTableColumn<RaceDriverRow>[] = [
     {
       key: 'position',
       label: 'Pos',
@@ -1037,12 +1421,12 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
           ? row.qualifyingPosition ?? (row as any).position ?? null
           : row.racePosition ?? (row as any).position ?? null;
 
-  return (
+    return (
           <div className="flex justify-center">
             <span className={getPositionBadgeClass(positionValue)}>
               P{positionValue ?? '—'}
             </span>
-          </div>
+      </div>
         );
       },
     },
@@ -1051,32 +1435,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       label: 'Driver',
       align: 'left' as const,
       headerClassName: clsx(baseHeaderPadding, 'text-left'),
-      className: clsx(baseCellPadding, 'w-56'),
-      render: (_: unknown, row) => (
-        <div className="flex items-center justify-between">
-          <div className="text-base font-semibold text-slate-900 dark:text-slate-100">{row.name}</div>
-          {activeSession === 'race' && row.positionGain != null && (
-            <div className="ml-4 flex items-center space-x-1">
-              {row.positionGain > 0 ? (
-                <>
-                  <ArrowUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  <span className="text-sm font-normal text-green-600 dark:text-green-400">{row.positionGain}</span>
-                </>
-              ) : row.positionGain < 0 ? (
-                <>
-                  <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  <span className="text-sm font-normal text-red-600 dark:text-red-400">{Math.abs(row.positionGain)}</span>
-                </>
-              ) : (
-                <>
-                  <Minus className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400">0</span>
-                </>
-              )}
-              </div>
-              )}
-            </div>
-      ),
+    className: clsx(baseCellPadding, 'w-56'),
+      render: renderDriverCell,
     },
     {
       key: 'team',
@@ -1282,15 +1642,15 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-10 text-center text-sm text-red-200 backdrop-blur dark:border-red-400/40 dark:bg-red-500/15">
           <p className="text-base font-semibold uppercase tracking-[0.3em]">Unable to load</p>
           <p className="mt-2 text-sm text-red-200/80">{error}</p>
-          </div>
+      </div>
       )}
 
       {viewState === 'empty' && (
         <div className="rounded-3xl border border-dashed border-white/20 bg-white/10 p-12 text-center text-sm text-white/70 backdrop-blur dark:border-white/15 dark:bg-slate-900/50">
           <p className="text-base font-semibold uppercase tracking-[0.3em] text-white/80">No race selected</p>
           <p className="mt-2 text-sm text-white/65">Choose a race to review classification, stints, and telemetry.</p>
-        </div>
-      )}
+              </div>
+              )}
 
       {viewState === 'ready' && (
         <div className="space-y-6">

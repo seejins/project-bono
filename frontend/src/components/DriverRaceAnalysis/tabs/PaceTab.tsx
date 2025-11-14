@@ -1,7 +1,7 @@
 import React from 'react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from '../../charts/ChartCard';
-import { BaseLineChart } from '../../charts/BaseLineChart';
+import { BaseLineChart, type ReferenceLineConfig } from '../../charts/BaseLineChart';
 import { BRAND_COLORS, STATUS_COLORS } from '../../../theme/colors';
 
 type OverlayLegendItem = {
@@ -39,6 +39,7 @@ interface PaceTabProps {
   LapTimeTooltipContent: React.FC<TooltipProps<number, string>>;
   DeltaTooltipContent: React.FC<TooltipProps<number, string>>;
   hexToRgba: (hex: string, alpha: number) => string;
+  pitReferenceLines?: ReferenceLineConfig[];
 }
 
 export const PaceTab: React.FC<PaceTabProps> = ({
@@ -56,6 +57,7 @@ export const PaceTab: React.FC<PaceTabProps> = ({
   LapTimeTooltipContent,
   DeltaTooltipContent,
   hexToRgba,
+  pitReferenceLines = [],
 }) => {
   return (
     <div className="space-y-6">
@@ -158,6 +160,9 @@ export const PaceTab: React.FC<PaceTabProps> = ({
                 legend
                 overlays={chartOverlays}
                 className="h-full"
+                enableSeriesHighlight
+                dimmedOpacity={1}
+                referenceLines={pitReferenceLines}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -201,9 +206,14 @@ export const PaceTab: React.FC<PaceTabProps> = ({
                 ]}
                 yTickFormatter={(value) => formatSecondsDifference(value as number)}
                 tooltipContent={<DeltaTooltipContent />}
-                referenceLines={[{ y: 0, stroke: BRAND_COLORS.muted, strokeDasharray: '4 4' }]}
+                referenceLines={[
+                  { y: 0, stroke: BRAND_COLORS.muted, strokeDasharray: '4 4' },
+                  ...pitReferenceLines,
+                ]}
                 overlays={chartOverlays}
                 className="h-full"
+                enableSeriesHighlight
+                dimmedOpacity={1}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">

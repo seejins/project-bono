@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from '../../charts/ChartCard';
-import { BaseLineChart, type LineConfig } from '../../charts/BaseLineChart';
+import { BaseLineChart, type LineConfig, type ReferenceLineConfig } from '../../charts/BaseLineChart';
 import { BaseBarChart } from '../../charts/BaseBarChart';
 import { BRAND_COLORS, STATUS_COLORS } from '../../../theme/colors';
 
@@ -20,6 +20,7 @@ interface StrategyTabProps {
   formatSecondsValue: (seconds?: number | null) => string;
   StintLapTooltip: React.FC<TooltipProps<number, string>>;
   CompoundBarTooltip: React.FC<TooltipProps<number, string>>;
+  pitReferenceLines?: ReferenceLineConfig[];
 }
 
 export const StrategyTab: React.FC<StrategyTabProps> = ({
@@ -31,7 +32,24 @@ export const StrategyTab: React.FC<StrategyTabProps> = ({
   formatSecondsValue,
   StintLapTooltip,
   CompoundBarTooltip,
+  pitReferenceLines = [],
 }) => {
+  const combinedReferenceLines = useMemo(() => {
+    const pitLines = pitReferenceLines ?? [];
+    if (averageLapSeconds === null) {
+      return pitLines;
+    }
+    return [
+      ...pitLines,
+      {
+        y: averageLapSeconds,
+        stroke: STATUS_COLORS.neutral,
+        strokeDasharray: '4 4',
+        label: { value: 'Avg', fill: BRAND_COLORS.mutedStrong, position: 'right' },
+      } as ReferenceLineConfig,
+    ];
+  }, [averageLapSeconds, pitReferenceLines]);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -58,18 +76,7 @@ export const StrategyTab: React.FC<StrategyTabProps> = ({
                 autoDomainPadding={{ axis: 'y', padding: 20, clampToZero: true }}
                 yTickFormatter={(value) => formatSecondsValue(value as number)}
                 tooltipContent={<StintLapTooltip />}
-                referenceLines={
-                  averageLapSeconds !== null
-                    ? [
-                        {
-                          y: averageLapSeconds,
-                          stroke: STATUS_COLORS.neutral,
-                          strokeDasharray: '4 4',
-                          label: { value: 'Avg', fill: BRAND_COLORS.mutedStrong, position: 'right' },
-                        },
-                      ]
-                    : undefined
-                }
+                referenceLines={combinedReferenceLines}
                 referenceAreas={stintSegments.map((segment) => ({
                   x1: segment.startLap - 0.5,
                   x2: segment.endLap + 0.5,
