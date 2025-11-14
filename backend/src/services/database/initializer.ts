@@ -315,6 +315,38 @@ export class DatabaseInitializer {
         `);
       });
 
+      await this.runMigration('add_missing_indexes', async () => {
+        // Index on driver_session_results.session_result_id (most common query pattern)
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_driver_session_results_session_result_id 
+          ON driver_session_results(session_result_id)
+        `);
+
+        // Index on session_results.race_id (common query pattern)
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_session_results_race_id 
+          ON session_results(race_id)
+        `);
+
+        // Composite index on session_results(race_id, session_type) for WHERE race_id = $1 AND session_type = X patterns
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_session_results_race_id_session_type 
+          ON session_results(race_id, session_type)
+        `);
+
+        // Composite index on driver_session_results(session_result_id, json_driver_id)
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_driver_session_results_session_result_id_json_driver_id 
+          ON driver_session_results(session_result_id, json_driver_id)
+        `);
+
+        // Ensure lap_times indexes exist (may already exist, but ensure they do)
+        await this.db.query(`
+          CREATE INDEX IF NOT EXISTS idx_lap_times_driver_session_result_id 
+          ON lap_times(driver_session_result_id)
+        `);
+      });
+
       console.log('✅ Database migrations completed');
     } catch (error) {
       console.error('❌ Migration error:', error);

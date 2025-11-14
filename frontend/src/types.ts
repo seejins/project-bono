@@ -187,6 +187,6 @@ export interface PreviousRaceResults {
       averageLapTimeMs: number | null;
       driverId?: string | null;
     }>;
-  }>;
+  };
 }
 

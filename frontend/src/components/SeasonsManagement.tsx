@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, AlertCircle, X, Trophy, ArrowLeft, Settings, Flag } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
+import logger from '../utils/logger';
+import { useSeason } from '../contexts/SeasonContext';
 import { SeasonDetail } from './SeasonDetail';
 
 type SeasonStatus = 'draft' | 'active' | 'completed';
@@ -45,6 +47,7 @@ interface SeasonsManagementProps {
 }
 
 export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
+  const { refreshSeasons } = useSeason();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -132,7 +135,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       }
 
     } catch (error) {
-      console.error('Error loading data:', error);
+      logger.error('Error loading data:', error);
       setStatus('error');
       setStatusMessage('Failed to load data');
     } finally {
@@ -148,7 +151,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
         setEvents(data.events || []);
       }
     } catch (error) {
-      console.error('Error loading events:', error);
+      logger.error('Error loading events:', error);
     }
   };
 
@@ -374,6 +377,9 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
       if (updatedSeason) {
         handleSeasonDetailUpdated(updatedSeason);
       }
+
+      // Refresh SeasonContext to sync with database state
+      await refreshSeasons();
 
       await loadData();
     } catch (error) {

@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../utils/api';
+import logger from '../utils/logger';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
 import { STATUS_COLORS } from '../theme/colors';
@@ -100,6 +102,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     };
 
     const { currentSeason } = useSeason();
+    const navigate = useNavigate();
     const [raceLabel, setRaceLabel] = useState('Season Leaders');
     const [seasonTag, setSeasonTag] = useState<string | null>(null);
     const [raceDate, setRaceDate] = useState<string | null>(null);
@@ -116,6 +119,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     const [cardsVisible, setCardsVisible] = useState(false);
     const [buttonVisible, setButtonVisible] = useState(false);
     const [videoRevealed, setVideoRevealed] = useState(false);
+    const [videoLoaded, setVideoLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedVideo] = useState(() => getRandomVideo()); // Random video selected once on mount
 
@@ -298,7 +302,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           }
         } catch (err) {
           if (!isCancelled) {
-            console.error('Hero podium load error:', err);
+            logger.error('Hero podium load error:', err);
             setError(err instanceof Error ? err.message : 'Unable to load race podium');
             setPodiumEntries([]);
             setPreviousRacePodium([]);
@@ -484,6 +488,9 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           muted
           loop
           playsInline
+          preload="metadata"
+          onLoadedData={() => setVideoLoaded(true)}
+          onCanPlay={() => setVideoLoaded(true)}
         />
         <div
           className={clsx(
@@ -566,7 +573,10 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 cardsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-16'
               )}
             >
-              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article
+                onClick={() => navigate('/races')}
+                className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur cursor-pointer transition-colors hover:bg-black/35"
+              >
                 <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
                   Next Event
                 </h3>
@@ -588,7 +598,13 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 )}
               </article>
 
-              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article
+                onClick={() => previousEvent?.id && navigate(`/races/${previousEvent.id}`)}
+                className={clsx(
+                  'rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur transition-colors',
+                  previousEvent?.id ? 'cursor-pointer hover:bg-black/35' : ''
+                )}
+              >
                 <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
                   Last Race Podium
                 </h3>
@@ -621,7 +637,10 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 </ul>
               </article>
 
-              <article className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur">
+              <article
+                onClick={() => navigate('/season')}
+                className="rounded-3xl border border-white/20 bg-black/25 p-6 text-white shadow-lg backdrop-blur cursor-pointer transition-colors hover:bg-black/35"
+              >
                 <h3 className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">
                   Season Progress
                 </h3>

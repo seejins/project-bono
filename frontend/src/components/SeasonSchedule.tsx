@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatDate, formatTime } from '../utils/dateUtils';
 import { Calendar, Clock, MapPin, Flag, ChevronLeft, ChevronRight, Plus, Edit, Trash2 } from 'lucide-react';
 
 interface Race {
@@ -39,21 +40,6 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatTime = (timeString: string) => {
-    return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

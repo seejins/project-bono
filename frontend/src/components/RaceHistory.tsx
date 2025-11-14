@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Flag, Trophy, Zap, Clock, CheckCircle, Circle } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
+import { formatDate } from '../utils/dateUtils';
 
 interface RaceEvent {
   id: string;
@@ -32,33 +35,48 @@ export const RaceHistory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentSeason) {
-      fetchRaceEvents();
-    }
-  }, [currentSeason]);
-
-  const fetchRaceEvents = async () => {
     if (!currentSeason) return;
-    
-    try {
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
-      // Fetch race events for the current season
-      const response = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/events`);
-      if (response.ok) {
-        const data = await response.json();
-        setRaceEvents(data.events || []);
+
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    const fetchRaceEvents = async () => {
+      try {
+        setLoading(true);
+        const apiUrl = getApiUrl();
+        
+        // Fetch race events for the current season
+        const response = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/events`, { signal });
+        if (signal.aborted) return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (!signal.aborted) {
+            setRaceEvents(data.events || []);
+          }
+        }
+        
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching race events:', error);
+        if (!signal.aborted) {
+          setError('Failed to load race events');
+          setRaceEvents([]);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
-      
-    } catch (error) {
-      console.error('Error fetching race events:', error);
-      setError('Failed to load race events');
-      setRaceEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchRaceEvents();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [currentSeason]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -86,14 +104,6 @@ export const RaceHistory: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   if (loading) {
     return (

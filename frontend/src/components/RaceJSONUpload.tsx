@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
 
 export const RaceJSONUpload: React.FC = () => {
   const { currentSeason } = useSeason();
@@ -16,7 +18,7 @@ export const RaceJSONUpload: React.FC = () => {
         const existingNames = new Set(prevFiles.map(f => f.name));
         const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
         const updated = [...prevFiles, ...uniqueNewFiles];
-        console.log(`Total files: ${updated.length}`, updated.map(f => f.name));
+        logger.debug(`Total files: ${updated.length}`, updated.map(f => f.name));
         return updated;
       });
       setResult(null);
@@ -44,7 +46,7 @@ export const RaceJSONUpload: React.FC = () => {
       });
       formData.append('seasonId', currentSeason.id);
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/races/import-json-batch`, {
         method: 'POST',
         body: formData

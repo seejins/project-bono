@@ -12,8 +12,8 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "dependencies": {
-    "@heroicons/react": "^2.2.0",
     "@hello-pangea/dnd": "^16.5.0",
+    "@heroicons/react": "^2.2.0",
     "clsx": "^2.0.0",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.294.0",
@@ -26,8 +26,8 @@
     "tailwind-merge": "^2.0.0"
   },
   "devDependencies": {
-    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react": "^18.2.43",
+    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
@@ -40,6 +40,7 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
+    "vite-imagetools": "^9.0.0",
     "vitest": "^1.0.4"
   }
 }

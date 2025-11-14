@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Suspense, lazy } from 'react';
 import clsx from 'clsx';
 import { io } from 'socket.io-client';
 import {
@@ -13,16 +13,18 @@ import {
   useSearchParams,
   useNavigationType,
 } from 'react-router-dom';
+import { getApiUrl } from './utils/api';
 import { SeasonDashboard } from './components/SeasonDashboard';
 import { Grid } from './components/Grid';
-import { DriverSeasonStats } from './components/DriverSeasonStats';
 import { HistoryPage } from './components/HistoryPage';
-import { DriverCareerProfileComponent } from './components/DriverCareerProfile';
-import { RacesDashboard } from './components/RacesDashboard';
-import { RaceDetail } from './components/RaceDetail';
-import { DriverRaceAnalysis } from './components/DriverRaceAnalysis';
-import { LiveTimings } from './components/LiveTimings';
-import { AdminPanel } from './components/AdminPanel';
+// Lazy load heavy components for code splitting
+const DriverSeasonStats = lazy(() => import('./components/DriverSeasonStats').then(m => ({ default: m.DriverSeasonStats })));
+const DriverCareerProfileComponent = lazy(() => import('./components/DriverCareerProfile').then(m => ({ default: m.DriverCareerProfileComponent })));
+const RacesDashboard = lazy(() => import('./components/RacesDashboard').then(m => ({ default: m.RacesDashboard })));
+const RaceDetail = lazy(() => import('./components/RaceDetail').then(m => ({ default: m.RaceDetail })));
+const DriverRaceAnalysis = lazy(() => import('./components/DriverRaceAnalysis').then(m => ({ default: m.DriverRaceAnalysis })));
+const LiveTimings = lazy(() => import('./components/LiveTimings').then(m => ({ default: m.LiveTimings })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 import { AlertSystem } from './components/AlertSystem';
 import { HeaderNavigation } from './components/HeaderNavigation';
 import { PasswordGate } from './components/PasswordGate';
@@ -63,7 +65,7 @@ function AppLayout() {
   };
 
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const apiUrl = getApiUrl();
     const socket = io(apiUrl);
 
     socket.on('connect', () => {
@@ -188,6 +190,13 @@ function GridPage() {
   );
 }
 
+// Loading fallback component for lazy-loaded routes
+const RouteLoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+  </div>
+);
+
 function DriverSeasonStatsPage() {
   const { driverId } = useParams<{ driverId: string }>();
   const navigate = useNavigate();
@@ -198,10 +207,12 @@ function DriverSeasonStatsPage() {
 
   return (
     <PageTransition>
-      <DriverSeasonStats
-        driverId={driverId}
-        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <DriverSeasonStats
+          driverId={driverId}
+          onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+        />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -226,10 +237,12 @@ function DriverCareerProfilePage() {
 
   return (
     <PageTransition>
-      <DriverCareerProfileComponent
-        memberId={driverId}
-        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <DriverCareerProfileComponent
+          memberId={driverId}
+          onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+        />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -253,7 +266,9 @@ function RacesPage() {
 
   return (
     <PageTransition>
-      <RacesDashboard seasonId={seasonId} onRaceSelect={(raceId) => navigate(`/races/${raceId}`)} />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <RacesDashboard seasonId={seasonId} onRaceSelect={(raceId) => navigate(`/races/${raceId}`)} />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -266,14 +281,19 @@ function RaceDetailPage() {
     return <Navigate to="/races" replace />;
   }
 
+  const handleDriverSelect = (
+    driverId: string,
+    raceId: string,
+    initialSessionType?: 'race' | 'qualifying' | 'practice',
+  ) => {
+    navigate(`/races/${raceId}/driver/${driverId}${initialSessionType ? `?session=${initialSessionType}` : ''}`);
+  };
+
   return (
     <PageTransition>
-      <RaceDetail
-        raceId={raceId}
-        onDriverSelect={(driverId, race, initialSessionType) =>
-          navigate(`/races/${race}/driver/${driverId}${initialSessionType ? `?session=${initialSessionType}` : ''}`)
-        }
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <RaceDetail raceId={raceId} onDriverSelect={handleDriverSelect} />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -291,11 +311,13 @@ function DriverRaceAnalysisPage() {
 
   return (
     <PageTransition>
-      <DriverRaceAnalysis
-        raceId={raceId}
-        driverId={driverId}
-        initialSessionType={initialSessionType}
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <DriverRaceAnalysis
+          raceId={raceId}
+          driverId={driverId}
+          initialSessionType={initialSessionType}
+        />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -303,7 +325,9 @@ function DriverRaceAnalysisPage() {
 function LivePage() {
   return (
     <PageTransition>
-      <LiveTimings />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <LiveTimings />
+      </Suspense>
     </PageTransition>
   );
 }
@@ -313,7 +337,9 @@ function AdminPage() {
 
   return (
     <PageTransition>
-      <AdminPanel isAuthenticated={adminAuthenticated} onAuthenticate={authenticate} />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <AdminPanel isAuthenticated={adminAuthenticated} onAuthenticate={authenticate} />
+      </Suspense>
     </PageTransition>
   );
 }

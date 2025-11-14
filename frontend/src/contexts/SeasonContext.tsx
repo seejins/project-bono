@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getApiUrl } from '../utils/api';
 
 interface Season {
   id: string;
@@ -33,7 +34,7 @@ export const SeasonProvider: React.FC<SeasonProviderProps> = ({ children }) => {
       setLoading(true);
       
       // Make actual API call to fetch seasons
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/seasons`);
       
       if (!response.ok) {
@@ -55,12 +56,22 @@ export const SeasonProvider: React.FC<SeasonProviderProps> = ({ children }) => {
         
         setSeasons(apiSeasons);
         
-        // Set current season from localStorage or default to active season
+        // Set current season: prioritize active season from database, then saved from localStorage
         const savedSeasonId = localStorage.getItem('f1-current-season-id');
         const activeSeason = apiSeasons.find(s => s.status === 'active');
         const savedSeason = savedSeasonId ? apiSeasons.find(s => s.id === savedSeasonId) : null;
         
-        setCurrentSeason(savedSeason || activeSeason || apiSeasons[0]);
+        // If there's an active season and it differs from current, use the active one
+        // This ensures that when an admin activates a season, it becomes the current season
+        // Otherwise, use saved season (if it exists), or active season, or first season
+        const newCurrentSeason = activeSeason || savedSeason || apiSeasons[0];
+        
+        // Update localStorage if we're switching to a newly activated season
+        if (activeSeason && activeSeason.id !== savedSeasonId) {
+          localStorage.setItem('f1-current-season-id', activeSeason.id);
+        }
+        
+        setCurrentSeason(newCurrentSeason);
       } else {
         console.error('Invalid API response:', data);
         // Fallback to empty array if API fails

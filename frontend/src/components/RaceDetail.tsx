@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import logger from '../utils/logger';
 import { useSearchParams } from 'react-router-dom';
+import { getApiUrl } from '../utils/api';
 import clsx from 'clsx';
 import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
@@ -83,7 +85,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const [driverOptionsLoading, setDriverOptionsLoading] = useState(false);
   const [mappingBusy, setMappingBusy] = useState<Record<string, boolean>>({});
   const [mappingErrors, setMappingErrors] = useState<Record<string, string | null>>({});
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const apiUrl = getApiUrl();
 
   const normalizePenalties = useCallback((penalties: any, driverSessionResultId: string): DriverPenalty[] => {
     let list = penalties;
@@ -139,7 +141,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       setDriverOptions(options);
       driverOptionsLoadedRef.current = true;
     } catch (error) {
-      console.error('Error fetching driver options:', error);
+      logger.error('Error fetching driver options:', error);
     } finally {
       setDriverOptionsLoading(false);
     }
@@ -208,33 +210,36 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     }
   }, [sessions, activeSession, sessionTypes, handleSessionChange]);
 
-  // Memoize updateDriversFromSessions to prevent unnecessary re-renders
-  const updateDriversFromSessions = useCallback(() => {
+  // Helper function to find matching session based on activeSession
+  // Session types: 1=P1, 2=P2, 3=P3, 4=Short Practice, 5=Q1, 6=Q2, 7=Q3, 8=Short Qualifying, 9=OSQ, 10=Race
+  const findMatchingSession = useCallback((sessions: any[], activeSession: string) => {
     if (!sessions || sessions.length === 0) {
-      setDrivers([]);
-      return;
+      return null;
     }
 
-    // Find the appropriate session based on activeSession
-    // Session types: 1=P1, 2=P2, 3=P3, 4=Short Practice, 5=Q1, 6=Q2, 7=Q3, 8=Short Qualifying, 9=OSQ, 10=Race
     const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] : 
                               activeSession === 'qualifying' ? [5, 6, 7, 8, 9] : 
                               [10];
     
     // Find the most recent session if multiple exist (prefer later sessions)
     const matchingSessions = sessions.filter(s => targetSessionType.includes(s.sessionType));
-    const session = matchingSessions.length > 0 
+    return matchingSessions.length > 0 
       ? matchingSessions.sort((a, b) => (b.sessionType || 0) - (a.sessionType || 0))[0] // Prefer later sessions (Q3 > Q2 > Q1, P3 > P2 > P1)
       : null;
-    
-    if (!session || !session.results) {
-      setDrivers([]);
-      return;
+  }, []);
+
+  // Memoize the current session to avoid recalculating
+  const currentSession = useMemo(() => findMatchingSession(sessions, activeSession), [sessions, activeSession, findMatchingSession]);
+
+  // Memoize the expensive driver transformation logic
+  const transformedDrivers = useMemo((): RaceDriverRow[] => {
+    if (!currentSession || !currentSession.results) {
+      return [];
     }
 
     // Transform the backend data to match F123DriverResult interface
     // Note: DB already returns sorted by position, no need to sort again
-    const transformedDrivers: RaceDriverRow[] = session.results.map((result: any, index: number) => {
+    return currentSession.results.map((result: any, index: number) => {
       // Parse additional_data ONCE and reuse
       let additionalData = null;
       if (result.additional_data) {
@@ -443,12 +448,21 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       
       return driver;
     });
+  }, [currentSession]);
+
+  // Memoize gap calculations for race and qualifying
+  const driversWithGaps = useMemo(() => {
+    if (transformedDrivers.length === 0) {
+      return transformedDrivers;
+    }
+
+    const drivers = transformedDrivers.map(driver => ({ ...driver }));
 
     // Calculate gaps for race (gap to leader)
-    if (activeSession === 'race' && transformedDrivers.length > 0) {
-      const leaderTimeMs = (transformedDrivers[0] as any)._totalRaceTimeMs || 0;
+    if (activeSession === 'race' && drivers.length > 0) {
+      const leaderTimeMs = (drivers[0] as any)._totalRaceTimeMs || 0;
       
-      transformedDrivers.forEach((driver, index) => {
+      drivers.forEach((driver, index) => {
         const driverTimeMs = (driver as any)._totalRaceTimeMs || 0;
         
         if (index === 0) {
@@ -485,17 +499,22 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     }
 
     // Calculate gaps for qualifying and practice
-    if ((activeSession === 'qualifying' || activeSession === 'practice') && transformedDrivers.length > 0) {
-      const poleTime = transformedDrivers[0].qualifyingTime || 0;
-      transformedDrivers.forEach(driver => {
+    if ((activeSession === 'qualifying' || activeSession === 'practice') && drivers.length > 0) {
+      const poleTime = drivers[0].qualifyingTime || 0;
+      drivers.forEach(driver => {
         if (driver.qualifyingTime && driver.qualifyingTime > poleTime) {
           driver.qualifyingGap = driver.qualifyingTime - poleTime;
         }
       });
     }
 
-    setDrivers(transformedDrivers);
-  }, [activeSession, sessions]);
+    return drivers;
+  }, [transformedDrivers, activeSession]);
+
+  // Memoize updateDriversFromSessions to prevent unnecessary re-renders
+  const updateDriversFromSessions = useCallback(() => {
+    setDrivers(driversWithGaps);
+  }, [driversWithGaps]);
 
   useEffect(() => {
     // Update drivers when activeSession changes
@@ -508,14 +527,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       return;
     }
 
-    const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] :
-      activeSession === 'qualifying' ? [5, 6, 7, 8, 9] :
-      [10];
-
-    const matchingSessions = sessions.filter((s: any) => targetSessionType.includes(s.sessionType));
-    const session = matchingSessions.length > 0
-      ? matchingSessions.sort((a: any, b: any) => (b.sessionType || 0) - (a.sessionType || 0))[0]
-      : null;
+    const session = currentSession;
 
     if (!session || !session.results) {
       setPenaltiesByDriver({});
@@ -538,19 +550,12 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     });
 
     setPenaltiesByDriver(map);
-  }, [sessions, activeSession, normalizePenalties]);
+  }, [currentSession, normalizePenalties]);
 
   const fetchSessionPenalties = useCallback(async () => {
     if (!sessions || sessions.length === 0) return;
 
-    const targetSessionType = activeSession === 'practice' ? [1, 2, 3, 4] :
-      activeSession === 'qualifying' ? [5, 6, 7, 8, 9] :
-      [10];
-
-    const matchingSessions = sessions.filter((s: any) => targetSessionType.includes(s.sessionType));
-    const session = matchingSessions.length > 0
-      ? matchingSessions.sort((a: any, b: any) => (b.sessionType || 0) - (a.sessionType || 0))[0]
-      : null;
+    const session = currentSession;
 
     const sessionId = session?.id || session?.sessionId;
     if (!sessionId) return;
@@ -587,9 +592,9 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         setPenaltiesByDriver(map);
       }
     } catch (error) {
-      console.error('Error fetching session penalties:', error);
+      logger.error('Error fetching session penalties:', error);
     }
-  }, [sessions, activeSession, normalizePenalties]);
+  }, [currentSession, normalizePenalties, apiUrl]);
 
   const fetchDriverPenalties = useCallback(async (driverSessionResultId: string) => {
     if (!driverSessionResultId) return;
@@ -598,7 +603,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       const response = await fetch(`${apiUrl}/api/races/driver-results/${driverSessionResultId}/penalties`);
 
       if (!response.ok) {
-        console.error('Failed to fetch driver penalties:', response.status, response.statusText);
+        logger.error('Failed to fetch driver penalties:', response.status, response.statusText);
         return;
       }
 
@@ -616,7 +621,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         return updated;
       });
     } catch (error) {
-      console.error('Error fetching driver penalties:', error);
+      logger.error('Error fetching driver penalties:', error);
     }
   }, [normalizePenalties]);
 
@@ -649,7 +654,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       }
       
     } catch (error) {
-      console.error('Error fetching race data:', error);
+      logger.error('Error fetching race data:', error);
       setError('Failed to load race data');
     } finally {
       setLoading(false);
@@ -761,7 +766,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
 
       // Only use driver_session_result_id - it's unique per driver result
       if (!sessionResultId) {
-        console.warn('Cannot navigate: missing driver_session_result_id for driver:', driver.name);
+        logger.warn('Cannot navigate: missing driver_session_result_id for driver:', driver.name);
         return;
       }
 
@@ -1187,7 +1192,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
           <button
             onClick={async (e) => {
               e.stopPropagation();
-              console.log('🔍 CLICKED ADD BUTTON - Driver object:', {
+              logger.debug('🔍 CLICKED ADD BUTTON - Driver object:', {
                 driver,
                 driver_keys: Object.keys(driver as any),
                 has_additional_data: !!(driver as any).additional_data,
@@ -1352,13 +1357,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   }, [penaltyMap]);
 
   const getCurrentSession = () => {
-    const currentSession = sessions.find(s => {
-      if (activeSession === 'race') return s.sessionType === 10;
-      if (activeSession === 'qualifying') return s.sessionType >= 5 && s.sessionType <= 9;
-      if (activeSession === 'practice') return s.sessionType >= 1 && s.sessionType <= 4;
-      return false;
-    });
-    return currentSession?.sessionId || currentSession?.id;
+    const session = currentSession;
+    return session?.sessionId || session?.id;
   };
 
   const handleAddPenaltyToPending = () => {
@@ -1419,7 +1419,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       // Apply all pending penalty additions (use driverSessionResultId)
       for (const penalty of pendingPenaltyAdds) {
         if (!penalty.driverSessionResultId) {
-          console.warn('Skipping penalty with missing driverSessionResultId:', penalty);
+          logger.warn('Skipping penalty with missing driverSessionResultId:', penalty);
           continue;
         }
         
@@ -1444,16 +1444,16 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       // Apply all pending penalty removals
       for (const removal of pendingPenaltyRemovals) {
         if (!removal.penaltyId) {
-          console.warn('Skipping removal with missing penaltyId:', removal);
+          logger.warn('Skipping removal with missing penaltyId:', removal);
           continue;
         }
 
         if (!removal.driverSessionResultId) {
-          console.warn('Skipping removal with missing driverSessionResultId:', removal);
+          logger.warn('Skipping removal with missing driverSessionResultId:', removal);
           continue;
         }
 
-        console.log(`Removing penalty: ${removal.penaltyId}, driverSessionResultId: ${removal.driverSessionResultId}`);
+        logger.debug(`Removing penalty: ${removal.penaltyId}, driverSessionResultId: ${removal.driverSessionResultId}`);
 
         const response = await fetch(`${apiUrl}/api/races/driver-results/${removal.driverSessionResultId}/penalties/${removal.penaltyId}`, {
           method: 'DELETE'
@@ -1472,7 +1472,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       setPendingPenaltyAdds([]);
       setPendingPenaltyRemovals([]);
     } catch (error) {
-      console.error('Error saving changes:', error);
+      logger.error('Error saving changes:', error);
       alert(`Failed to save changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -1480,7 +1480,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const handleCancelEdit = async () => {
     // Discard ALL pending changes and reload original state
     // This ensures no changes are saved when Cancel is clicked
-    console.log('Canceling edit mode - discarding all pending changes:', {
+    logger.debug('Canceling edit mode - discarding all pending changes:', {
       pendingPenaltyAdds: pendingPenaltyAdds.length,
       pendingPenaltyRemovals: pendingPenaltyRemovals.length
     });
@@ -1497,7 +1497,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     await fetchRaceData();
     await fetchSessionPenalties();
     
-    console.log('Edit mode cancelled - all pending changes discarded');
+    logger.debug('Edit mode cancelled - all pending changes discarded');
   };
 
   const handleRemovePenaltyById = (driver: RaceDriverRow, penalty: DriverPenalty) => {
@@ -1506,7 +1506,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     const driverSessionResultId = getDriverSessionResultId(driver);
     
     if (!driverSessionResultId) {
-      console.warn('Cannot remove penalty - missing driverSessionResultId');
+      logger.warn('Cannot remove penalty - missing driverSessionResultId');
       return;
     }
 
@@ -1528,7 +1528,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       driverSessionResultId: driverSessionResultId
     }]);
     
-    console.log('Added penalty to pending removals:', {
+    logger.debug('Added penalty to pending removals:', {
       penaltyId: penalty.id,
       driverSessionResultId: driverSessionResultId,
       totalPending: pendingPenaltyRemovals.length + 1

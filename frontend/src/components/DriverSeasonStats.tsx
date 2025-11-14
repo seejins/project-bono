@@ -24,6 +24,7 @@ import { BaseLineChart, type LineConfig } from './charts/BaseLineChart';
 import { BRAND_COLORS } from '../theme/colors';
 import { getResultStatus } from '../utils/f123DataMapping';
 import { apiGet } from '../utils/api';
+import { formatDate, formatFullDate } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 
 interface DriverSeasonStatsProps {
@@ -85,23 +86,6 @@ const HighlightBadge: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
-const formatDate = (value: string | null | undefined): string => {
-  if (!value) {
-    return 'TBD';
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'TBD';
-  }
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-const formatFullDate = (value: string | null | undefined): string => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
 
 const createShortLabel = (event: SeasonEventSummary | null, index: number): string => {
   if (!event) {
@@ -590,39 +574,56 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   }, [completedEvents, driverHistoryMap, comparisonHistoryMap]);
 
   const averageRacePosition = useMemo(() => {
-    const values = trendData
-      .map((point) => point.racePosition)
-      .filter((value): value is number => value !== null && Number.isFinite(value));
-    if (values.length === 0) {
+    // Single pass: filter valid values and sum in one iteration
+    let total = 0;
+    let count = 0;
+    for (const point of trendData) {
+      const value = point.racePosition;
+      if (value !== null && Number.isFinite(value)) {
+        total += value;
+        count++;
+      }
+    }
+    if (count === 0) {
       return null;
     }
-    const total = values.reduce((sum, value) => sum + value, 0);
-    return Math.round((total / values.length) * 10) / 10;
+    return Math.round((total / count) * 10) / 10;
   }, [trendData]);
 
   const averageQualifyingPosition = useMemo(() => {
-    const values = trendData
-      .map((point) => point.qualifyingPosition)
-      .filter((value): value is number => value !== null && Number.isFinite(value));
-    if (values.length === 0) {
+    // Single pass: filter valid values and sum in one iteration
+    let total = 0;
+    let count = 0;
+    for (const point of trendData) {
+      const value = point.qualifyingPosition;
+      if (value !== null && Number.isFinite(value)) {
+        total += value;
+        count++;
+      }
+    }
+    if (count === 0) {
       return null;
     }
-    const total = values.reduce((sum, value) => sum + value, 0);
-    return Math.round((total / values.length) * 10) / 10;
+    return Math.round((total / count) * 10) / 10;
   }, [trendData]);
 
   const comparisonOptions: ComparisonOption[] = useMemo(() => {
     if (!analysis) {
       return [];
     }
-    return analysis.drivers
-      .filter((driver) => driver.id !== driverId)
-      .map((driver) => ({
-        id: driver.id,
-        name: driver.name,
-        team: driver.team ?? null,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    // Single pass: filter, map, and prepare for sort in one iteration
+    const options: ComparisonOption[] = [];
+    for (const driver of analysis.drivers) {
+      if (driver.id !== driverId) {
+        options.push({
+          id: driver.id,
+          name: driver.name,
+          team: driver.team ?? null,
+        });
+      }
+    }
+    // Sort after single-pass filtering/mapping
+    return options.sort((a, b) => a.name.localeCompare(b.name));
   }, [analysis, driverId]);
 
   const comparisonDriverSummary = useMemo(() => {

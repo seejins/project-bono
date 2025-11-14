@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
+import logger from '../../utils/logger';
 
 interface DashboardHeroProps {
   imageSrc: string;
@@ -66,7 +67,7 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
             loading="eager"
             onLoad={() => setImageLoaded(true)}
             onError={() => {
-              console.warn(`Failed to load hero image at ${imageSrc}`);
+              logger.warn(`Failed to load hero image at ${imageSrc}`);
               setImageLoaded(true);
             }}
           />

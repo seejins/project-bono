@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Trophy, Clock, Calendar, BarChart, Award } from 'lucide-react';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
 
 interface TrackDetailProps {
   trackId: string;
@@ -36,44 +38,66 @@ interface Race {
 export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => {
   const [track, setTrack] = useState<TrackData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTrackDetails();
-  }, [trackId]);
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
-  const fetchTrackDetails = async () => {
-    try {
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
-      // Fetch track data
-      const trackResponse = await fetch(`${apiUrl}/api/tracks/${trackId}`);
-      if (trackResponse.ok) {
-        const trackDataResult = await trackResponse.json();
-        setTrack(trackDataResult.track);
+    const fetchTrackDetails = async () => {
+      try {
+        setLoading(true);
+        const apiUrl = getApiUrl();
+        const fetchOptions = { signal };
+        
+        // Parallel fetch: track data, races, and statistics simultaneously
+        const [trackResponse, racesResponse, statsResponse] = await Promise.all([
+          fetch(`${apiUrl}/api/tracks/${trackId}`, fetchOptions),
+          fetch(`${apiUrl}/api/tracks/${trackId}/races`, fetchOptions),
+          fetch(`${apiUrl}/api/tracks/${trackId}/statistics`, fetchOptions),
+        ]);
+        
+        if (signal.aborted) return;
+        
+        if (trackResponse.ok) {
+          const trackDataResult = await trackResponse.json();
+          if (!signal.aborted) setTrack(trackDataResult.track);
+        }
+        
+        if (racesResponse.ok) {
+          const racesData = await racesResponse.json();
+          if (!signal.aborted) {
+            setTrack(prev => prev ? { ...prev, races: racesData.races || [] } : null);
+          }
+        }
+        
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          if (!signal.aborted) {
+            setTrack(prev => prev ? { ...prev, statistics: statsData.statistics } : null);
+          }
+        }
+        
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching track details:', error);
+        if (!signal.aborted) {
+          setError('Failed to load track details');
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
-      
-      // Fetch races at this track
-      const racesResponse = await fetch(`${apiUrl}/api/tracks/${trackId}/races`);
-      if (racesResponse.ok) {
-        const racesData = await racesResponse.json();
-        setTrack(prev => prev ? { ...prev, races: racesData.races || [] } : null);
-      }
-      
-      // Fetch track statistics
-      const statsResponse = await fetch(`${apiUrl}/api/tracks/${trackId}/statistics`);
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setTrack(prev => prev ? { ...prev, statistics: statsData.statistics } : null);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching track details:', error);
-      setError('Failed to load track details');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchTrackDetails();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [trackId]);
 
   if (loading) {
     return (

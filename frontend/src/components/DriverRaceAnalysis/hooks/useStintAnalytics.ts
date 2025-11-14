@@ -105,6 +105,8 @@ export const useStintAnalytics = (lapData: LapData[]): StintAnalytics => {
       dataKey: key,
       name: label,
       stroke: color,
+      dot: false,
+      connectNulls: false,
     }));
 
     return { data, lines };

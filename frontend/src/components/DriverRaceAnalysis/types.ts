@@ -42,6 +42,8 @@ export type DriverResultWithMeta = F123DriverResult & {
   sessionResultId?: string | null;
   canonicalDriverId?: string | null;
   mappedUserId?: string | null;
+  postRacePenalties?: number;
+  totalPenalties?: number;
 };
 
 export interface DriverSessionData {

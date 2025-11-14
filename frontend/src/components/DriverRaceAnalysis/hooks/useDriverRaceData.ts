@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { F123DataService } from '../../../services/F123DataService';
+import logger from '../../../utils/logger';
 import { DriverRaceData, LapData, DriverSessionData, DriverResultWithMeta } from '../types';
 
 interface UseDriverRaceDataResult extends DriverRaceData {}
@@ -13,7 +14,7 @@ type CanonicalDriverIdentifiers = {
   carNumber: string | null;
 };
 
-const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { getApiUrl } from '../../../utils/api';
 
 const DEFAULT_STATE: UseDriverRaceDataResult = {
   raceData: null,
@@ -36,16 +37,17 @@ export const useDriverRaceData = (driverId: string, raceId: string): UseDriverRa
         const apiUrl = getApiUrl();
         const fetchOptions = { signal: abortController.signal };
 
-        // Fetch race metadata
-        const raceMetadataResponse = await fetch(`${apiUrl}/api/races/${raceId}`, fetchOptions);
+        // Parallel fetch: race metadata and race results simultaneously
+        const [raceMetadataResponse, raceResponse] = await Promise.all([
+          fetch(`${apiUrl}/api/races/${raceId}`, fetchOptions),
+          fetch(`${apiUrl}/api/races/${raceId}/results`, fetchOptions),
+        ]);
+
         let raceMetadata: any = null;
         if (raceMetadataResponse.ok) {
           const raceMetadataResult = await raceMetadataResponse.json();
           raceMetadata = raceMetadataResult?.race ?? null;
         }
-
-        // Fetch race results with driver data (includes lap_times if available)
-        const raceResponse = await fetch(`${apiUrl}/api/races/${raceId}/results`, fetchOptions);
         if (!raceResponse.ok) {
           const errorText = await raceResponse.text();
           throw new Error(`Failed to fetch race data: ${raceResponse.status} ${errorText}`);
@@ -422,7 +424,7 @@ const deriveCanonicalDriverIdentifiers = (
   }
 
   // No match found - return minimal identifiers (error will be handled upstream)
-  console.error('Could not find driver with id:', driverIdStr);
+  logger.error('Could not find driver with id:', driverIdStr);
   return {
     driverId: driverIdStr,
     sessionResultId: driverIdStr,

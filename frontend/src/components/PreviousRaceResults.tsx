@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import clsx from 'clsx';
 import { Trophy, Loader2 } from 'lucide-react';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
 import { PreviousRaceResults } from '../types';
 import { F123DataService } from '../services/F123DataService';
 import './PreviousRace/animations.css';
@@ -33,7 +35,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
       setLoading(true);
       setError(null);
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/seasons/${seasonId}/previous-race`);
       
       if (response.ok) {
@@ -44,7 +46,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
         setPreviousRace(null);
       }
     } catch (error) {
-      console.error('Error fetching previous race results:', error);
+      logger.error('Error fetching previous race results:', error);
       setError('Failed to load previous race results');
     } finally {
       setLoading(false);

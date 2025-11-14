@@ -12,6 +12,8 @@ import type {
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 import { F123_TRACKS } from '../data/f123Tracks';
 import { F123_TEAMS } from '../data/f123Teams';
+import logger from '../utils/logger';
+import { useSeason } from '../contexts/SeasonContext';
 
 const TEAM_OPTIONS = F123_TEAMS.map((team) => team.name);
 
@@ -78,6 +80,7 @@ interface SeasonDetailProps {
 }
 
 export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack, onSeasonUpdated }) => {
+  const { refreshSeasons } = useSeason();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as 'drivers' | 'events' | null;
   const [members, setMembers] = useState<Member[]>([]);
@@ -259,7 +262,7 @@ const editTeamOptions = useMemo(() => {
         }
       }
     } catch (error) {
-      console.error('Error loading season data:', error);
+      logger.error('Error loading season data:', error);
     } finally {
       setLoading(false);
     }
@@ -460,7 +463,7 @@ const editTeamOptions = useMemo(() => {
         setStatus('idle');
         setStatusMessage('');
       } catch (error) {
-        console.error('Failed to reorder events', error);
+        logger.error('Failed to reorder events', error);
         setStatus('error');
         setStatusMessage(error instanceof Error ? error.message : 'Failed to update event order');
         setEvents(previousEvents);
@@ -638,6 +641,9 @@ const editTeamOptions = useMemo(() => {
       } else {
         setLocalSeasonStatus('active');
       }
+
+      // Refresh SeasonContext to sync with database state
+      await refreshSeasons();
 
       loadData();
     } catch (error) {

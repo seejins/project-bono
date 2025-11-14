@@ -51,12 +51,13 @@ export const useRaceStats = ({ lapData, driver, sessionDrivers = [] }: UseRaceSt
 
     let gapToLeaderMs: number | null = null;
 
-    const latestGapLap = [...lapData]
-      .reverse()
-      .find((lap) => typeof lap.gap_to_leader_ms === 'number' && Number.isFinite(lap.gap_to_leader_ms));
-
-    if (latestGapLap && latestGapLap.gap_to_leader_ms && latestGapLap.gap_to_leader_ms > 0) {
-      gapToLeaderMs = latestGapLap.gap_to_leader_ms;
+    // Single pass: find latest gap from end instead of reverse + find
+    for (let i = lapData.length - 1; i >= 0; i--) {
+      const lap = lapData[i];
+      if (typeof lap.gap_to_leader_ms === 'number' && Number.isFinite(lap.gap_to_leader_ms) && lap.gap_to_leader_ms > 0) {
+        gapToLeaderMs = lap.gap_to_leader_ms;
+        break;
+      }
     }
 
     if (gapToLeaderMs === null) {

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Calendar } from 'lucide-react';
 import { CreateSeason } from './CreateSeason';
 import { SeasonDetail } from './SeasonDetail';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface Driver {
   id: string;
@@ -51,6 +54,7 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
   const [showCreateSeason, setShowCreateSeason] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [viewSelectedSeason, setViewSelectedSeason] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Fetch seasons from API
   useEffect(() => {
@@ -60,7 +64,7 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
   const fetchSeasons = async () => {
     try {
       setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrl();
       
       const response = await fetch(`${apiUrl}/api/seasons`);
       if (response.ok) {
@@ -69,7 +73,7 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
       }
       
     } catch (error) {
-      console.error('Error fetching seasons:', error);
+      logger.error('Error fetching seasons:', error);
       setSeasons([]);
     } finally {
       setLoading(false);
@@ -94,16 +98,6 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
     setSelectedSeason(updatedSeason);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'Not set';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid date';
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -114,9 +108,33 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
         />
       ) : viewSelectedSeason && selectedSeason ? (
         <SeasonDetail 
-          season={selectedSeason}
+          season={{
+            id: selectedSeason.id,
+            name: selectedSeason.name,
+            year: selectedSeason.year,
+            startDate: selectedSeason.startDate,
+            endDate: selectedSeason.endDate,
+            status: selectedSeason.status,
+            isActive: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }}
           onBack={() => setViewSelectedSeason(false)}
-          onSeasonUpdated={handleUpdateSeason}
+          onSeasonUpdated={(updatedSeason) => {
+            handleUpdateSeason({
+              id: updatedSeason.id,
+              name: updatedSeason.name,
+              year: updatedSeason.year,
+              startDate: updatedSeason.startDate,
+              endDate: updatedSeason.endDate || '',
+              pointsSystem: 'f1_standard',
+              fastestLapPoint: false,
+              drivers: [],
+              tracks: [],
+              races: [],
+              status: updatedSeason.status,
+            });
+          }}
         />
       ) : (
         <>
@@ -149,8 +167,8 @@ export const SeasonManagement: React.FC<SeasonManagementProps> = ({ onSeasonSele
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{season.name}</h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {season.startDate && season.endDate && formatDate(season.startDate) !== 'Not set' && formatDate(season.endDate) !== 'Not set'
-                          ? `${formatDate(season.startDate)} - ${formatDate(season.endDate)}`
+                        {season.startDate && season.endDate && formatFullDate(season.startDate) && formatFullDate(season.endDate)
+                          ? `${formatFullDate(season.startDate)} - ${formatFullDate(season.endDate)}`
                           : `Season ${season.year}`
                         }
                       </p>

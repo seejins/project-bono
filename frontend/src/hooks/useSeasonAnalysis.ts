@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getApiUrl } from '../utils/api';
 
 export interface SeasonAnalysisHighlight {
   id: string;
@@ -110,7 +111,7 @@ export function useSeasonAnalysis(seasonId?: string): UseSeasonAnalysisResult {
       setError(null);
 
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/seasons/${seasonId}/analysis`);
 
         if (!response.ok) {

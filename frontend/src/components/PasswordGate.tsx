@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock, Eye, EyeOff } from 'lucide-react';
+import logger from '../utils/logger';
 
 interface PasswordGateProps {
   onAuthenticated: () => void;
@@ -29,8 +30,8 @@ export function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       const expectedPassword = import.meta.env.VITE_APP_PASSWORD || 'dinof1';
       
       // Debug logging
-      console.log('Expected password:', expectedPassword);
-      console.log('Entered password:', password);
+      logger.debug('Expected password:', expectedPassword);
+      logger.debug('Entered password:', password);
       
       if (password === expectedPassword) {
         localStorage.setItem('f1-app-authenticated', 'true');

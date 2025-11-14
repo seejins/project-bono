@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Users, Calendar, MapPin, Trash2, Edit, ChevronDown, ChevronRight, Flag } from 'lucide-react';
 import { apiGet, apiPost, apiCall } from '../utils/api';
 import { useSeason } from '../contexts/SeasonContext';
+import logger from '../utils/logger';
 import { SeasonDetail } from './SeasonDetail';
 import { F123_TEAMS } from '../data/f123Teams';
 
@@ -108,7 +109,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
       } else {
         // Season not found yet, might be a newly created one
         // Try to find it in the next render cycle
-        console.log('Season not found in current seasons list:', selectedSeasonId);
+        logger.debug('Season not found in current seasons list:', selectedSeasonId);
       }
     } else {
       setSelectedSeason(null);
@@ -129,7 +130,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         }
       }
     } catch (error) {
-      console.error('Failed to load seasons:', error);
+      logger.error('Failed to load seasons:', error);
     }
   };
 
@@ -170,7 +171,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         setEvents(transformedEvents);
       }
     } catch (error) {
-      console.error('Failed to load season data:', error);
+      logger.error('Failed to load season data:', error);
     }
   };
 
@@ -212,7 +213,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         alert('Failed to create season: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to create season:', error);
+      logger.error('Failed to create season:', error);
       alert('Failed to create season');
     }
   };
@@ -244,7 +245,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         alert('Failed to add driver: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to add driver:', error);
+      logger.error('Failed to add driver:', error);
       alert('Failed to add driver');
     }
   };
@@ -283,7 +284,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         alert('Failed to add event: ' + data.error);
       }
     } catch (error) {
-      console.error('Failed to add event:', error);
+      logger.error('Failed to add event:', error);
       alert('Failed to add event');
     }
   };
@@ -308,7 +309,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         alert('Failed to remove driver');
       }
     } catch (error) {
-      console.error('Failed to remove driver:', error);
+      logger.error('Failed to remove driver:', error);
       alert('Failed to remove driver');
     }
   };
@@ -327,7 +328,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
         alert('Failed to remove event');
       }
     } catch (error) {
-      console.error('Failed to remove event:', error);
+      logger.error('Failed to remove event:', error);
       alert('Failed to remove event');
     }
   };
@@ -391,6 +392,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
             year: selectedSeason.year,
             startDate: selectedSeason.start_date || '',
             endDate: selectedSeason.end_date || '',
+            status: selectedSeason.status || 'draft',
             isActive: 1,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()

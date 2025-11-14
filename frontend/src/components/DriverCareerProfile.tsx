@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Zap, TrendingUp, Calendar, Flag, Loader2 } from 'lucide-react';
 import { MemberCareerProfile, MemberCareerStats, RaceHistoryEntry } from '../types';
-import { apiGet } from '../utils/api';
+import { apiGet, getApiUrl } from '../utils/api';
+import logger from '../utils/logger';
 
 interface DriverCareerProfileProps {
   memberId: string; // Keep for backward compatibility, but treat as driverId
@@ -21,79 +22,121 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    const fetchDriverCareerProfile = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/drivers/${driverId}/career-profile`, { signal });
+        
+        if (signal.aborted) return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (!signal.aborted) {
+            setCareerProfile(data.careerProfile);
+          }
+        } else {
+          throw new Error('Failed to fetch driver career profile');
+        }
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching driver career profile:', error);
+        if (!signal.aborted) {
+          setError('Failed to load driver career profile');
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchDriverCareerProfile();
+
+    return () => {
+      abortController.abort();
+    };
   }, [driverId]);
 
   useEffect(() => {
-    if (careerProfile) {
-      fetchRaceHistory();
-      if (activeTab !== 'career') {
-        fetchSeasonStats(activeTab);
-      } else {
-        setSeasonStats(null);
-      }
-    }
-  }, [careerProfile, activeTab]);
+    if (!careerProfile) return;
 
-  const fetchDriverCareerProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/drivers/${driverId}/career-profile`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setCareerProfile(data.careerProfile);
-      } else {
-        throw new Error('Failed to fetch driver career profile');
+    const fetchRaceHistory = async () => {
+      try {
+        const apiUrl = getApiUrl();
+        const seasonId = activeTab === 'career' ? undefined : activeTab;
+        const url = seasonId 
+          ? `${apiUrl}/api/drivers/${driverId}/race-history?seasonId=${seasonId}`
+          : `${apiUrl}/api/drivers/${driverId}/race-history`;
+        
+        const response = await fetch(url, { signal });
+        
+        if (signal.aborted) return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (!signal.aborted) {
+            setRaceHistory(data.raceHistory || []);
+          }
+        }
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching race history:', error);
+        if (!signal.aborted) {
+          setRaceHistory([]);
+        }
       }
-    } catch (error) {
-      console.error('Error fetching driver career profile:', error);
-      setError('Failed to load driver career profile');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const fetchSeasonStats = async (seasonId: string) => {
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/drivers/${driverId}/seasons/${seasonId}/stats`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSeasonStats(data.stats);
-      } else {
-        console.error('Failed to fetch season stats');
-        setSeasonStats(null);
+    const fetchSeasonStats = async (seasonId: string) => {
+      try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/drivers/${driverId}/seasons/${seasonId}/stats`, { signal });
+        
+        if (signal.aborted) return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (!signal.aborted) {
+            setSeasonStats(data.stats);
+          }
+        } else {
+          logger.error('Failed to fetch season stats');
+          if (!signal.aborted) {
+            setSeasonStats(null);
+          }
+        }
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching season stats:', error);
+        if (!signal.aborted) {
+          setSeasonStats(null);
+        }
       }
-    } catch (error) {
-      console.error('Error fetching season stats:', error);
+    };
+
+    fetchRaceHistory();
+    if (activeTab !== 'career') {
+      fetchSeasonStats(activeTab);
+    } else {
       setSeasonStats(null);
     }
-  };
 
-  const fetchRaceHistory = async () => {
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const seasonId = activeTab === 'career' ? undefined : activeTab;
-      const url = seasonId 
-        ? `${apiUrl}/api/drivers/${driverId}/race-history?seasonId=${seasonId}`
-        : `${apiUrl}/api/drivers/${driverId}/race-history`;
-      
-      const response = await fetch(url);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setRaceHistory(data.raceHistory || []);
-      }
-    } catch (error) {
-      console.error('Error fetching race history:', error);
-      setRaceHistory([]);
-    }
-  };
+    return () => {
+      abortController.abort();
+    };
+  }, [careerProfile, activeTab, driverId]);
 
   const getPositionIcon = (position: number) => {
     if (position === 1) return '🥇';

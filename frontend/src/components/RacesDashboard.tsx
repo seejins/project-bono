@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import clsx from 'clsx';
 import { apiGet, apiPostFormData } from '../utils/api';
+import logger from '../utils/logger';
 import { Grid3X3, List, Calendar, MapPin, Flag } from 'lucide-react';
+import { formatFullDate } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 import { DashboardPage } from './layout/DashboardPage';
 import { useAdmin } from '../contexts/AdminContext';
@@ -49,12 +51,11 @@ const formatEventDate = (dateString: string | null) => {
   if (!dateString) return 'TBD';
   const parsed = new Date(dateString);
   if (Number.isNaN(parsed.getTime())) return 'TBD';
-  return parsed.toLocaleDateString('en-US', {
+  const weekday = parsed.toLocaleDateString('en-US', {
     weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
   });
+  const date = formatFullDate(dateString);
+  return `${weekday}, ${date}`;
 };
 
 const getSessionTypes = (sessionTypes: string | null) => {
@@ -149,7 +150,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
         throw new Error('Failed to load events');
       }
     } catch (err) {
-      console.error('Error loading events:', err);
+      logger.error('Error loading events:', err);
       setError(err instanceof Error ? err.message : 'Failed to load events');
     } finally {
       setLoading(false);

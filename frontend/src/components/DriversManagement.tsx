@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
+import logger from '../utils/logger';
 
 interface Driver {
   id: string;
@@ -45,7 +46,7 @@ export const DriversManagement: React.FC<DriversManagementProps> = () => {
         throw new Error('Failed to load members');
       }
     } catch (error) {
-      console.error('Error loading members:', error);
+      logger.error('Error loading members:', error);
       setStatus('error');
       setStatusMessage('Failed to load members');
     } finally {

@@ -419,53 +419,73 @@ export const sessionMethods = {
     );
     const userId = driverResult.rows[0]?.user_id || null;
 
+    // Batch insert all lap times in a single query instead of N+1 queries
+    if (lapData.length === 0) {
+      return;
+    }
+
+    // Build parameterized VALUES clause
+    const values: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
     for (const lap of lapData) {
-      await this.db.query(
-        `INSERT INTO lap_times (
-          id, driver_session_result_id, race_id, driver_id, lap_number, 
-          lap_time_ms, sector1_ms, sector2_ms, sector3_ms, 
-          sector1_time_minutes, sector2_time_minutes, sector3_time_minutes,
-          lap_valid_bit_flags, tire_compound, track_position, tire_age_laps,
-          top_speed_kmph, max_safety_car_status, vehicle_fia_flags, pit_stop,
-          ers_store_energy, ers_deployed_this_lap, ers_deploy_mode,
-          fuel_in_tank, fuel_remaining_laps, gap_to_leader_ms, gap_to_position_ahead_ms,
-          car_damage_data, tyre_sets_data, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
-        ON CONFLICT DO NOTHING`,
-        [
-          uuidv4(),
-          driverSessionResultId,
-          raceId,
-          userId,
-          lap.lapNumber,
-          lap.lapTimeMs,
-          lap.sector1Ms || null,
-          lap.sector2Ms || null,
-          lap.sector3Ms || null,
-          lap.sector1TimeMinutes || null,
-          lap.sector2TimeMinutes || null,
-          lap.sector3TimeMinutes || null,
-          lap.lapValidBitFlags || null,
-          lap.tireCompound || null,
-          lap.trackPosition || null,
-          lap.tireAgeLaps || null,
-          lap.topSpeedKmph || null,
-          lap.maxSafetyCarStatus || null,
-          lap.vehicleFiaFlags || null,
-          lap.pitStop || false,
-          lap.ersStoreEnergy || null,
-          lap.ersDeployedThisLap || null,
-          lap.ersDeployMode || null,
-          lap.fuelInTank || null,
-          lap.fuelRemainingLaps || null,
-          lap.gapToLeaderMs || null,
-          lap.gapToPositionAheadMs || null,
-          lap.carDamageData ? JSON.stringify(lap.carDamageData) : null,
-          lap.tyreSetsData ? JSON.stringify(lap.tyreSetsData) : null,
-          now,
-        ],
+      const rowValues: string[] = [];
+      // 30 parameters per row
+      for (let i = 0; i < 30; i++) {
+        rowValues.push(`$${paramIndex++}`);
+      }
+      values.push(`(${rowValues.join(', ')})`);
+      
+      // Push actual values in order
+      params.push(
+        uuidv4(),
+        driverSessionResultId,
+        raceId,
+        userId,
+        lap.lapNumber,
+        lap.lapTimeMs,
+        lap.sector1Ms || null,
+        lap.sector2Ms || null,
+        lap.sector3Ms || null,
+        lap.sector1TimeMinutes || null,
+        lap.sector2TimeMinutes || null,
+        lap.sector3TimeMinutes || null,
+        lap.lapValidBitFlags || null,
+        lap.tireCompound || null,
+        lap.trackPosition || null,
+        lap.tireAgeLaps || null,
+        lap.topSpeedKmph || null,
+        lap.maxSafetyCarStatus || null,
+        lap.vehicleFiaFlags || null,
+        lap.pitStop || false,
+        lap.ersStoreEnergy || null,
+        lap.ersDeployedThisLap || null,
+        lap.ersDeployMode || null,
+        lap.fuelInTank || null,
+        lap.fuelRemainingLaps || null,
+        lap.gapToLeaderMs || null,
+        lap.gapToPositionAheadMs || null,
+        lap.carDamageData ? JSON.stringify(lap.carDamageData) : null,
+        lap.tyreSetsData ? JSON.stringify(lap.tyreSetsData) : null,
+        now,
       );
     }
+
+    await this.db.query(
+      `INSERT INTO lap_times (
+        id, driver_session_result_id, race_id, driver_id, lap_number, 
+        lap_time_ms, sector1_ms, sector2_ms, sector3_ms, 
+        sector1_time_minutes, sector2_time_minutes, sector3_time_minutes,
+        lap_valid_bit_flags, tire_compound, track_position, tire_age_laps,
+        top_speed_kmph, max_safety_car_status, vehicle_fia_flags, pit_stop,
+        ers_store_energy, ers_deployed_this_lap, ers_deploy_mode,
+        fuel_in_tank, fuel_remaining_laps, gap_to_leader_ms, gap_to_position_ahead_ms,
+        car_damage_data, tyre_sets_data, created_at
+      ) VALUES ${values.join(', ')}
+      ON CONFLICT DO NOTHING`,
+      params,
+    );
   },
 
   async getCompletedSessions(this: DatabaseService, raceId: string): Promise<any[]> {
@@ -1067,18 +1087,39 @@ export const sessionMethods = {
       [sessionResultId],
     );
 
+    // Batch update positions in a single query instead of N+1 queries
+    const updates: Array<{ id: string; position: number }> = [];
     for (let i = 0; i < drivers.rows.length; i++) {
       const driver = drivers.rows[i];
       const newPosition = i + 1;
 
       if (driver.position !== newPosition) {
-        await this.db.query(
-          `UPDATE driver_session_results 
-           SET position = $1 
-           WHERE id = $2`,
-          [newPosition, driver.id],
-        );
+        updates.push({ id: driver.id, position: newPosition });
       }
+    }
+
+    if (updates.length > 0) {
+      // Use CASE statement with parameterized queries to batch update all positions
+      const params: any[] = [];
+      const cases: string[] = [];
+      const ids: string[] = [];
+      
+      updates.forEach((update, index) => {
+        const idParam = `$${index * 2 + 1}`;
+        const posParam = `$${index * 2 + 2}`;
+        cases.push(`WHEN id = ${idParam} THEN ${posParam}`);
+        params.push(update.id, update.position);
+        ids.push(idParam);
+      });
+      
+      params.push(...updates.map(u => u.id));
+      
+      await this.db.query(
+        `UPDATE driver_session_results 
+         SET position = CASE ${cases.join(' ')} END
+         WHERE id IN (${ids.join(', ')})`,
+        params,
+      );
     }
   },
 

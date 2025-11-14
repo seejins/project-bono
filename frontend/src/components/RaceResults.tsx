@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiGet, apiPost, apiPut } from '../utils/api';
 import { Trophy, Clock, Flag, AlertTriangle, RotateCcw, Edit, History, Shield } from 'lucide-react';
+import logger from '../utils/logger';
+import { formatTimeFromMs } from '../utils/dateUtils';
 
 interface RaceResult {
   id: string;
@@ -71,7 +73,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         setShowHistoryModal(true);
       }
     } catch (err) {
-      console.error('Failed to load edit history:', err);
+      logger.error('Failed to load edit history:', err);
     }
   };
 
@@ -92,7 +94,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         throw new Error('Failed to add penalty');
       }
     } catch (err) {
-      console.error('Failed to add penalty:', err);
+      logger.error('Failed to add penalty:', err);
     }
   };
 
@@ -112,7 +114,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         throw new Error('Failed to change position');
       }
     } catch (err) {
-      console.error('Failed to change position:', err);
+      logger.error('Failed to change position:', err);
     }
   };
 
@@ -123,7 +125,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         await loadRaceResults();
       }
     } catch (err) {
-      console.error('Failed to reset driver:', err);
+      logger.error('Failed to reset driver:', err);
     }
   };
 
@@ -134,17 +136,10 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         await loadRaceResults();
       }
     } catch (err) {
-      console.error('Failed to reset race:', err);
+      logger.error('Failed to reset race:', err);
     }
   };
 
-  const formatTime = (timeMs: number): string => {
-    if (!timeMs || timeMs === 0) return '--:--.---';
-    const minutes = Math.floor(timeMs / 60000);
-    const seconds = Math.floor((timeMs % 60000) / 1000);
-    const milliseconds = timeMs % 1000;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
-  };
 
   const getResultStatusBadge = (status: number, dnfReason?: string) => {
     switch (status) {
@@ -304,10 +299,10 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
                       {result.num_laps}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {formatTime(result.best_lap_time_ms)}
+                      {formatTimeFromMs(result.best_lap_time_ms)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {formatTime(result.total_race_time_ms)}
+                      {formatTimeFromMs(result.total_race_time_ms)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getResultStatusBadge(result.result_status, result.dnf_reason)}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Trophy, Award, Clock, TrendingUp, Target, Users, Calendar } from 'lucide-react';
+import logger from '../utils/logger';
+import { getApiUrl } from '../utils/api';
 
 interface Driver {
   id: string;
@@ -57,47 +59,64 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
   const [activeTab, setActiveTab] = useState<'overview' | 'results' | 'achievements' | 'comparison'>('overview');
 
   useEffect(() => {
-    fetchDriverData();
-  }, [driverId]);
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
-  const fetchDriverData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch real driver data from API
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      
-      // Fetch driver profile
-      const driverResponse = await fetch(`${apiUrl}/api/members/${driverId}`);
-      if (driverResponse.ok) {
-        const driverData = await driverResponse.json();
-        setDriver(driverData.member || null);
+    const fetchDriverData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch real driver data from API
+        const apiUrl = getApiUrl();
+        const fetchOptions = { signal };
+        
+        // Parallel fetch: driver profile, race results, and achievements simultaneously
+        const [driverResponse, resultsResponse, achievementsResponse] = await Promise.all([
+          fetch(`${apiUrl}/api/members/${driverId}`, fetchOptions),
+          fetch(`${apiUrl}/api/members/${driverId}/race-results`, fetchOptions),
+          fetch(`${apiUrl}/api/members/${driverId}/achievements`, fetchOptions),
+        ]);
+        
+        if (signal.aborted) return;
+        
+        if (driverResponse.ok) {
+          const driverData = await driverResponse.json();
+          if (!signal.aborted) setDriver(driverData.member || null);
+        }
+        
+        if (resultsResponse.ok) {
+          const resultsData = await resultsResponse.json();
+          if (!signal.aborted) setRaceResults(resultsData.results || []);
+        }
+        
+        if (achievementsResponse.ok) {
+          const achievementsData = await achievementsResponse.json();
+          if (!signal.aborted) setAchievements(achievementsData.achievements || []);
+        }
+        
+      } catch (error: any) {
+        if (signal.aborted || error.name === 'AbortError') return;
+        
+        logger.error('Error fetching driver data:', error);
+        // Set empty data on error
+        if (!signal.aborted) {
+          setDriver(null);
+          setRaceResults([]);
+          setAchievements([]);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
-      
-      // Fetch driver race results
-      const resultsResponse = await fetch(`${apiUrl}/api/members/${driverId}/race-results`);
-      if (resultsResponse.ok) {
-        const resultsData = await resultsResponse.json();
-        setRaceResults(resultsData.results || []);
-      }
-      
-      // Fetch driver achievements
-      const achievementsResponse = await fetch(`${apiUrl}/api/members/${driverId}/achievements`);
-      if (achievementsResponse.ok) {
-        const achievementsData = await achievementsResponse.json();
-        setAchievements(achievementsData.achievements || []);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching driver data:', error);
-      // Set empty data on error
-      setDriver(null);
-      setRaceResults([]);
-      setAchievements([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    fetchDriverData();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [driverId]);
 
   const getPositionColor = (position: number) => {
     if (position === 1) return 'text-yellow-400 bg-yellow-500/20';
