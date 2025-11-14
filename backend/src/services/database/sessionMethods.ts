@@ -1,3 +1,4 @@
+import { QueryResultRow } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { DatabaseService } from '../DatabaseService';
@@ -328,7 +329,7 @@ export const sessionMethods = {
       [sessionResultId],
     );
 
-    const driverResultIds = driverResults.rows.map((r) => r.id);
+    const driverResultIds = driverResults.rows.map((r: QueryResultRow) => r.id as string);
     if (driverResultIds.length > 0) {
       await this.db.query(
         `DELETE FROM lap_times WHERE driver_session_result_id = ANY($1)`,
@@ -499,7 +500,7 @@ export const sessionMethods = {
 
     console.log(`🔍 getCompletedSessions: Found ${result.rows.length} sessions for race_id ${raceId}`);
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: QueryResultRow) => ({
       id: row.id,
       sessionType: row.session_type,
       sessionName: row.session_name,

@@ -1,3 +1,4 @@
+import { QueryResultRow } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import type { DatabaseService } from '../DatabaseService';
 import { Season, SeasonData, SeasonStatus } from './types';
@@ -44,7 +45,7 @@ export const seasonMethods = {
       `SELECT id, name, year, start_date, end_date, status, created_at, updated_at
          FROM seasons ORDER BY year DESC, name`,
     );
-    return result.rows.map((row) => ({
+    return result.rows.map((row: QueryResultRow) => ({
       ...this.transformSeasonToCamelCase(row),
       isActive: row.status === 'active',
     }));
@@ -430,7 +431,7 @@ export const seasonMethods = {
       ORDER BY s.year DESC
     `);
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: QueryResultRow) => ({
       id: row.id,
       name: row.name,
       year: row.year,

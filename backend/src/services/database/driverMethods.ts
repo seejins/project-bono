@@ -1,3 +1,4 @@
+import { QueryResultRow } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { DatabaseService } from '../DatabaseService';
@@ -15,12 +16,12 @@ export const driverMethods = {
       [seasonId],
     );
 
-    return result.rows.map((row) => this.transformDriverToCamelCase(row));
+    return result.rows.map((row: QueryResultRow) => this.transformDriverToCamelCase(row));
   },
 
   async getAllDrivers(this: DatabaseService): Promise<Driver[]> {
     const result = await this.db.query('SELECT * FROM drivers ORDER BY name ASC');
-    return result.rows.map((row) => this.transformDriverToCamelCase(row));
+    return result.rows.map((row: QueryResultRow) => this.transformDriverToCamelCase(row));
   },
 
   async getAllMembers(this: DatabaseService): Promise<Member[]> {
@@ -303,7 +304,7 @@ export const driverMethods = {
       return {
         driver,
         careerStats,
-        seasons: seasonsResult.rows.map((row) => ({
+        seasons: seasonsResult.rows.map((row: QueryResultRow) => ({
           id: row.id,
           year: row.year,
           name: row.name,
@@ -423,7 +424,7 @@ export const driverMethods = {
       [seasonId],
     );
 
-    return result.rows.map((row, index) => ({
+    return result.rows.map((row: QueryResultRow, index: number) => ({
       id: row.id,
       name: row.name,
       team: row.team,
@@ -480,7 +481,7 @@ export const driverMethods = {
 
       const result = await this.db.query(query, params);
 
-      return result.rows.map((row) => ({
+      return result.rows.map((row: QueryResultRow) => ({
         raceId: row.race_id,
         trackName: row.track_name,
         raceDate: row.race_date,

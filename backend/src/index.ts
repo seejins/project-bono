@@ -154,7 +154,7 @@ process.on('SIGINT', () => {
     pool.end().then(() => {
       logger.log('✅ Database pool closed');
       process.exit(0);
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       logger.error('❌ Error closing database pool:', error);
       process.exit(1);
     });

@@ -1,3 +1,4 @@
+import { QueryResultRow } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { DatabaseService } from '../DatabaseService';
@@ -84,7 +85,7 @@ export const raceMethods = {
     return id;
   },
 
-  async getRacesBySeason(this: DatabaseService, seasonId: string): Promise<Race[]> {
+  async getRacesBySeason(this: DatabaseService, seasonId: string): Promise<any[]> {
     const result = await this.db.query(
       `SELECT 
         r.id,
@@ -116,7 +117,7 @@ export const raceMethods = {
     );
 
     const racesWithSessions = await Promise.all(
-      result.rows.map(async (race) => {
+      result.rows.map(async (race: QueryResultRow) => {
         const sessions = await this.getCompletedSessions(race.id);
         const sessionTypes: string[] = [];
 
@@ -292,7 +293,7 @@ export const raceMethods = {
     );
 
     const eventsWithSessions = await Promise.all(
-      result.rows.map(async (row) => {
+      result.rows.map(async (row: QueryResultRow) => {
         const sessions = await this.getCompletedSessions(row.id);
         const sessionTypes: string[] = [];
 
@@ -641,7 +642,7 @@ export const raceMethods = {
       [seasonId],
     );
 
-    const existingIds = existingEvents.rows.map((row) => row.id);
+    const existingIds = existingEvents.rows.map((row: QueryResultRow) => row.id as string);
 
     const unknownIds = trimmedIds.filter((id) => !existingIds.includes(id));
     if (unknownIds.length > 0) {
@@ -653,7 +654,7 @@ export const raceMethods = {
       throw new Error('Event order payload contains duplicate event ids');
     }
 
-    const remainingIds = existingIds.filter((id) => !uniqueIds.has(id));
+    const remainingIds = existingIds.filter((id: string) => !uniqueIds.has(id));
     const finalOrdering = [...trimmedIds, ...remainingIds];
 
     await this.withTransaction(async (tx) => {

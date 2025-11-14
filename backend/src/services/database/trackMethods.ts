@@ -1,3 +1,4 @@
+import { QueryResultRow } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { DatabaseService } from '../DatabaseService';
@@ -25,13 +26,13 @@ export const trackMethods = {
     return id;
   },
 
-  async getAllTracks(this: DatabaseService): Promise<Track[]> {
+  async getAllTracks(this: DatabaseService): Promise<any[]> {
     const result = await this.db.query(
       `SELECT id, name, country, length_km as length, event_name, short_event_name, created_at as "createdAt"
        FROM tracks ORDER BY name`,
     );
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: QueryResultRow) => ({
       ...row,
       city: '',
       laps: 0,
