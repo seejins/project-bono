@@ -657,7 +657,7 @@ export const sessionMethods = {
       `✅ getDriverSessionResults: Returning ${result.rows.length} driver results for session ${sessionResultId}`,
     );
 
-    const transformedRows = result.rows.map((row) => {
+    const transformedRows = result.rows.map((row: QueryResultRow) => {
       let additionalData = row.additional_data;
       if (additionalData === null || additionalData === undefined) {
         additionalData = null;
@@ -1038,7 +1038,7 @@ export const sessionMethods = {
         });
       }
 
-      if (!matchingDriverRows.rows.some((row) => row.id === driverSessionResultId)) {
+      if (!matchingDriverRows.rows.some((row: QueryResultRow) => row.id === driverSessionResultId)) {
         updates.push({
           driverSessionResultId,
           sessionResultId,
