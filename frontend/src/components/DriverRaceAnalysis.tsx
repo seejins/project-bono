@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BarChart3, TrendingUp, Award, LineChart } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
@@ -28,10 +29,31 @@ type AnalyticsTab = 'overview' | 'pace' | 'comparison' | 'strategy';
 
 export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, initialSessionType }) => {
   const { raceData, sessions, defaultSessionId, loading, error } = useDriverRaceData(driverId, raceId);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') as AnalyticsTab | null;
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const hasAppliedInitialSession = useRef(false);
-  const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview');
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>(
+    tabFromUrl && ['overview', 'pace', 'comparison', 'strategy'].includes(tabFromUrl) ? tabFromUrl : 'overview'
+  );
   const [comparisonDriverId, setComparisonDriverId] = useState<string | null>(null);
+
+  // Handle tab change - update both state and URL
+  const handleTabChange = useCallback((tab: AnalyticsTab) => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.set('tab', tab);
+      return newParams;
+    });
+  }, [setSearchParams]);
+
+  // Restore tab from URL on mount
+  useEffect(() => {
+    if (tabFromUrl && ['overview', 'pace', 'comparison', 'strategy'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const determineSessionKind = useCallback((sessionType: number): 'practice' | 'qualifying' | 'race' => {
     if (sessionType === 10) {
@@ -119,14 +141,31 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   );
 
   const getDriverDisplayName = (driverResult: any): string => {
-    return (
-      driverResult?.json_driver_name ??
-      driverResult?.driver_name ??
-      driverResult?.mapping_driver_name ??
-      driverResult?.name ??
-      driverResult?.additional_data?.participantData?.name ??
-      'Unknown Driver'
-    );
+    const candidateNames = [
+      driverResult?.mappedUserName,
+      driverResult?.mapped_user_name,
+      driverResult?.mappedDriverName,
+      driverResult?.mapped_driver_name,
+      driverResult?.driver_name,
+      driverResult?.json_driver_name,
+      driverResult?.mapping_driver_name,
+      driverResult?.name,
+      driverResult?.additional_data?.participantData?.name,
+      driverResult?.additionalData?.participantData?.name,
+      driverResult?.additional_data?.participantData?.driverName,
+      driverResult?.additionalData?.participantData?.driverName,
+    ];
+
+    for (const rawName of candidateNames) {
+      if (typeof rawName === 'string') {
+        const trimmed = rawName.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
+    }
+
+    return 'Unknown Driver';
   };
 
   const comparisonOptions = useMemo(() => {
@@ -193,7 +232,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   const { lapComparisonData, deltaComparisonData, statusOverlays, statusLegend } = useLapAnalytics({ lapData, comparisonDriver });
   const { stintChartData, stintSegments, stintStartLapInfo, compoundLineSetup, compoundAverages } =
     useStintAnalytics(lapData);
-  const raceStats = useRaceStats({ lapData, driver });
+  const raceStats = useRaceStats({ lapData, driver, sessionDrivers });
 
   const createStintDotRenderer = useCallback(
     (compoundKey: string) =>
@@ -506,12 +545,19 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
       headerClassName: lapTableHeaderPadding,
       className: `${lapTableCellPadding} text-lg`,
       render: (_: unknown, row) => {
-        const isFastest = Boolean(
+        const isPersonalBest = Boolean(
           raceStats?.fastestLap && row.lap_time_ms && raceStats.fastestLap === row.lap_time_ms
         );
-        const className = isFastest
-          ? 'text-purple-600 dark:text-purple-400 font-semibold'
-          : 'text-slate-900 dark:text-white';
+        const isSessionFastest = Boolean(
+          raceStats?.sessionFastestLap && row.lap_time_ms && raceStats.sessionFastestLap === row.lap_time_ms
+        );
+        
+        let className = 'text-slate-900 dark:text-white';
+        if (isSessionFastest) {
+          className = 'text-purple-600 dark:text-purple-400 font-semibold'; // Session fastest - purple
+        } else if (isPersonalBest) {
+          className = 'text-green-600 dark:text-green-400 font-semibold'; // Personal best - green
+        }
 
         return (
           <span className={className}>
@@ -772,7 +818,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           >
             <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-6">
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => handleTabChange('overview')}
               className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'overview'
                   ? 'border-red-600 text-red-600'
@@ -785,7 +831,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           </div>
             </button>
             <button
-              onClick={() => setActiveTab('pace')}
+              onClick={() => handleTabChange('pace')}
               className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'pace'
                   ? 'border-red-600 text-red-600'
@@ -798,7 +844,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           </div>
             </button>
             <button
-              onClick={() => setActiveTab('comparison')}
+              onClick={() => handleTabChange('comparison')}
               className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'comparison'
                   ? 'border-red-600 text-red-600'
@@ -811,7 +857,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           </div>
             </button>
             <button
-              onClick={() => setActiveTab('strategy')}
+              onClick={() => handleTabChange('strategy')}
               className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
                 activeTab === 'strategy'
                   ? 'border-red-600 text-red-600'

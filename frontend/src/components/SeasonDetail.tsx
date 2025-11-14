@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit, Trash2, Users, Calendar, Flag, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type {
@@ -77,13 +78,34 @@ interface SeasonDetailProps {
 }
 
 export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack, onSeasonUpdated }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') as 'drivers' | 'events' | null;
   const [members, setMembers] = useState<Member[]>([]);
   const [seasonDrivers, setSeasonDrivers] = useState<Member[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [localSeasonStatus, setLocalSeasonStatus] = useState<SeasonStatus>(season.status);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'drivers' | 'events'>('drivers');
+  const [activeTab, setActiveTab] = useState<'drivers' | 'events'>(
+    tabFromUrl && ['drivers', 'events'].includes(tabFromUrl) ? tabFromUrl : 'drivers'
+  );
+
+  // Handle tab change - update both state and URL
+  const handleTabChange = useCallback((tab: 'drivers' | 'events') => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.set('tab', tab);
+      return newParams;
+    });
+  }, [setSearchParams]);
+
+  // Restore tab from URL on mount
+  useEffect(() => {
+    if (tabFromUrl && ['drivers', 'events'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [showEditEventModal, setShowEditEventModal] = useState(false);
@@ -732,7 +754,7 @@ const editTeamOptions = useMemo(() => {
       {/* Tabs */}
       <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             <button
-              onClick={() => setActiveTab('drivers')}
+              onClick={() => handleTabChange('drivers')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
                 activeTab === 'drivers'
               ? 'bg-red-600 text-white'
@@ -743,7 +765,7 @@ const editTeamOptions = useMemo(() => {
           <span>Drivers ({seasonDrivers.length})</span>
             </button>
             <button
-          onClick={() => setActiveTab('events')}
+          onClick={() => handleTabChange('events')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
             activeTab === 'events'
               ? 'bg-red-600 text-white'

@@ -73,7 +73,7 @@ export const StrategyTab: React.FC<StrategyTabProps> = ({
               <BaseLineChart
                 data={compoundLineSetup.data}
                 lines={stintLines}
-                autoDomainPadding={{ axis: 'y', padding: 20, clampToZero: true }}
+                autoDomainPadding={{ axis: 'y', padding: 10, clampToZero: false }}
                 yTickFormatter={(value) => formatSecondsValue(value as number)}
                 tooltipContent={<StintLapTooltip />}
                 referenceLines={combinedReferenceLines}

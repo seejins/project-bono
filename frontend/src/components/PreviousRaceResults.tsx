@@ -59,7 +59,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
       <button
         type="button"
         onClick={() => previousRace && onRaceSelect?.(previousRace.raceId)}
-        className="flex w-full items-center gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4 text-left transition hover:bg-purple-50/60 focus:outline-none focus-visible:bg-purple-100/70 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:bg-slate-800/70"
+        className="flex w-full items-center gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4 text-left transition hover:bg-red-50/60 focus:outline-none focus-visible:bg-red-100/70 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:bg-slate-800/70"
       >
         <div className="flex h-10 w-10 items-center justify-center text-purple-500">
           <Trophy className="w-5 h-5" />
@@ -150,7 +150,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
         label: 'Fastest Laps',
         items: (previousRace.summary.fastestLaps ?? []).slice(0, 3),
         render: (item: any, index: number) => {
-          const isFastestLap = item.fastestLap === true || index === 0;
+          const isFastestLap = item.fastestLap === true;
           return (
           <>
             <span className="font-semibold text-slate-600 dark:text-slate-300">
@@ -173,7 +173,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
               className={clsx(
                 'text-right font-semibold',
                 isFastestLap
-                  ? 'text-purple-500 dark:text-purple-400'
+                ? 'text-purple-500 dark:text-purple-400'
                   : 'text-slate-700 dark:text-slate-200',
               )}
             >
@@ -247,7 +247,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
     return (
       <CardShell>
         <div className="flex items-center justify-center py-6 text-sm text-slate-500 dark:text-slate-400">
-          <Loader2 className="mr-3 h-5 w-5 animate-spin text-purple-500" />
+          <Loader2 className="mr-3 h-5 w-5 animate-spin text-red-500" />
           Loading previous race…
         </div>
       </CardShell>
@@ -309,7 +309,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                     className={clsx(
                       'h-1.5 w-6 rounded-full transition-all duration-300 focus:outline-none',
                       index === activeIndex % summarySections.length
-                        ? 'bg-purple-500'
+                        ? 'bg-red-500'
                         : 'bg-slate-200 dark:bg-slate-700',
                     )}
                     onClick={() => handleIndicatorSelect(index)}

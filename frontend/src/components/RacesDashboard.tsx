@@ -498,7 +498,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       {(() => {
                         const label = formatEventDate(latestCompleted.race_date);
-                        return label === 'TBD' ? 'Awaiting final date' : `Wrapped up ${label}`;
+                        return label === 'TBD' ? 'Awaiting final date' : label;
                       })()}
                     </p>
                   </div>

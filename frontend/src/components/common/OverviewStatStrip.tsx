@@ -20,8 +20,8 @@ interface OverviewStatStripProps {
 export function OverviewStatStrip({ items, className, variant = 'default' }: OverviewStatStripProps) {
   const cardBaseClasses =
     variant === 'muted'
-      ? 'group rounded-2xl border border-slate-800/60 bg-slate-900/70 p-4 text-left shadow-md transition duration-200 hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 dark:border-slate-700'
-      : 'group rounded-2xl border border-slate-800/50 bg-slate-900/70 p-4 text-left shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] backdrop-blur-lg transition duration-200 hover:bg-slate-800/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40';
+      ? 'group rounded-2xl border border-slate-800/60 bg-slate-900/70 p-4 text-left shadow-md transition duration-200 hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 dark:border-slate-700'
+      : 'group rounded-2xl border border-slate-800/50 bg-slate-900/70 p-4 text-left shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] backdrop-blur-lg transition duration-200 hover:bg-slate-800/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40';
 
   const iconBaseClasses =
     variant === 'muted'

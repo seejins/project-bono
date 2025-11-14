@@ -154,7 +154,7 @@ export const PaceTab: React.FC<PaceTabProps> = ({
                     dot: false,
                   },
                 ]}
-                autoDomainPadding={{ axis: 'y', padding: 20, clampToZero: true }}
+                autoDomainPadding={{ axis: 'y', padding: 10, clampToZero: false }}
                 yTickFormatter={(value) => formatSecondsValue(value as number)}
                 tooltipContent={<LapTimeTooltipContent />}
                 legend

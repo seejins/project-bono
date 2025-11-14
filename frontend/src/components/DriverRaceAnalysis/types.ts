@@ -39,6 +39,9 @@ export type DriverResultWithMeta = F123DriverResult & {
   additional_data?: any;
   additionalData?: any;
   _totalRaceTimeMs?: number;
+  sessionResultId?: string | null;
+  canonicalDriverId?: string | null;
+  mappedUserId?: string | null;
 };
 
 export interface DriverSessionData {
@@ -102,7 +105,8 @@ export interface StintAnalytics {
 }
 
 export interface RaceStats {
-  fastestLap: number;
+  fastestLap: number; // Driver's personal best lap time
+  sessionFastestLap: number | null; // Session fastest lap (from driver with fastestLap = true)
   slowestLap: number;
   avgLap: number;
   consistencyPercent: string;

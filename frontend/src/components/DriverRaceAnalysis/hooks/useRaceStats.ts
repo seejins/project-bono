@@ -4,9 +4,10 @@ import { LapData, RaceStats } from '../types';
 interface UseRaceStatsParams {
   lapData: LapData[];
   driver: any;
+  sessionDrivers?: any[]; // Add to get session fastest lap
 }
 
-export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats | null => {
+export const useRaceStats = ({ lapData, driver, sessionDrivers = [] }: UseRaceStatsParams): RaceStats | null => {
   return useMemo(() => {
     if (!lapData || lapData.length === 0 || !driver) {
       return null;
@@ -19,8 +20,27 @@ export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats
     }
 
     const lapTimes = validLaps.map((lap) => lap.lap_time_ms);
-    const fastestLap = Math.min(...lapTimes);
+    const fastestLap = Math.min(...lapTimes); // Driver's personal best
     const slowestLap = Math.max(...lapTimes);
+    
+    // Get session fastest lap from driver with fastestLap = true (already extracted from JSON)
+    let sessionFastestLap: number | null = null;
+    if (sessionDrivers && sessionDrivers.length > 0) {
+      const fastestLapDriver = sessionDrivers.find((d: any) => 
+        d?.fastestLap === true || d?.fastest_lap === true || d?.fastest_lap === 1 || d?.fastest_lap === 'true'
+      );
+      
+      if (fastestLapDriver) {
+        const fastestTime = fastestLapDriver.fastestLapTime ?? 
+                           fastestLapDriver.raceBestLapTime ?? 
+                           fastestLapDriver.best_lap_time_ms ??
+                           null;
+        if (fastestTime != null && fastestTime > 0) {
+          sessionFastestLap = Number(fastestTime);
+        }
+      }
+    }
+
     const avgLap = Math.round(lapTimes.reduce((sum, time) => sum + time, 0) / lapTimes.length);
 
     const variance = lapTimes.reduce((sum, time) => sum + Math.pow(time - avgLap, 2), 0) / lapTimes.length;
@@ -72,7 +92,8 @@ export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats
     ).length;
 
     return {
-      fastestLap,
+      fastestLap, // Driver's personal best
+      sessionFastestLap, // Session fastest lap (from JSON)
       slowestLap,
       avgLap,
       consistencyPercent,
@@ -92,7 +113,7 @@ export const useRaceStats = ({ lapData, driver }: UseRaceStatsParams): RaceStats
       totalLaps: validLaps.length,
       fastestLapNumber: validLaps.find((lap) => lap.lap_time_ms === fastestLap)?.lap_number || null,
     };
-  }, [lapData, driver]);
+  }, [lapData, driver, sessionDrivers]);
 };
 
 export default useRaceStats;

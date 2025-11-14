@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Users, Trophy, Award, ChevronRight } from 'lucide-react';
 import { useSeason } from '../contexts/SeasonContext';
 import { useSeasonAnalysis, type DriverSeasonSummary } from '../hooks/useSeasonAnalysis';
@@ -13,7 +14,6 @@ interface DriverListProps {
 const formatNumber = (value: number) => value.toLocaleString();
 
 export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
-  const [sortBy, setSortBy] = useState<'position' | 'points' | 'wins' | 'name'>('position');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const { currentSeason } = useSeason();
   const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
@@ -23,20 +23,11 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       return [];
     }
 
-    return [...analysis.drivers].sort((a, b) => {
-      switch (sortBy) {
-        case 'points':
-          return b.points - a.points;
-        case 'wins':
-          return b.wins - a.wins;
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'position':
-        default:
-          return (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER);
-      }
-    });
-  }, [analysis, sortBy]);
+    return [...analysis.drivers].sort(
+      (a, b) =>
+        (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER),
+    );
+  }, [analysis]);
 
   const getPositionColor = (position?: number | null) => {
     if (position === 1) return 'text-yellow-500';
@@ -155,6 +146,8 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
     );
   }
 
+  const easing: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
   return (
     <DashboardPage
       hero={{
@@ -165,7 +158,12 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       }}
       contentClassName="space-y-6"
     >
-      <div className="flex items-center justify-between">
+      <motion.div
+        className="flex items-center justify-between"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
+      >
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center text-slate-900 dark:text-slate-100">
             <Users className="h-6 w-6" />
@@ -174,17 +172,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as any)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            <option value="position">Position</option>
-            <option value="points">Points</option>
-            <option value="wins">Wins</option>
-            <option value="name">Name</option>
-          </select>
-
           <div className="flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-900">
             <button
               onClick={() => setViewMode('list')}
@@ -208,19 +195,27 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {drivers.map((driver) => {
-            const teamColorClass = F123DataService.getTeamColor(driver.team ?? '');
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
+      >
+        {viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {drivers.map((driver, index) => {
+              const teamColorClass = F123DataService.getTeamColor(driver.team ?? '');
 
-            return (
-              <div
-                key={driver.id}
-                className="cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-md transition hover:bg-slate-900"
-                onClick={() => onDriverSelect?.(driver.id)}
-              >
+              return (
+                <motion.div
+                  key={driver.id}
+                  className="cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-md transition hover:bg-slate-900"
+                  onClick={() => onDriverSelect?.(driver.id)}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: easing, delay: 0.22 + index * 0.05 }}
+                >
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-slate-200">
@@ -259,19 +254,20 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
                   <span>Average finish: {driver.averageFinish ? `P${driver.averageFinish.toFixed(1)}` : '—'}</span>
                   <span>Consistency: {driver.consistency.toFixed(1)}%</span>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
-      ) : (
-        <DashboardTable
-          columns={tableColumns}
-          rows={drivers}
-          rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
-          onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
-          emptyMessage="No drivers registered for this season yet."
-        />
-      )}
+          </div>
+        ) : (
+          <DashboardTable
+            columns={tableColumns}
+            rows={drivers}
+            rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
+            onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
+            emptyMessage="No drivers registered for this season yet."
+          />
+        )}
+      </motion.div>
     </DashboardPage>
   );
 };

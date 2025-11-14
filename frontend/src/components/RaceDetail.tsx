@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
@@ -37,8 +38,12 @@ type RaceDriverRow = F123DriverResult & {
   mappedUserName?: string | null;
   jsonDriverName?: string | null;
   mappingDriverName?: string | null;
+  json_driver_id?: string | null;
+  jsonDriverId?: string | null;
   isHumanDriver?: boolean;
   participantIsAi?: boolean | null;
+  sessionResultId?: string | null;
+  canonicalDriverId?: string | null;
 };
 
 type DriverMemberOption = {
@@ -55,7 +60,11 @@ interface RaceDetailProps {
 
 export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }) => {
   const { isAuthenticated } = useAdmin();
-  const [activeSession, setActiveSession] = useState<'practice' | 'qualifying' | 'race'>('race');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionFromUrl = searchParams.get('session') as 'practice' | 'qualifying' | 'race' | null;
+  const [activeSession, setActiveSession] = useState<'practice' | 'qualifying' | 'race'>(
+    sessionFromUrl && ['practice', 'qualifying', 'race'].includes(sessionFromUrl) ? sessionFromUrl : 'race'
+  );
   const [raceData, setRaceData] = useState<any>(null);
   const [drivers, setDrivers] = useState<RaceDriverRow[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -153,6 +162,23 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     hasPractice: sessions.some(s => s.sessionType >= 1 && s.sessionType <= 4)
   }), [sessions]);
 
+  // Handle session change - update both state and URL
+  const handleSessionChange = useCallback((session: 'practice' | 'qualifying' | 'race') => {
+    setActiveSession(session);
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.set('session', session);
+      return newParams;
+    });
+  }, [setSearchParams]);
+
+  // Restore session from URL on mount
+  useEffect(() => {
+    if (sessionFromUrl && ['practice', 'qualifying', 'race'].includes(sessionFromUrl)) {
+      setActiveSession(sessionFromUrl);
+    }
+  }, [sessionFromUrl]);
+
   // Set default active session to first available session when sessions load
   useEffect(() => {
     if (sessions.length === 0) return;
@@ -163,24 +189,24 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     // If current active session doesn't exist, switch to first available
     if (activeSession === 'race' && !hasRace) {
       if (hasQualifying) {
-        setActiveSession('qualifying');
+        handleSessionChange('qualifying');
       } else if (hasPractice) {
-        setActiveSession('practice');
+        handleSessionChange('practice');
       }
     } else if (activeSession === 'qualifying' && !hasQualifying) {
       if (hasRace) {
-        setActiveSession('race');
+        handleSessionChange('race');
       } else if (hasPractice) {
-        setActiveSession('practice');
+        handleSessionChange('practice');
       }
     } else if (activeSession === 'practice' && !hasPractice) {
       if (hasRace) {
-        setActiveSession('race');
+        handleSessionChange('race');
       } else if (hasQualifying) {
-        setActiveSession('qualifying');
+        handleSessionChange('qualifying');
       }
     }
-  }, [sessions, activeSession, sessionTypes]);
+  }, [sessions, activeSession, sessionTypes, handleSessionChange]);
 
   // Memoize updateDriversFromSessions to prevent unnecessary re-renders
   const updateDriversFromSessions = useCallback(() => {
@@ -295,17 +321,55 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         }
       }
 
+      const rawDriverSessionResultId =
+        result?.driver_session_result_id ??
+        result?.driverSessionResultId ??
+        result?.id ??
+        null;
+      const normalizedDriverSessionResultId =
+        rawDriverSessionResultId !== undefined && rawDriverSessionResultId !== null
+          ? String(rawDriverSessionResultId)
+          : null;
+
+      const rawSessionResultId =
+        result?.session_result_id ??
+        result?.sessionResultId ??
+        null;
+      const normalizedSessionResultId =
+        rawSessionResultId !== undefined && rawSessionResultId !== null
+          ? String(rawSessionResultId)
+          : null;
+
       const mappedUserId = result.user_id ? String(result.user_id) : null;
       const mappedUserName = result.driver_name || null;
       const jsonDriverName = result.json_driver_name || null;
       const fallbackMappingName = result.mapping_driver_name || null;
+      const jsonDriverId = result.json_driver_id ? String(result.json_driver_id) : null;
+      const rawDriverId = result.driver_id ?? result.driverId ?? null;
+      const normalizedDriverId = rawDriverId !== undefined && rawDriverId !== null ? String(rawDriverId) : null;
+      const canonicalDriverId =
+        mappedUserId ??
+        jsonDriverId ??
+        normalizedDriverId ??
+        (result.member_id ? String(result.member_id) : null) ??
+        (result.player_id ? String(result.player_id) : null) ??
+        (result.driver_number != null ? `car-${result.driver_number}` : null);
+      // Prioritize driver_session_result_id first (unique per result)
+      const normalizedResultId =
+        normalizedDriverSessionResultId ??
+        (result?.id !== undefined && result?.id !== null ? String(result.id) : null) ??
+        normalizedSessionResultId;
       const preferredDisplayName =
         mappedUserName || jsonDriverName || fallbackMappingName || 'Unknown Driver';
       const isHumanDriver = aiControlled === null ? Boolean(mappedUserId) : !aiControlled;
       
       const driver: any = {
-        id: result.id, // Use driver_session_results.id as primary identifier (UUID)
-        driver_session_result_id: result.id, // Primary key from driver_session_results table (always a UUID)
+        // driver.id MUST be driver_session_result_id (unique per result)
+        id:
+          normalizedDriverSessionResultId ??
+          normalizedResultId ??
+          `driver-${normalizedDriverSessionResultId ?? index}`,
+        driver_session_result_id: normalizedDriverSessionResultId,
         user_id: result.user_id, // Tournament participant/user (NULL until mapped)
         json_driver_id: result.json_driver_id ? String(result.json_driver_id) : null, // In-game driver ID from column
         mappedUserId,
@@ -314,6 +378,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         mappingDriverName: fallbackMappingName,
         isHumanDriver,
         participantIsAi: aiControlled,
+        sessionResultId: normalizedResultId ?? normalizedSessionResultId ?? null,
+        canonicalDriverId: canonicalDriverId ?? null,
         name: preferredDisplayName,
         team: result.json_team_name || result.mapping_team_name || result.driver_team || 'Unknown Team',
         number: result.json_car_number || result.driver_number || result.mapping_driver_number || result.position || 0,
@@ -625,14 +691,122 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300 2xl:text-sm';
   };
 
-  const handleDriverClick = (driver: RaceDriverRow) => {
-    onDriverSelect(driver.id, raceId, activeSession);
+  // Get driver_session_result_id - this is the primary identifier for all operations
+  const getDriverSessionResultId = (driver: RaceDriverRow): string | null => {
+    const rawId =
+      (driver as any).driver_session_result_id ??
+      (driver as any).driverSessionResultId ??
+      (driver as any).id ??
+      driver.id ??
+      driver.sessionResultId ??
+      null;
+
+    if (rawId === null || rawId === undefined) {
+      return null;
+    }
+
+    const normalized = String(rawId).trim();
+    return normalized.length > 0 ? normalized : null;
   };
 
-  // Get driver_session_result_id (UUID) - this is the primary identifier for all operations
-  const getDriverSessionResultId = (driver: RaceDriverRow): string | null => {
-    return (driver as any).driver_session_result_id || (driver as any).id || null;
+  const getCanonicalDriverIdentifier = (driver: RaceDriverRow): string | null => {
+    const raw =
+      driver.canonicalDriverId ??
+      driver.mappedUserId ??
+      driver.json_driver_id ??
+      (driver as any)?.jsonDriverId ??
+      (driver as any)?.driver_id ??
+      (driver as any)?.driverId ??
+      (driver.user_id != null ? String(driver.user_id) : null) ??
+      (driver.number != null ? `car-${driver.number}` : null);
+
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    const normalized = String(raw).trim();
+    return normalized.length > 0 ? normalized : null;
   };
+
+  const sessionResultIdCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    drivers.forEach((driver) => {
+      const sessionResultId = getDriverSessionResultId(driver);
+      if (!sessionResultId) {
+        return;
+      }
+
+      counts[sessionResultId] = (counts[sessionResultId] ?? 0) + 1;
+    });
+
+    return counts;
+  }, [drivers]);
+
+  const duplicateSessionResultIds = useMemo(() => {
+    const duplicates = new Set<string>();
+
+    Object.entries(sessionResultIdCounts).forEach(([id, count]) => {
+      if (count > 1) {
+        duplicates.add(id);
+      }
+    });
+
+    return duplicates;
+  }, [sessionResultIdCounts]);
+
+  const handleDriverClick = useCallback(
+    (driver: RaceDriverRow) => {
+      const sessionResultId = getDriverSessionResultId(driver);
+
+      // Only use driver_session_result_id - it's unique per driver result
+      if (!sessionResultId) {
+        console.warn('Cannot navigate: missing driver_session_result_id for driver:', driver.name);
+        return;
+      }
+
+      onDriverSelect(sessionResultId, raceId, activeSession);
+    },
+    [activeSession, onDriverSelect, raceId],
+  );
+
+  const buildDriverRowKey = useCallback(
+    (row: RaceDriverRow, index: number) => {
+      // Prioritize driver_session_result_id first (most unique)
+      const sessionResultId = getDriverSessionResultId(row);
+      if (sessionResultId) {
+        // Even if there are duplicates, include index as a fallback
+        if (duplicateSessionResultIds.has(sessionResultId)) {
+          const canonicalId = getCanonicalDriverIdentifier(row);
+          const fallbackName =
+            row.name && typeof row.name === 'string'
+              ? row.name.replace(/\s+/g, '-').toLowerCase()
+              : `driver-${index}`;
+          return `${sessionResultId}-${canonicalId ?? fallbackName}-${index}-${activeSession}`;
+        }
+        return `${sessionResultId}-${activeSession}`;
+      }
+
+      // Fallback to other identifiers
+      const uniqueRowId = row.id != null ? String(row.id) : null;
+      const canonicalId = getCanonicalDriverIdentifier(row);
+      const fallbackName =
+        row.name && typeof row.name === 'string'
+          ? row.name.replace(/\s+/g, '-').toLowerCase()
+          : `driver-${index}`;
+
+      if (uniqueRowId) {
+        return `${uniqueRowId}-${activeSession}`;
+      }
+
+      if (canonicalId) {
+        return `${canonicalId}-${activeSession}`;
+      }
+
+      return `${fallbackName}-${index}-${activeSession}`;
+    },
+    [activeSession, duplicateSessionResultIds],
+  );
 
   const handleDriverMappingChange = useCallback(
     async (driver: RaceDriverRow, nextUserId: string | null) => {
@@ -713,7 +887,15 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
               user_id: normalizedNextUserId,
               mappedUserId: normalizedNextUserId,
               mappedUserName: selectedOption?.name ?? null,
+              canonicalDriverId:
+                normalizedNextUserId ??
+                row.json_driver_id ??
+                (row as any)?.jsonDriverId ??
+                row.canonicalDriverId ??
+                null,  // Don't fall back to row.id - keep it null if no better option
               name: nextDisplayName,
+              // Preserve driver_session_result_id
+              driver_session_result_id: row.driver_session_result_id ?? getDriverSessionResultId(row),
             };
             return updated;
           }),
@@ -1660,7 +1842,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       <div className="flex h-10 items-center rounded-xl bg-slate-100 p-1 text-sm font-medium dark:bg-slate-900">
               {sessionTypes.hasRace && (
           <button
-            onClick={() => setActiveSession('race')}
+            onClick={() => handleSessionChange('race')}
             className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'race'
                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
@@ -1672,7 +1854,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
               )}
               {sessionTypes.hasQualifying && (
           <button
-            onClick={() => setActiveSession('qualifying')}
+            onClick={() => handleSessionChange('qualifying')}
             className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'qualifying'
                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
@@ -1684,7 +1866,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
               )}
               {sessionTypes.hasPractice && (
           <button
-            onClick={() => setActiveSession('practice')}
+            onClick={() => handleSessionChange('practice')}
             className={`rounded-lg px-3 py-1 transition-colors ${
               activeSession === 'practice'
                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
@@ -1730,7 +1912,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         <DashboardTable
           columns={tableColumns}
           rows={drivers}
-          rowKey={(row) => getDriverSessionResultId(row) ?? row.id ?? row.name}
+          rowKey={(row, index) => buildDriverRowKey(row, index)}
           onRowClick={!isEditing ? (row) => handleDriverClick(row) : undefined}
           emptyMessage={tableEmptyMessage}
         />

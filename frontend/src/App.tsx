@@ -11,6 +11,7 @@ import {
   useParams,
   Navigate,
   useSearchParams,
+  useNavigationType,
 } from 'react-router-dom';
 import { SeasonDashboard } from './components/SeasonDashboard';
 import { Grid } from './components/Grid';
@@ -37,10 +38,14 @@ const TAB_BAR_HEIGHT = 88;
 
 function ScrollToTop() {
   const { pathname } = useLocation();
+  const navigationType = useNavigationType(); // 'POP' = back/forward, 'PUSH'/'REPLACE' = new navigation
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-  }, [pathname]);
+    // Only scroll to top on new navigation (PUSH/REPLACE), not on back/forward (POP)
+    if (navigationType !== 'POP') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    }
+  }, [pathname, navigationType]);
 
   return null;
 }
