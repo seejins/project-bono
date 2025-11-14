@@ -44,12 +44,12 @@ export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => 
     const abortController = new AbortController();
     const signal = abortController.signal;
 
-    const fetchTrackDetails = async () => {
-      try {
-        setLoading(true);
+  const fetchTrackDetails = async () => {
+    try {
+      setLoading(true);
         const apiUrl = getApiUrl();
         const fetchOptions = { signal };
-        
+      
         // Parallel fetch: track data, races, and statistics simultaneously
         const [trackResponse, racesResponse, statsResponse] = await Promise.all([
           fetch(`${apiUrl}/api/tracks/${trackId}`, fetchOptions),
@@ -59,36 +59,36 @@ export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => 
         
         if (signal.aborted) return;
         
-        if (trackResponse.ok) {
-          const trackDataResult = await trackResponse.json();
+      if (trackResponse.ok) {
+        const trackDataResult = await trackResponse.json();
           if (!signal.aborted) setTrack(trackDataResult.track);
-        }
-        
-        if (racesResponse.ok) {
-          const racesData = await racesResponse.json();
+      }
+      
+      if (racesResponse.ok) {
+        const racesData = await racesResponse.json();
           if (!signal.aborted) {
-            setTrack(prev => prev ? { ...prev, races: racesData.races || [] } : null);
+        setTrack(prev => prev ? { ...prev, races: racesData.races || [] } : null);
           }
-        }
-        
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
+      }
+      
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
           if (!signal.aborted) {
-            setTrack(prev => prev ? { ...prev, statistics: statsData.statistics } : null);
-          }
+        setTrack(prev => prev ? { ...prev, statistics: statsData.statistics } : null);
+      }
         }
         
       } catch (error: any) {
         if (signal.aborted || error.name === 'AbortError') return;
-        
+      
         logger.error('Error fetching track details:', error);
         if (!signal.aborted) {
-          setError('Failed to load track details');
+      setError('Failed to load track details');
         }
-      } finally {
+    } finally {
         if (!signal.aborted) {
-          setLoading(false);
-        }
+      setLoading(false);
+    }
       }
     };
 

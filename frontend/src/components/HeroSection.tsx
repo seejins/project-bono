@@ -79,10 +79,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     // Video playlist - randomly selects one on each page refresh
     const HERO_VIDEOS = [
       {
-        src: '/raw/videos/aus-edit.mp4',
-        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
-      },
-      {
         src: '/raw/videos/bahrainstar.mp4',
         poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
       },

@@ -451,7 +451,7 @@ const doesResultMatchDriver = (result: any, identifiers: CanonicalDriverIdentifi
   // 2. For cross-session matching, use json_driver_name (unique per game driver)
   // This finds the same game driver (e.g., Verstappen) in other sessions
   if (identifiers.driverName) {
-    const resultDriverName = normalizeIdentifier(
+  const resultDriverName = normalizeIdentifier(
       result?.json_driver_name ?? 
       result?.jsonDriverName ?? 
       result?.driver_name ?? 
@@ -460,7 +460,7 @@ const doesResultMatchDriver = (result: any, identifiers: CanonicalDriverIdentifi
     );
     if (resultDriverName && resultDriverName === identifiers.driverName) {
       return true; // Same game driver in different session
-    }
+  }
   }
 
   // No match - return false (error will be thrown upstream if driver not found)

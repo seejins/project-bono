@@ -9,6 +9,8 @@ import { getTireCompound } from '../utils/f123DataMapping';
 import { useAdmin } from '../contexts/AdminContext';
 import { DashboardPage } from './layout/DashboardPage';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
+// @ts-expect-error - vite-imagetools query parameters aren't recognized by TypeScript
+import raceHeroImage from '../assets/images/SI202510260512-Aangepast.jpg?w=1920&format=webp&q=85';
 
 type DriverPenalty = {
   id: string;
@@ -782,11 +784,11 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       if (sessionResultId) {
         // Even if there are duplicates, include index as a fallback
         if (duplicateSessionResultIds.has(sessionResultId)) {
-          const canonicalId = getCanonicalDriverIdentifier(row);
-          const fallbackName =
-            row.name && typeof row.name === 'string'
-              ? row.name.replace(/\s+/g, '-').toLowerCase()
-              : `driver-${index}`;
+      const canonicalId = getCanonicalDriverIdentifier(row);
+      const fallbackName =
+        row.name && typeof row.name === 'string'
+          ? row.name.replace(/\s+/g, '-').toLowerCase()
+          : `driver-${index}`;
           return `${sessionResultId}-${canonicalId ?? fallbackName}-${index}-${activeSession}`;
         }
         return `${sessionResultId}-${activeSession}`;
@@ -1543,7 +1545,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     ? `${new Date(raceData.raceDate).toLocaleDateString()} • ${distanceLabel} • ${lapsLabel}`
     : `${distanceLabel} • ${lapsLabel}`;
   const heroBase = {
-    imageSrc: '/raw/images/SI202510260512-Aangepast.jpg',
+    imageSrc: raceHeroImage,
     title: heroTitle,
     subtitle: heroSubtitle,
     description: heroDescription,

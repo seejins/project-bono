@@ -5,17 +5,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = createTracksRoutes;
 const express_1 = __importDefault(require("express"));
-function createTracksRoutes(dbService) {
+function createTracksRoutes(_dbService, repositories) {
     const router = express_1.default.Router();
+    const { tracks } = repositories;
     // Get all tracks
     router.get('/', async (req, res) => {
         try {
-            await dbService.ensureInitialized();
-            // For now, return empty array since we don't have tracks in the database yet
-            // This can be populated later with F1 23 tracks
+            await tracks.ensureInitialized();
+            const allTracks = await tracks.getAllTracks();
             res.json({
                 success: true,
-                tracks: []
+                tracks: allTracks
             });
         }
         catch (error) {
@@ -33,8 +33,8 @@ function createTracksRoutes(dbService) {
             if (!name || !country) {
                 return res.status(400).json({ error: 'Name and country are required' });
             }
-            await dbService.ensureInitialized();
-            const trackId = await dbService.createTrack({
+            await tracks.ensureInitialized();
+            const trackId = await tracks.createTrack({
                 name,
                 country,
                 city: city || '',
@@ -59,7 +59,7 @@ function createTracksRoutes(dbService) {
     router.get('/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            await dbService.ensureInitialized();
+            await tracks.ensureInitialized();
             // Note: We don't have a getTrackById method yet, so this will return 404 for now
             res.status(404).json({ error: 'Track not found' });
         }
@@ -76,7 +76,7 @@ function createTracksRoutes(dbService) {
         try {
             const { id } = req.params;
             const updateData = req.body;
-            await dbService.ensureInitialized();
+            await tracks.ensureInitialized();
             // Note: We don't have an updateTrack method yet, so this will return 404 for now
             res.status(404).json({ error: 'Track not found' });
         }
@@ -92,7 +92,7 @@ function createTracksRoutes(dbService) {
     router.delete('/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            await dbService.ensureInitialized();
+            await tracks.ensureInitialized();
             // Note: We don't have a deleteTrack method yet, so this will return 404 for now
             res.status(404).json({ error: 'Track not found' });
         }

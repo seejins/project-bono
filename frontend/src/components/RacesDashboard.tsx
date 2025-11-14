@@ -7,6 +7,8 @@ import { formatFullDate } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 import { DashboardPage } from './layout/DashboardPage';
 import { useAdmin } from '../contexts/AdminContext';
+// @ts-expect-error - vite-imagetools query parameters aren't recognized by TypeScript
+import racesHeroImage from '../assets/images/M12_5309-Aangepast.jpg?w=1920&format=webp&q=85';
 
 interface Event {
   id: string;
@@ -418,7 +420,7 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
   return (
     <DashboardPage
       hero={{
-        imageSrc: '/raw/images/M12_5309-Aangepast.jpg',
+        imageSrc: racesHeroImage,
         title: 'Season Schedule',
         subtitle: events.length ? `${events.length} Events` : 'Season Calendar',
         description: 'Track every race weekend, session type, and status update across the entire campaign.',

@@ -17,7 +17,7 @@ services:
       - key: API_KEY
         generateValue: true
       - key: ADMIN_PASSWORD
-        value: benji1234
+        generateValue: true
       - key: SESSION_SECRET
         generateValue: true
       - key: FRONTEND_URL
@@ -36,7 +36,7 @@ services:
       - key: VITE_API_URL
         value: https://f1-race-engineer-backend.onrender.com
       - key: VITE_APP_PASSWORD
-        value: dinof1
+        generateValue: true
       - key: VITE_DEBUG
         value: false
 

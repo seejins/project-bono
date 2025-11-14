@@ -62,14 +62,14 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
     const abortController = new AbortController();
     const signal = abortController.signal;
 
-    const fetchDriverData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch real driver data from API
+  const fetchDriverData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch real driver data from API
         const apiUrl = getApiUrl();
         const fetchOptions = { signal };
-        
+      
         // Parallel fetch: driver profile, race results, and achievements simultaneously
         const [driverResponse, resultsResponse, achievementsResponse] = await Promise.all([
           fetch(`${apiUrl}/api/members/${driverId}`, fetchOptions),
@@ -79,35 +79,35 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
         
         if (signal.aborted) return;
         
-        if (driverResponse.ok) {
-          const driverData = await driverResponse.json();
+      if (driverResponse.ok) {
+        const driverData = await driverResponse.json();
           if (!signal.aborted) setDriver(driverData.member || null);
-        }
-        
-        if (resultsResponse.ok) {
-          const resultsData = await resultsResponse.json();
+      }
+      
+      if (resultsResponse.ok) {
+        const resultsData = await resultsResponse.json();
           if (!signal.aborted) setRaceResults(resultsData.results || []);
-        }
-        
-        if (achievementsResponse.ok) {
-          const achievementsData = await achievementsResponse.json();
+      }
+      
+      if (achievementsResponse.ok) {
+        const achievementsData = await achievementsResponse.json();
           if (!signal.aborted) setAchievements(achievementsData.achievements || []);
-        }
-        
+      }
+      
       } catch (error: any) {
         if (signal.aborted || error.name === 'AbortError') return;
         
         logger.error('Error fetching driver data:', error);
-        // Set empty data on error
+      // Set empty data on error
         if (!signal.aborted) {
-          setDriver(null);
-          setRaceResults([]);
-          setAchievements([]);
+      setDriver(null);
+      setRaceResults([]);
+      setAchievements([]);
         }
-      } finally {
+    } finally {
         if (!signal.aborted) {
-          setLoading(false);
-        }
+      setLoading(false);
+    }
       }
     };
 

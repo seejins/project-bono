@@ -22,13 +22,28 @@ export function setupRoutes(
 ) {
   const repositories = services.databaseService.repositories;
   const raceJsonImportService = new RaceJSONImportService(services.databaseService, io);
-  // Health check endpoint
-  app.get('/health', (req, res) => {
-    res.json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      telemetry: services.telemetryService.isRunning
-    });
+  
+  // Health check endpoint with database connectivity check
+  app.get('/health', async (req, res) => {
+    try {
+      // Test database connectivity
+      await services.databaseService.query('SELECT 1');
+      
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        telemetry: services.telemetryService.isRunning,
+        database: 'connected'
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        telemetry: services.telemetryService.isRunning,
+        database: 'disconnected',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 
   // Get current telemetry data

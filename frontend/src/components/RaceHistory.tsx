@@ -36,38 +36,38 @@ export const RaceHistory: React.FC = () => {
 
   useEffect(() => {
     if (!currentSeason) return;
-
+    
     const abortController = new AbortController();
     const signal = abortController.signal;
 
     const fetchRaceEvents = async () => {
-      try {
-        setLoading(true);
+    try {
+      setLoading(true);
         const apiUrl = getApiUrl();
-        
-        // Fetch race events for the current season
+      
+      // Fetch race events for the current season
         const response = await fetch(`${apiUrl}/api/seasons/${currentSeason.id}/events`, { signal });
         if (signal.aborted) return;
         
-        if (response.ok) {
-          const data = await response.json();
+      if (response.ok) {
+        const data = await response.json();
           if (!signal.aborted) {
-            setRaceEvents(data.events || []);
-          }
+        setRaceEvents(data.events || []);
+      }
         }
         
       } catch (error: any) {
         if (signal.aborted || error.name === 'AbortError') return;
-        
+      
         logger.error('Error fetching race events:', error);
         if (!signal.aborted) {
-          setError('Failed to load race events');
-          setRaceEvents([]);
+      setError('Failed to load race events');
+      setRaceEvents([]);
         }
-      } finally {
+    } finally {
         if (!signal.aborted) {
-          setLoading(false);
-        }
+      setLoading(false);
+    }
       }
     };
 

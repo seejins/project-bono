@@ -33,6 +33,7 @@ import { AdminProvider, useAdmin } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SeasonProvider, useSeason } from './contexts/SeasonContext';
 import { PageTransition } from './components/layout/PageTransition';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type AlertPayload = { id: string; type: string; message: string; timestamp: number };
 
@@ -367,16 +368,18 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <ScrollToTop />
-      <ThemeProvider>
-        <SeasonProvider>
-          <AdminProvider>
-            <AppRoutes />
-          </AdminProvider>
-        </SeasonProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ScrollToTop />
+        <ThemeProvider>
+          <SeasonProvider>
+            <AdminProvider>
+              <AppRoutes />
+            </AdminProvider>
+          </SeasonProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

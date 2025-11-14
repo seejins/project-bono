@@ -25,35 +25,35 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
     const abortController = new AbortController();
     const signal = abortController.signal;
 
-    const fetchDriverCareerProfile = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchDriverCareerProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
         const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/drivers/${driverId}/career-profile`, { signal });
         
         if (signal.aborted) return;
-        
-        if (response.ok) {
-          const data = await response.json();
+      
+      if (response.ok) {
+        const data = await response.json();
           if (!signal.aborted) {
-            setCareerProfile(data.careerProfile);
+        setCareerProfile(data.careerProfile);
           }
-        } else {
-          throw new Error('Failed to fetch driver career profile');
-        }
+      } else {
+        throw new Error('Failed to fetch driver career profile');
+      }
       } catch (error: any) {
         if (signal.aborted || error.name === 'AbortError') return;
         
         logger.error('Error fetching driver career profile:', error);
         if (!signal.aborted) {
-          setError('Failed to load driver career profile');
+      setError('Failed to load driver career profile');
         }
-      } finally {
+    } finally {
         if (!signal.aborted) {
-          setLoading(false);
-        }
+      setLoading(false);
+    }
       }
     };
 
@@ -70,31 +70,31 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
     const abortController = new AbortController();
     const signal = abortController.signal;
 
-    const fetchRaceHistory = async () => {
-      try {
+  const fetchRaceHistory = async () => {
+    try {
         const apiUrl = getApiUrl();
-        const seasonId = activeTab === 'career' ? undefined : activeTab;
-        const url = seasonId 
-          ? `${apiUrl}/api/drivers/${driverId}/race-history?seasonId=${seasonId}`
-          : `${apiUrl}/api/drivers/${driverId}/race-history`;
-        
+      const seasonId = activeTab === 'career' ? undefined : activeTab;
+      const url = seasonId 
+        ? `${apiUrl}/api/drivers/${driverId}/race-history?seasonId=${seasonId}`
+        : `${apiUrl}/api/drivers/${driverId}/race-history`;
+      
         const response = await fetch(url, { signal });
         
         if (signal.aborted) return;
-        
-        if (response.ok) {
-          const data = await response.json();
+      
+      if (response.ok) {
+        const data = await response.json();
           if (!signal.aborted) {
-            setRaceHistory(data.raceHistory || []);
-          }
+        setRaceHistory(data.raceHistory || []);
+      }
         }
       } catch (error: any) {
         if (signal.aborted || error.name === 'AbortError') return;
         
         logger.error('Error fetching race history:', error);
         if (!signal.aborted) {
-          setRaceHistory([]);
-        }
+      setRaceHistory([]);
+    }
       }
     };
 

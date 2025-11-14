@@ -5,8 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = createSessionsRoutes;
 const express_1 = __importDefault(require("express"));
-function createSessionsRoutes(dbService) {
+function createSessionsRoutes(_dbService, repositories) {
     const router = express_1.default.Router();
+    const { tracks, races, drivers, sessions } = repositories;
     // Upload session data from local host app
     router.post('/upload', async (req, res) => {
         try {
@@ -14,18 +15,18 @@ function createSessionsRoutes(dbService) {
             if (!sessionData || !seasonId) {
                 return res.status(400).json({ error: 'Session data and season ID are required' });
             }
-            await dbService.ensureInitialized();
+            await sessions.ensureInitialized();
             // Find or create track
-            const trackId = await dbService.findOrCreateTrack(sessionData.trackName);
+            const trackId = await tracks.findOrCreateTrack(sessionData.trackName);
             // Create race
-            const raceId = await dbService.createRace({
+            const raceId = await races.createRace({
                 seasonId,
                 trackId,
                 raceDate: new Date(sessionData.date).toISOString(),
                 status: 'completed'
             });
             // Get driver mappings for this season
-            const driverMappings = await dbService.getDriverMappings(seasonId);
+            const driverMappings = await drivers.getDriverMappings(seasonId);
             // Map F1 23 drivers to your league drivers
             const mappedResults = sessionData.results.map((result) => {
                 const mapping = driverMappings.find((m) => m.f123DriverName === result.driverName &&
@@ -36,7 +37,7 @@ function createSessionsRoutes(dbService) {
                 };
             });
             // Import race results
-            const importResult = await dbService.importRaceResults(raceId, {
+            const importResult = await sessions.importRaceResults(raceId, {
                 ...sessionData,
                 results: mappedResults
             });

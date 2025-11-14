@@ -5,13 +5,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = createDriversRoutes;
 const express_1 = __importDefault(require("express"));
-function createDriversRoutes(dbService) {
+function createDriversRoutes(_dbService, repositories) {
     const router = express_1.default.Router();
+    const { drivers } = repositories;
     // Get all drivers
     router.get('/', async (req, res) => {
         try {
-            const drivers = await dbService.getAllDrivers();
-            res.json({ success: true, drivers });
+            const driverList = await drivers.getAllDrivers();
+            res.json({ success: true, drivers: driverList });
         }
         catch (error) {
             console.error('Error getting drivers:', error);
@@ -29,7 +30,7 @@ function createDriversRoutes(dbService) {
             if (!fullName) {
                 return res.status(400).json({ error: 'Member name is required' });
             }
-            const driverId = await dbService.createDriver({
+            const driverId = await drivers.createDriver({
                 name: fullName,
                 team,
                 number,
@@ -37,7 +38,7 @@ function createDriversRoutes(dbService) {
                 steam_id,
                 isActive
             });
-            const newDriver = await dbService.getDriverById(driverId);
+            const newDriver = await drivers.getDriverById(driverId);
             res.status(201).json({ success: true, driver: newDriver });
         }
         catch (error) {
@@ -49,7 +50,7 @@ function createDriversRoutes(dbService) {
     router.get('/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            const driver = await dbService.getDriverById(id);
+            const driver = await drivers.getDriverById(id);
             if (!driver) {
                 return res.status(404).json({ error: 'Member not found' });
             }
@@ -65,7 +66,7 @@ function createDriversRoutes(dbService) {
         try {
             const { id } = req.params;
             const { firstName, lastName, name, team, number, seasonId, steam_id, isActive } = req.body;
-            const driver = await dbService.getDriverById(id);
+            const driver = await drivers.getDriverById(id);
             if (!driver) {
                 return res.status(404).json({ error: 'Driver not found' });
             }
@@ -73,7 +74,7 @@ function createDriversRoutes(dbService) {
             const trimmedLast = typeof lastName === 'string' ? lastName.trim() : undefined;
             const providedName = typeof name === 'string' ? name.trim() : '';
             const combinedName = providedName || [trimmedFirst, trimmedLast].filter((part) => !!part && part.length > 0).join(' ').trim();
-            await dbService.updateDriver(id, {
+            await drivers.updateDriver(id, {
                 name: combinedName || undefined,
                 team,
                 number,
@@ -81,7 +82,7 @@ function createDriversRoutes(dbService) {
                 steam_id,
                 isActive
             });
-            const updatedDriver = await dbService.getDriverById(id);
+            const updatedDriver = await drivers.getDriverById(id);
             res.json({ success: true, driver: updatedDriver });
         }
         catch (error) {
@@ -93,11 +94,11 @@ function createDriversRoutes(dbService) {
     router.delete('/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            const driver = await dbService.getDriverById(id);
+            const driver = await drivers.getDriverById(id);
             if (!driver) {
                 return res.status(404).json({ error: 'Member not found' });
             }
-            await dbService.deleteDriver(id);
+            await drivers.deleteDriver(id);
             res.json({ success: true, message: 'Driver deleted successfully' });
         }
         catch (error) {
@@ -109,7 +110,7 @@ function createDriversRoutes(dbService) {
     router.get('/:id/career-profile', async (req, res) => {
         try {
             const { id } = req.params;
-            const careerProfile = await dbService.getDriverCareerProfile(id);
+            const careerProfile = await drivers.getDriverCareerProfile(id);
             if (!careerProfile) {
                 return res.status(404).json({ error: 'Driver not found' });
             }
@@ -124,7 +125,7 @@ function createDriversRoutes(dbService) {
     router.get('/:id/seasons/:seasonId/stats', async (req, res) => {
         try {
             const { id, seasonId } = req.params;
-            const seasonStats = await dbService.getDriverSeasonStats(id, seasonId);
+            const seasonStats = await drivers.getDriverSeasonStats(id, seasonId);
             res.json({ success: true, stats: seasonStats });
         }
         catch (error) {
@@ -137,7 +138,7 @@ function createDriversRoutes(dbService) {
         try {
             const { id } = req.params;
             const { seasonId } = req.query;
-            const raceHistory = await dbService.getDriverRaceHistory(id, seasonId);
+            const raceHistory = await drivers.getDriverRaceHistory(id, seasonId);
             res.json({ success: true, raceHistory });
         }
         catch (error) {

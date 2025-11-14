@@ -14,6 +14,8 @@ import {
   type SeasonAnalysisHighlight,
   type SeasonEventSummary,
 } from '../hooks/useSeasonAnalysis';
+// @ts-expect-error - vite-imagetools query parameters aren't recognized by TypeScript
+import seasonHeroImage from '../assets/images/94mliza3aat71.jpg?w=1920&format=webp&q=85';
 
 interface SeasonDashboardProps {
   onRaceSelect?: (raceId: string) => void;
@@ -232,7 +234,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   return (
     <DashboardPage
       hero={{
-        imageSrc: '/raw/images/94mliza3aat71.jpg',
+        imageSrc: seasonHeroImage,
         title: 'Season Dashboard',
         subtitle: currentSeason?.name ?? 'F1 25',
         description:

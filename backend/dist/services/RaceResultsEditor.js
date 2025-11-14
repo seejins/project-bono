@@ -29,6 +29,44 @@ class RaceResultsEditor {
             throw error;
         }
     }
+    async updateDriverUserMapping(driverSessionResultId, userId, editedBy, reason) {
+        try {
+            const cascadedUpdates = await this.dbService.updateDriverUserMapping(driverSessionResultId, userId);
+            const now = new Date().toISOString();
+            for (const update of cascadedUpdates) {
+                await this.dbService.query(`INSERT INTO race_edit_history (
+            id,
+            session_result_id,
+            driver_session_result_id,
+            user_id,
+            edit_type,
+            old_value,
+            new_value,
+            reason,
+            edited_by,
+            created_at
+          )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [
+                    (0, uuid_1.v4)(),
+                    update.sessionResultId,
+                    update.driverSessionResultId,
+                    update.newUserId,
+                    'user_mapping',
+                    update.oldUserId ? { user_id: update.oldUserId } : null,
+                    update.newUserId ? { user_id: update.newUserId } : null,
+                    reason ?? (update.newUserId ? 'Mapped race result to user' : 'Cleared race result mapping'),
+                    editedBy,
+                    now,
+                ]);
+                console.log(`✅ Updated driver mapping for result ${update.driverSessionResultId}: ${update.oldUserId ?? 'none'} → ${update.newUserId ?? 'none'}`);
+            }
+            return cascadedUpdates;
+        }
+        catch (error) {
+            console.error('❌ Error updating driver mapping:', error);
+            throw error;
+        }
+    }
     // Change driver position
     async changePosition(sessionResultId, driverId, newPosition, reason, editedBy) {
         try {
@@ -54,7 +92,7 @@ class RaceResultsEditor {
             // Update the result to disqualified (status 5)
             await this.dbService.query('UPDATE driver_session_results SET result_status = $1, dnf_reason = $2, updated_at = $3 WHERE session_result_id = $4 AND driver_id = $5', [5, reason, now, sessionResultId, driverId]);
             // Log the edit
-            await this.dbService.query(`INSERT INTO race_edit_history (id, session_result_id, driver_id, edit_type, old_value, new_value, reason, edited_by, created_at)
+            await this.dbService.query(`INSERT INTO race_edit_history (id, session_result_id, user_id, edit_type, old_value, new_value, reason, edited_by, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [
                 (0, uuid_1.v4)(), sessionResultId, driverId, 'disqualification',
                 { result_status: oldStatus, position: oldPosition },

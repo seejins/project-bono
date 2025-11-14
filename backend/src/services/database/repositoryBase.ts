@@ -1,4 +1,4 @@
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 export type Queryable = Pick<Pool, 'query'> | PoolClient;
 
@@ -24,7 +24,7 @@ export class TransactionContext extends RepositoryBase {
     super(pool, client);
   }
 
-  async query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
+  async query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
     return this.client.query<T>(text, params);
   }
 

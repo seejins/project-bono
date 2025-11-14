@@ -616,9 +616,9 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
     for (const driver of analysis.drivers) {
       if (driver.id !== driverId) {
         options.push({
-          id: driver.id,
-          name: driver.name,
-          team: driver.team ?? null,
+        id: driver.id,
+        name: driver.name,
+        team: driver.team ?? null,
         });
       }
     }
@@ -839,7 +839,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
           className="absolute inset-x-0 top-0 h-[520px] blur-[160px]"
           style={{ background: glowGradient }}
         />
-      </div>
+              </div>
       <motion.div
         className="relative z-10 mx-auto max-w-[1600px] space-y-8 px-6 pt-40 pb-16 text-slate-900 dark:text-slate-100 lg:px-10"
         initial={{ opacity: 0, y: 32 }}

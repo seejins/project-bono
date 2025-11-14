@@ -368,25 +368,60 @@ class RaceJSONImportService {
                 // Total race time - from final-classification (in SECONDS!)
                 const totalRaceTimeSeconds = finalClassification['total-race-time'] || finalClassification.totalRaceTime || 0;
                 // Result status - convert from string to integer
-                const resultStatusStr = finalClassification['result-status'] || finalClassification.resultStatus || result['result-status'] || result.resultStatus || result.status || 'FINISHED';
+                const rawResultStatus = finalClassification['result-status'] ||
+                    finalClassification.resultStatus ||
+                    result['result-status'] ||
+                    result.resultStatus ||
+                    result.status ||
+                    'FINISHED';
                 let resultStatus = 2; // Default to FINISHED
-                if (resultStatusStr === 'FINISHED' || resultStatusStr === 'Finished' || resultStatusStr === 'finished') {
-                    resultStatus = 2;
+                let resultStatusStr = typeof rawResultStatus === 'string' ? rawResultStatus : '';
+                if (typeof rawResultStatus === 'number') {
+                    resultStatus = rawResultStatus;
+                    resultStatusStr = (0, f123Constants_1.getResultStatus)(resultStatus);
                 }
-                else if (resultStatusStr === 'DNF' || resultStatusStr === 'Dnf' || resultStatusStr === 'dnf') {
-                    resultStatus = 4;
+                else if (typeof rawResultStatus === 'string' && rawResultStatus.trim() !== '') {
+                    const normalizedStatus = rawResultStatus.trim().toLowerCase().replace(/[\s_-]+/g, '');
+                    switch (normalizedStatus) {
+                        case 'finished':
+                        case 'complete':
+                        case 'classified':
+                            resultStatus = 2;
+                            resultStatusStr = 'FINISHED';
+                            break;
+                        case 'dnf':
+                        case 'didnotfinish':
+                        case 'didnotfinishrace':
+                            resultStatus = 4;
+                            resultStatusStr = 'DNF';
+                            break;
+                        case 'dsq':
+                        case 'disqualified':
+                            resultStatus = 5;
+                            resultStatusStr = 'DSQ';
+                            break;
+                        case 'ncl':
+                        case 'didnotclassify':
+                        case 'notclassified':
+                            resultStatus = 6;
+                            resultStatusStr = 'NCL';
+                            break;
+                        case 'ret':
+                        case 'retired':
+                        case 'retirement':
+                            resultStatus = 7;
+                            resultStatusStr = 'RET';
+                            break;
+                        default:
+                            resultStatus = 2;
+                            resultStatusStr = 'FINISHED';
+                    }
                 }
-                else if (resultStatusStr === 'DSQ' || resultStatusStr === 'Dsq' || resultStatusStr === 'dsq') {
-                    resultStatus = 5;
+                else {
+                    resultStatusStr = (0, f123Constants_1.getResultStatus)(resultStatus);
                 }
-                else if (resultStatusStr === 'NCL' || resultStatusStr === 'Ncl' || resultStatusStr === 'ncl') {
-                    resultStatus = 6;
-                }
-                else if (resultStatusStr === 'RET' || resultStatusStr === 'Ret' || resultStatusStr === 'ret') {
-                    resultStatus = 7;
-                }
-                else if (typeof resultStatusStr === 'number') {
-                    resultStatus = resultStatusStr;
+                if (!resultStatusStr) {
+                    resultStatusStr = (0, f123Constants_1.getResultStatus)(resultStatus);
                 }
                 const numPenalties = finalClassification['num-penalties'] || finalClassification.numPenalties || result['num-penalties'] || result.numPenalties || result.penalties || 0;
                 const penaltiesTime = finalClassification['penalties-time'] || finalClassification.penaltiesTime || 0; // Penalty time in seconds
@@ -861,7 +896,14 @@ class RaceJSONImportService {
             // Mark event as completed if this was a race session
             if (sessionType === 10) {
                 await this.dbService.updateEventInSeason(targetRaceId, {
-                    status: 'completed'
+                    status: 'completed',
+                    primarySessionResultId: sessionResultId,
+                    race_date: sessionDate
+                });
+            }
+            else if (sessionType && sessionType > 0) {
+                await this.dbService.updateEventInSeason(targetRaceId, {
+                    primarySessionResultId: sessionResultId
                 });
             }
             console.log(`✅ Imported ${importedCount} driver results for session ${sessionTypeName} (${sessionType})`);

@@ -255,9 +255,7 @@ export default function createSeasonsRoutes(
         status:
           shouldActivate
             ? 'active'
-            : normalizedStatus && normalizedStatus !== 'active'
-              ? normalizedStatus
-              : 'draft',
+            : normalizedStatus || 'draft',
       });
 
       if (shouldActivate) {

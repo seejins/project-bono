@@ -439,36 +439,36 @@ export const sessionMethods = {
       
       // Push actual values in order
       params.push(
-        uuidv4(),
-        driverSessionResultId,
-        raceId,
-        userId,
-        lap.lapNumber,
-        lap.lapTimeMs,
-        lap.sector1Ms || null,
-        lap.sector2Ms || null,
-        lap.sector3Ms || null,
-        lap.sector1TimeMinutes || null,
-        lap.sector2TimeMinutes || null,
-        lap.sector3TimeMinutes || null,
-        lap.lapValidBitFlags || null,
-        lap.tireCompound || null,
-        lap.trackPosition || null,
-        lap.tireAgeLaps || null,
-        lap.topSpeedKmph || null,
-        lap.maxSafetyCarStatus || null,
-        lap.vehicleFiaFlags || null,
-        lap.pitStop || false,
-        lap.ersStoreEnergy || null,
-        lap.ersDeployedThisLap || null,
-        lap.ersDeployMode || null,
-        lap.fuelInTank || null,
-        lap.fuelRemainingLaps || null,
-        lap.gapToLeaderMs || null,
-        lap.gapToPositionAheadMs || null,
-        lap.carDamageData ? JSON.stringify(lap.carDamageData) : null,
-        lap.tyreSetsData ? JSON.stringify(lap.tyreSetsData) : null,
-        now,
+          uuidv4(),
+          driverSessionResultId,
+          raceId,
+          userId,
+          lap.lapNumber,
+          lap.lapTimeMs,
+          lap.sector1Ms || null,
+          lap.sector2Ms || null,
+          lap.sector3Ms || null,
+          lap.sector1TimeMinutes || null,
+          lap.sector2TimeMinutes || null,
+          lap.sector3TimeMinutes || null,
+          lap.lapValidBitFlags || null,
+          lap.tireCompound || null,
+          lap.trackPosition || null,
+          lap.tireAgeLaps || null,
+          lap.topSpeedKmph || null,
+          lap.maxSafetyCarStatus || null,
+          lap.vehicleFiaFlags || null,
+          lap.pitStop || false,
+          lap.ersStoreEnergy || null,
+          lap.ersDeployedThisLap || null,
+          lap.ersDeployMode || null,
+          lap.fuelInTank || null,
+          lap.fuelRemainingLaps || null,
+          lap.gapToLeaderMs || null,
+          lap.gapToPositionAheadMs || null,
+          lap.carDamageData ? JSON.stringify(lap.carDamageData) : null,
+          lap.tyreSetsData ? JSON.stringify(lap.tyreSetsData) : null,
+          now,
       );
     }
 
@@ -1114,12 +1114,12 @@ export const sessionMethods = {
       
       params.push(...updates.map(u => u.id));
       
-      await this.db.query(
-        `UPDATE driver_session_results 
+        await this.db.query(
+          `UPDATE driver_session_results 
          SET position = CASE ${cases.join(' ')} END
          WHERE id IN (${ids.join(', ')})`,
         params,
-      );
+        );
     }
   },
 
