@@ -192,6 +192,47 @@ export const CREATE_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_driver_penalties_driver_session_result_id
     ON driver_penalties(driver_session_result_id);
 
+  -- Lap Times table (stores lap-by-lap data for each driver session)
+  CREATE TABLE IF NOT EXISTS lap_times (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    driver_session_result_id UUID REFERENCES driver_session_results(id) ON DELETE CASCADE,
+    race_id UUID REFERENCES races(id) ON DELETE CASCADE, -- Keep for backwards compatibility
+    driver_id UUID REFERENCES drivers(id) ON DELETE SET NULL, -- Keep for backwards compatibility
+    lap_number INTEGER NOT NULL,
+    lap_time_ms INTEGER NOT NULL,
+    sector1_ms INTEGER,
+    sector2_ms INTEGER,
+    sector3_ms INTEGER,
+    sector1_time_minutes INTEGER,
+    sector2_time_minutes INTEGER,
+    sector3_time_minutes INTEGER,
+    lap_valid_bit_flags INTEGER,
+    tire_compound VARCHAR(20),
+    track_position INTEGER,
+    tire_age_laps INTEGER,
+    top_speed_kmph INTEGER,
+    max_safety_car_status VARCHAR(50),
+    vehicle_fia_flags VARCHAR(50),
+    pit_stop BOOLEAN DEFAULT FALSE,
+    ers_store_energy DECIMAL(10,2),
+    ers_deployed_this_lap DECIMAL(10,2),
+    ers_deploy_mode VARCHAR(50),
+    fuel_in_tank DECIMAL(10,2),
+    fuel_remaining_laps DECIMAL(10,2),
+    gap_to_leader_ms INTEGER,
+    gap_to_position_ahead_ms INTEGER,
+    car_damage_data JSONB,
+    tyre_sets_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Create indexes for lap_times
+  CREATE INDEX IF NOT EXISTS idx_lap_times_driver_session_result_id ON lap_times(driver_session_result_id);
+  CREATE INDEX IF NOT EXISTS idx_lap_times_lap_number ON lap_times(lap_number);
+  CREATE INDEX IF NOT EXISTS idx_lap_times_tire_compound ON lap_times(tire_compound);
+  CREATE INDEX IF NOT EXISTS idx_lap_times_pit_stop ON lap_times(pit_stop);
+  CREATE INDEX IF NOT EXISTS idx_lap_times_track_position ON lap_times(track_position);
+
   -- Race Edit History Table (for audit trail and reset capability)
   CREATE TABLE IF NOT EXISTS race_edit_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

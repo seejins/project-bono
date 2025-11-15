@@ -20,83 +20,21 @@ export class DatabaseInitializer {
     try {
       await this.createMigrationsTable();
 
-      // Removed: add_steam_id_to_members migration (members table doesn't exist - consolidated into drivers table)
+      // Removed obsolete migrations - all columns are now in the base schema:
+      // - add_jsonb_columns_for_session_data (additional_data already in schema)
+      // - add_post_race_penalties (already in schema)
+      // - add_base_race_time_ms_to_driver_session_results (already in schema)
+      // - add_json_driver_columns (already in schema with indexes)
+      // - add_event_name_to_tracks (already in schema)
+      // - add_primary_session_result_id_to_races (column already in schema)
+      // - allow_nullable_race_date (already nullable in schema)
+      // - add_order_index_to_races (already in schema)
+      // - add_driver_session_result_id_to_lap_times (already in schema)
+      // - add_lap_analytics_columns (already in schema with indexes)
+      // - add_your_driver_id_to_f123_driver_mappings (already in schema)
 
-      await this.runMigration('add_jsonb_columns_for_session_data', async () => {
-        await this.addColumnIfNotExists('session_results', 'additional_data', 'JSONB');
-        await this.addColumnIfNotExists('driver_session_results', 'additional_data', 'JSONB');
-      });
-
-      await this.runMigration('add_post_race_penalties', async () => {
-        await this.addColumnIfNotExists('driver_session_results', 'post_race_penalties', 'INTEGER DEFAULT 0');
-        await this.addColumnIfNotExists('driver_session_results', 'base_race_time_ms', 'INTEGER');
-        await this.addColumnIfNotExists(
-          'driver_session_results',
-          'updated_at',
-          'TIMESTAMP WITH TIME ZONE DEFAULT NOW()'
-        );
-      });
-
-      await this.runMigration('add_base_race_time_ms_to_driver_session_results', async () => {
-        await this.addColumnIfNotExists('driver_session_results', 'base_race_time_ms', 'INTEGER');
-      });
-
-      await this.runMigration('allow_null_driver_id_in_edit_history', async () => {
-        const columnInfo = await this.db.query(
-          `SELECT column_name, is_nullable 
-           FROM information_schema.columns 
-           WHERE table_name = 'race_edit_history' AND column_name = 'driver_id'`
-        );
-
-        if (columnInfo.rows.length > 0) {
-          await this.db.query(`
-            ALTER TABLE race_edit_history 
-            DROP CONSTRAINT IF EXISTS race_edit_history_driver_id_fkey
-          `);
-
-          if (columnInfo.rows[0].is_nullable === 'NO') {
-            await this.db.query(`
-              ALTER TABLE race_edit_history 
-              ALTER COLUMN driver_id DROP NOT NULL
-            `);
-          }
-
-          await this.db.query(`
-            ALTER TABLE race_edit_history 
-            ADD CONSTRAINT race_edit_history_driver_id_fkey 
-            FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE SET NULL
-          `);
-        }
-      });
-
-      await this.runMigration('fix_seasons_nullable_dates', async () => {
-        await this.db.query('ALTER TABLE seasons ALTER COLUMN start_date DROP NOT NULL');
-        await this.db.query('ALTER TABLE seasons ALTER COLUMN end_date DROP NOT NULL');
-      });
-
-      await this.runMigration('add_your_driver_id_to_f123_driver_mappings', async () => {
-        await this.addColumnIfNotExists(
-          'f123_driver_mappings',
-          'your_driver_id',
-          'UUID REFERENCES drivers(id) ON DELETE CASCADE'
-        );
-      });
-
-      await this.runMigration('add_json_driver_columns', async () => {
-        await this.addColumnIfNotExists('driver_session_results', 'json_driver_id', 'INTEGER');
-        await this.addColumnIfNotExists('driver_session_results', 'json_driver_name', 'VARCHAR(100)');
-        await this.addColumnIfNotExists('driver_session_results', 'json_team_name', 'VARCHAR(100)');
-        await this.addColumnIfNotExists('driver_session_results', 'json_car_number', 'INTEGER');
-
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_driver_session_results_json_driver_id 
-          ON driver_session_results(json_driver_id)
-        `);
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_driver_session_results_json_driver_name 
-          ON driver_session_results(json_driver_name)
-        `);
-
+      // Data migration: Populate json_driver columns from existing additional_data
+      await this.runMigration('populate_json_driver_columns_from_data', async () => {
         await this.db.query(`
           UPDATE driver_session_results
           SET 
@@ -121,10 +59,8 @@ export class DatabaseInitializer {
         `);
       });
 
-      await this.runMigration('add_event_name_to_tracks', async () => {
-        await this.addColumnIfNotExists('tracks', 'event_name', 'VARCHAR(120)');
-        await this.addColumnIfNotExists('tracks', 'short_event_name', 'VARCHAR(60)');
-
+      // Data migration: Populate track event names
+      await this.runMigration('populate_track_event_names', async () => {
         const trackEventMap: Array<[string, string, string]> = [
           ['Bahrain International Circuit', 'Bahrain Grand Prix', 'Bahrain GP'],
           ['Jeddah Corniche Circuit', 'Saudi Arabian Grand Prix', 'Saudi Arabian GP'],
@@ -162,9 +98,8 @@ export class DatabaseInitializer {
         }
       });
 
-      await this.runMigration('add_primary_session_result_id_to_races', async () => {
-        await this.addColumnIfNotExists('races', 'primary_session_result_id', 'UUID');
-
+      // Add foreign key constraint for primary_session_result_id (circular dependency resolved)
+      await this.runMigration('add_primary_session_result_id_foreign_key', async () => {
         await this.db.query(`
           DO $$
           BEGIN
@@ -188,16 +123,8 @@ export class DatabaseInitializer {
         `);
       });
 
-      await this.runMigration('allow_nullable_race_date', async () => {
-        await this.db.query(`
-          ALTER TABLE races
-          ALTER COLUMN race_date DROP NOT NULL
-        `);
-      });
-
-      await this.runMigration('add_order_index_to_races', async () => {
-        await this.addColumnIfNotExists('races', 'order_index', 'INTEGER');
-
+      // Data migration: Set order_index for existing races
+      await this.runMigration('populate_race_order_index', async () => {
         await this.db.query(`
           WITH ordered AS (
             SELECT
@@ -218,18 +145,8 @@ export class DatabaseInitializer {
         `);
       });
 
-      await this.runMigration('add_driver_session_result_id_to_edit_history', async () => {
-        await this.addColumnIfNotExists(
-          'race_edit_history',
-          'driver_session_result_id',
-          'UUID REFERENCES driver_session_results(id) ON DELETE CASCADE'
-        );
-
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_race_edit_history_driver_session_result_id 
-          ON race_edit_history(driver_session_result_id)
-        `);
-
+      // Data migration: Populate driver_session_result_id in edit_history for existing records
+      await this.runMigration('populate_edit_history_driver_session_result_id', async () => {
         await this.db.query(`
           UPDATE race_edit_history reh
           SET driver_session_result_id = (
@@ -249,70 +166,7 @@ export class DatabaseInitializer {
         `);
       });
 
-      await this.runMigration('add_driver_session_result_id_to_lap_times', async () => {
-        await this.addColumnIfNotExists('lap_times', 'driver_session_result_id', 'UUID');
-
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_driver_session_result_id 
-          ON lap_times(driver_session_result_id)
-        `);
-
-        await this.db.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM pg_constraint 
-              WHERE conname = 'lap_times_driver_session_result_id_fkey'
-            ) THEN
-              ALTER TABLE lap_times
-              ADD CONSTRAINT lap_times_driver_session_result_id_fkey
-              FOREIGN KEY (driver_session_result_id)
-              REFERENCES driver_session_results(id)
-              ON DELETE CASCADE;
-            END IF;
-          END $$;
-        `);
-      });
-
-      await this.runMigration('add_lap_analytics_columns', async () => {
-        await this.addColumnIfNotExists('lap_times', 'sector1_time_minutes', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'sector2_time_minutes', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'sector3_time_minutes', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'lap_valid_bit_flags', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'track_position', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'tire_age_laps', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'top_speed_kmph', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'max_safety_car_status', 'VARCHAR(50)');
-        await this.addColumnIfNotExists('lap_times', 'vehicle_fia_flags', 'VARCHAR(50)');
-        await this.addColumnIfNotExists('lap_times', 'pit_stop', 'BOOLEAN DEFAULT FALSE');
-        await this.addColumnIfNotExists('lap_times', 'ers_store_energy', 'DECIMAL(10,2)');
-        await this.addColumnIfNotExists('lap_times', 'ers_deployed_this_lap', 'DECIMAL(10,2)');
-        await this.addColumnIfNotExists('lap_times', 'ers_deploy_mode', 'VARCHAR(50)');
-        await this.addColumnIfNotExists('lap_times', 'fuel_in_tank', 'DECIMAL(10,2)');
-        await this.addColumnIfNotExists('lap_times', 'fuel_remaining_laps', 'DECIMAL(10,2)');
-        await this.addColumnIfNotExists('lap_times', 'gap_to_leader_ms', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'gap_to_position_ahead_ms', 'INTEGER');
-        await this.addColumnIfNotExists('lap_times', 'car_damage_data', 'JSONB');
-        await this.addColumnIfNotExists('lap_times', 'tyre_sets_data', 'JSONB');
-
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_track_position 
-          ON lap_times(track_position)
-        `);
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_tire_compound 
-          ON lap_times(tire_compound)
-        `);
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_pit_stop 
-          ON lap_times(pit_stop)
-        `);
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_lap_number 
-          ON lap_times(lap_number)
-        `);
-      });
-
+      // Add missing indexes for query optimization
       await this.runMigration('add_missing_indexes', async () => {
         // Index on driver_session_results.session_result_id (most common query pattern)
         await this.db.query(`
@@ -336,12 +190,6 @@ export class DatabaseInitializer {
         await this.db.query(`
           CREATE INDEX IF NOT EXISTS idx_driver_session_results_session_result_id_json_driver_id 
           ON driver_session_results(session_result_id, json_driver_id)
-        `);
-
-        // Ensure lap_times indexes exist (may already exist, but ensure they do)
-        await this.db.query(`
-          CREATE INDEX IF NOT EXISTS idx_lap_times_driver_session_result_id 
-          ON lap_times(driver_session_result_id)
         `);
       });
 
