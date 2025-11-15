@@ -2,8 +2,15 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 import { URL } from 'url';
+import dns from 'dns';
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
+
+// Set default DNS order to prefer IPv4 (Node.js 17.4+)
+// This ensures IPv4 is tried first when resolving hostnames, avoiding IPv6 ENETUNREACH errors
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 export function createPgPool(): Pool {
   // If DATABASE_URL is provided (Supabase/Render), parse it to individual params
