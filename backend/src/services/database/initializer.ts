@@ -20,9 +20,7 @@ export class DatabaseInitializer {
     try {
       await this.createMigrationsTable();
 
-      await this.runMigration('add_steam_id_to_members', async () => {
-        await this.addColumnIfNotExists('members', 'steam_id', 'VARCHAR(20) UNIQUE');
-      });
+      // Removed: add_steam_id_to_members migration (members table doesn't exist - consolidated into drivers table)
 
       await this.runMigration('add_jsonb_columns_for_session_data', async () => {
         await this.addColumnIfNotExists('session_results', 'additional_data', 'JSONB');
