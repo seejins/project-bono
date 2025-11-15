@@ -223,7 +223,7 @@ export const CREATE_TABLES_SQL = `
     original_dnf_reason VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_restored BOOLEAN DEFAULT FALSE,
-    UNIQUE(session_result_id, driver_id)
+    UNIQUE(session_result_id, user_id)
   );
 
   -- Orphaned Sessions Table (for sessions that don't match any event)
