@@ -40,6 +40,8 @@ interface Track {
   name: string;
   country: string;
   length_km: number;
+  eventName?: string | null;
+  shortEventName?: string | null;
 }
 
 interface SeasonsManagementProps {

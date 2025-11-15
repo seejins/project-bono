@@ -33,6 +33,8 @@ interface Track {
   laps: number;
   createdAt: string;
   updatedAt: string;
+  eventName?: string | null;
+  shortEventName?: string | null;
 }
 
 interface Event {
@@ -148,6 +150,8 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
           laps: track.laps || 0,
           createdAt: track.createdAt || '',
           updatedAt: track.updatedAt || track.createdAt || '',
+          eventName: track.eventName || null,
+          shortEventName: track.shortEventName || null,
         }));
         setTracks(fetchedTracks);
       }
