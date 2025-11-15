@@ -1,16 +1,39 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
+import { URL } from 'url';
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 export function createPgPool(): Pool {
-  // If DATABASE_URL is provided (Supabase/Render), use it directly
+  // If DATABASE_URL is provided (Supabase/Render), parse it to individual params
+  // This avoids IPv6 issues and SSL conflicts with connectionString
   if (process.env.DATABASE_URL) {
-    return new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    });
+    try {
+      const dbUrl = new URL(process.env.DATABASE_URL);
+      
+      // Decode password (URLs can have special characters)
+      const password = decodeURIComponent(dbUrl.password || '');
+      
+      return new Pool({
+        host: dbUrl.hostname,
+        port: parseInt(dbUrl.port || '5432', 10),
+        database: dbUrl.pathname.slice(1), // Remove leading '/'
+        user: dbUrl.username,
+        password: password,
+        ssl: process.env.NODE_ENV === 'production' 
+          ? { rejectUnauthorized: false } 
+          : false,
+      });
+    } catch (error) {
+      // If parsing fails, fall back to connectionString
+      return new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' 
+          ? { rejectUnauthorized: false } 
+          : false,
+      });
+    }
   }
 
   // Otherwise, fall back to individual environment variables (local dev)
