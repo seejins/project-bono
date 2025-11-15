@@ -14,14 +14,10 @@
     overflow-x: hidden; /* Prevent horizontal scrolling */
   }
 
-  /* Custom scrollbar styling - overlay and auto-hide */
+  /* Custom scrollbar styling - always visible */
   /* Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(156, 163, 175, 0) transparent;
-  }
-
-  *:hover {
     scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
   }
 
@@ -36,13 +32,9 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: rgba(156, 163, 175, 0);
+    background-color: rgba(156, 163, 175, 0.5);
     border-radius: 4px;
     transition: background-color 0.2s;
-  }
-
-  *:hover::-webkit-scrollbar-thumb {
-    background-color: rgba(156, 163, 175, 0.5);
   }
 
   *::-webkit-scrollbar-thumb:hover {
