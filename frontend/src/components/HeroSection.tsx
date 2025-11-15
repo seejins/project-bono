@@ -80,15 +80,12 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     const HERO_VIDEOS = [
       {
         src: '/raw/videos/bahrainstar.mp4',
-        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
       },
       {
         src: '/raw/videos/f1-edit.mp4',
-        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
       },
       {
         src: '/raw/videos/lewfinal.mp4',
-        poster: '/hero/Mexico%20City%20GP%202024%20Desktop%20Wallpaper%202.jpg',
       },
     ];
 
@@ -479,7 +476,6 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         <video
           className="absolute inset-0 h-full w-full object-cover"
           src={selectedVideo.src}
-          poster={selectedVideo.poster}
           autoPlay
           muted
           loop
