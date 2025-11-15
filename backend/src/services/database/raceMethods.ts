@@ -349,13 +349,17 @@ export const raceMethods = {
           }
         }
 
+        // Event name (for display in title) - prioritize from tracks table, fall back to races.track_name
         const eventName =
           row.event_name ||
-          row.track_name ||
           row.short_event_name ||
+          row.track_name ||
           row.track_name_full ||
           'Unknown Event';
-        const circuitName = row.track_name_full || row.track_name || eventName;
+        
+        // Circuit/Track name (for track information) - use actual track name from tracks table
+        const circuitName = row.track_name_full || row.track_name || 'Venue TBD';
+        
         const raceDateNormalized =
           row.race_date && typeof row.race_date !== 'string'
             ? row.race_date.toISOString().split('T')[0]
@@ -367,11 +371,11 @@ export const raceMethods = {
           track_id: row.track_id,
           event_name: eventName,
           short_event_name: row.short_event_name || row.event_name || null,
-          track_name: circuitName,
+          track_name: circuitName, // Actual track/circuit name for display
           order_index: row.order_index,
           track: {
             id: row.track_id,
-            name: circuitName,
+            name: circuitName, // Actual track name from tracks table, not event name
             country: row.country || '',
             length: row.length_km || 0,
             eventName: row.event_name || null,
@@ -404,28 +408,21 @@ export const raceMethods = {
   ): Promise<string> {
     console.log(`Adding event to season ${seasonId}:`, eventData);
 
-    if (!eventData.track_name && !eventData.event_name) {
-      throw new Error('Event or track name is required for events');
+    // Require track_id - tracks must be selected from existing list
+    if (!eventData.track_id) {
+      throw new Error('Track selection is required. Please select a track from the list.');
     }
 
-    let trackId: string;
-    let trackRecord: Awaited<ReturnType<typeof this.getTrackById>> | null = null;
-    if (eventData.track_id) {
-      trackId = eventData.track_id;
-    } else if (eventData.full_track_name) {
-      trackId = await this.findOrCreateTrack(eventData.full_track_name, eventData.track_length);
-    } else {
-      trackId = await this.findOrCreateTrack(eventData.track_name);
+    const trackId = eventData.track_id;
+    const trackRecord = await this.getTrackById(trackId);
+
+    if (!trackRecord) {
+      throw new Error(`Track with ID ${trackId} not found. Please select a valid track.`);
     }
 
-    trackRecord = await this.getTrackById(trackId);
-
+    // Use track's event name - tracks are pre-seeded with proper event names
     const displayName =
-      eventData.event_name ||
-      eventData.track_name ||
-      trackRecord?.eventName ||
-      trackRecord?.name ||
-      'Unknown Event';
+      trackRecord.eventName || trackRecord.shortEventName || trackRecord.name || 'Unknown Event';
 
     const now = new Date().toISOString();
     const rawStatus = eventData.status;
@@ -521,7 +518,24 @@ export const raceMethods = {
     const values: any[] = [];
     let paramCount = 1;
 
-    const nextTrackName = eventData.event_name ?? eventData.track_name;
+    // Handle track_id update - if track_id is provided, get track's event name
+    let shouldUseTrackEventName = false;
+    let trackRecord: Awaited<ReturnType<typeof this.getTrackById>> | null = null;
+    if (eventData.track_id !== undefined) {
+      updates.push(`track_id = $${paramCount++}`);
+      values.push(eventData.track_id);
+      
+      // If track_id is updated and no explicit event_name/track_name provided, use track's event name
+      if (!eventData.event_name && !eventData.track_name) {
+        trackRecord = await this.getTrackById(eventData.track_id);
+        if (trackRecord?.eventName) {
+          shouldUseTrackEventName = true;
+        }
+      }
+    }
+
+    // Handle explicit event_name/track_name updates, or use track's event name if track_id was updated
+    const nextTrackName = eventData.event_name ?? eventData.track_name ?? (shouldUseTrackEventName ? trackRecord?.eventName : undefined);
     if (nextTrackName !== undefined) {
       updates.push(`track_name = $${paramCount++}`);
       values.push(nextTrackName);

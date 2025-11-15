@@ -204,20 +204,20 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
       >
-        {viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {drivers.map((driver, index) => {
-              const teamColorClass = F123DataService.getTeamColor(driver.team ?? '');
+            const teamColorClass = F123DataService.getTeamColor(driver.team ?? '');
 
-              return (
+            return (
                 <motion.div
-                  key={driver.id}
-                  className="cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-md transition hover:bg-slate-900"
-                  onClick={() => onDriverSelect?.(driver.id)}
+                key={driver.id}
+                className="cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-md transition hover:bg-slate-900"
+                onClick={() => onDriverSelect?.(driver.id)}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, ease: easing, delay: 0.22 + index * 0.05 }}
-                >
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-slate-200">
@@ -259,16 +259,16 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
               </motion.div>
             );
           })}
-          </div>
-        ) : (
-          <DashboardTable
-            columns={tableColumns}
-            rows={drivers}
-            rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
-            onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
-            emptyMessage="No drivers registered for this season yet."
-          />
-        )}
+        </div>
+      ) : (
+        <DashboardTable
+          columns={tableColumns}
+          rows={drivers}
+          rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
+          onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
+          emptyMessage="No drivers registered for this season yet."
+        />
+      )}
       </motion.div>
     </DashboardPage>
   );

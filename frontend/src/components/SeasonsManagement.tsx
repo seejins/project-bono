@@ -694,7 +694,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                     <option value="">Select a track...</option>
                     {tracks.map((track) => (
                       <option key={track.id} value={track.id}>
-                        {track.name} ({track.country})
+                        {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                       </option>
                     ))}
                   </select>
@@ -859,7 +859,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                     <option value="">Select a track...</option>
                     {tracks.map((track) => (
                       <option key={track.id} value={track.id}>
-                        {track.name} ({track.country})
+                        {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                       </option>
                     ))}
                   </select>

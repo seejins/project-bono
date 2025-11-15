@@ -10,7 +10,6 @@ import type {
   DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
-import { F123_TRACKS } from '../data/f123Tracks';
 import { F123_TEAMS } from '../data/f123Teams';
 import logger from '../utils/logger';
 import { useSeason } from '../contexts/SeasonContext';
@@ -87,6 +86,7 @@ export const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onBack, onSe
   const [seasonDrivers, setSeasonDrivers] = useState<Member[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [tracks, setTracks] = useState<Array<{ id: string; name: string; country: string; eventName?: string | null; shortEventName?: string | null }>>([]);
   const [localSeasonStatus, setLocalSeasonStatus] = useState<SeasonStatus>(season.status);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'drivers' | 'events'>(
@@ -179,7 +179,6 @@ const editTeamOptions = useMemo(() => {
 
   const [newEvent, setNewEvent] = useState({
     track_id: '',
-    event_name: '',
     date: '',
     status: 'scheduled' as Event['status'],
     session_types: {
@@ -191,7 +190,6 @@ const editTeamOptions = useMemo(() => {
 
   const [editEvent, setEditEvent] = useState({
     track_id: '',
-    event_name: '',
     date: '',
     status: 'scheduled' as Event['status'],
     session_types: {
@@ -213,12 +211,13 @@ const editTeamOptions = useMemo(() => {
     try {
       setLoading(true);
       
-      // Load all drivers, season drivers, events, and seasons in parallel
-      const [driversRes, seasonDriversRes, eventsRes, seasonsRes] = await Promise.all([
+      // Load all drivers, season drivers, events, seasons, and tracks in parallel
+      const [driversRes, seasonDriversRes, eventsRes, seasonsRes, tracksRes] = await Promise.all([
         apiGet('/api/drivers'),
         apiGet(`/api/seasons/${season.id}/participants`),
         apiGet(`/api/seasons/${season.id}/events`),
-        apiGet('/api/seasons')
+        apiGet('/api/seasons'),
+        apiGet('/api/tracks')
       ]);
 
       if (driversRes.ok) {
@@ -260,6 +259,11 @@ const editTeamOptions = useMemo(() => {
             setLocalSeasonStatus(refreshed.status);
           }
         }
+      }
+
+      if (tracksRes.ok) {
+        const tracksData = await tracksRes.json();
+        setTracks(tracksData.tracks || []);
       }
     } catch (error) {
       logger.error('Error loading season data:', error);
@@ -360,9 +364,8 @@ const editTeamOptions = useMemo(() => {
       setStatus('loading');
       setStatusMessage('Adding event to season...');
 
-      // Find the selected track
-      const selectedTrack = F123_TRACKS.find(track => track.id === newEvent.track_id);
-      if (!selectedTrack) {
+      // Validate track selection (track_id is now UUID from API)
+      if (!newEvent.track_id) {
         throw new Error('Please select a track');
       }
 
@@ -376,11 +379,8 @@ const editTeamOptions = useMemo(() => {
         throw new Error('Please select at least one session type');
       }
 
-      const trimmedEventName = newEvent.event_name.trim();
       const payload = {
-        track_name: trimmedEventName || selectedTrack.name,
-        event_name: trimmedEventName || selectedTrack.name,
-        track_id: selectedTrack.id,
+        track_id: newEvent.track_id, // UUID from API
         status: newEvent.status,
         date: newEvent.date || null,
         session_types: sessionTypes.join(', '), // Store as comma-separated string
@@ -395,7 +395,6 @@ const editTeamOptions = useMemo(() => {
         setShowAddEventModal(false);
         setNewEvent({
           track_id: '',
-          event_name: '',
           date: '',
           status: 'scheduled',
           session_types: { practice: false, qualifying: false, race: false },
@@ -412,15 +411,13 @@ const editTeamOptions = useMemo(() => {
   };
 
   const handleEditEvent = (event: Event) => {
-    const track =
-      F123_TRACKS.find((t) => t.id === event.track_id) ||
-      F123_TRACKS.find((t) => t.name === event.track?.name);
+    // event.track_id is now UUID from database, match directly with tracks from API
+    const track = tracks.find((t) => t.id === event.track_id);
 
     const sessionTypes = event.session_types ? event.session_types.split(', ') : [];
 
     setEditEvent({
-      track_id: track?.id || '',
-      event_name: event.event_name || event.short_event_name || event.track?.eventName || event.track_name || '',
+      track_id: track?.id || event.track_id || '', // Use UUID directly
       date: event.race_date || '',
       status: event.status ?? 'scheduled',
       session_types: {
@@ -479,9 +476,8 @@ const editTeamOptions = useMemo(() => {
       setStatus('loading');
       setStatusMessage('Updating event...');
 
-      // Find the selected track
-      const selectedTrack = F123_TRACKS.find(track => track.id === editEvent.track_id);
-      if (!selectedTrack) {
+      // Validate track selection (track_id is now UUID from API)
+      if (!editEvent.track_id) {
         throw new Error('Please select a track');
       }
 
@@ -495,10 +491,8 @@ const editTeamOptions = useMemo(() => {
         throw new Error('Please select at least one session type');
       }
 
-      const trimmedEventName = editEvent.event_name.trim();
       const response = await apiPut(`/api/seasons/${season.id}/events/${editingEvent.id}`, {
-        track_name: trimmedEventName || selectedTrack.name,
-        event_name: trimmedEventName || selectedTrack.name,
+        track_id: editEvent.track_id, // UUID from API
         status: editEvent.status,
         date: editEvent.date || null,
         session_types: sessionTypes.join(', '), // Store as comma-separated string
@@ -512,7 +506,6 @@ const editTeamOptions = useMemo(() => {
         setEditingEvent(null);
         setEditEvent({
           track_id: '',
-          event_name: '',
           date: '',
           status: 'scheduled',
           session_types: { practice: false, qualifying: false, race: false },
@@ -1136,39 +1129,19 @@ const editTeamOptions = useMemo(() => {
                   value={newEvent.track_id}
                   onChange={(e) => {
                     const nextTrackId = e.target.value;
-                    const selected = F123_TRACKS.find((track) => track.id === nextTrackId);
                     setNewEvent((prev) => ({
                       ...prev,
                       track_id: nextTrackId,
-                      event_name: prev.event_name || selected?.name || '',
                     }));
                   }}
                 >
                   <option value="">-- Select a track --</option>
-                  {F123_TRACKS.map((track) => (
+                  {tracks.map((track) => (
                     <option key={track.id} value={track.id}>
-                      {track.name} ({track.country})
+                      {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Event Name
-                </label>
-                <input
-                  type="text"
-                  value={newEvent.event_name}
-                  onChange={(e) =>
-                    setNewEvent((prev) => ({
-                      ...prev,
-                      event_name: e.target.value,
-                    }))
-                  }
-                  placeholder="e.g. Austrian Grand Prix"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-red-500 focus:border-red-500"
-                />
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1262,7 +1235,6 @@ const editTeamOptions = useMemo(() => {
                   setShowAddEventModal(false);
                   setNewEvent({
                     track_id: '',
-                    event_name: '',
                     date: '',
                     status: 'scheduled',
                     session_types: { practice: false, qualifying: false, race: false },
@@ -1306,39 +1278,19 @@ const editTeamOptions = useMemo(() => {
                   value={editEvent.track_id}
                   onChange={(e) => {
                     const nextTrackId = e.target.value;
-                    const selected = F123_TRACKS.find((track) => track.id === nextTrackId);
                     setEditEvent((prev) => ({
                       ...prev,
                       track_id: nextTrackId,
-                      event_name: prev.event_name || selected?.name || '',
                     }));
                   }}
                 >
                   <option value="">-- Select a track --</option>
-                  {F123_TRACKS.map((track) => (
+                  {tracks.map((track) => (
                     <option key={track.id} value={track.id}>
-                      {track.name} ({track.country})
+                      {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Event Name
-                </label>
-                <input
-                  type="text"
-                  value={editEvent.event_name}
-                  onChange={(e) =>
-                    setEditEvent((prev) => ({
-                      ...prev,
-                      event_name: e.target.value,
-                    }))
-                  }
-                  placeholder="e.g. Austrian Grand Prix"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
-                />
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1433,7 +1385,6 @@ const editTeamOptions = useMemo(() => {
                   setEditingEvent(null);
                   setEditEvent({
                     track_id: '',
-                    event_name: '',
                     date: '',
                     status: 'scheduled',
                     session_types: { practice: false, qualifying: false, race: false },

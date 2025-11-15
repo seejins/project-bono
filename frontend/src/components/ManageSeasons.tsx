@@ -135,14 +135,25 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
   };
 
   const loadTracks = async () => {
-    // Mock tracks for now - in real implementation, this would come from API
-    setTracks([
-      { id: '1', name: 'Bahrain International Circuit', country: 'Bahrain', location: 'Sakhir', length: 5.412, laps: 57, createdAt: '', updatedAt: '' },
-      { id: '2', name: 'Silverstone Circuit', country: 'United Kingdom', location: 'Silverstone', length: 5.891, laps: 52, createdAt: '', updatedAt: '' },
-      { id: '3', name: 'Circuit de Monaco', country: 'Monaco', location: 'Monte Carlo', length: 3.337, laps: 78, createdAt: '', updatedAt: '' },
-      { id: '4', name: 'Spa-Francorchamps', country: 'Belgium', location: 'Spa', length: 7.004, laps: 44, createdAt: '', updatedAt: '' },
-      { id: '5', name: 'Monza Circuit', country: 'Italy', location: 'Monza', length: 5.793, laps: 53, createdAt: '', updatedAt: '' }
-    ]);
+    try {
+      const response = await apiGet('/api/tracks');
+      if (response.ok) {
+        const data = await response.json();
+        const fetchedTracks = (data.tracks || []).map((track: any) => ({
+          id: track.id,
+          name: track.name,
+          country: track.country,
+          location: track.city || '',
+          length: track.length || 0,
+          laps: track.laps || 0,
+          createdAt: track.createdAt || '',
+          updatedAt: track.updatedAt || track.createdAt || '',
+        }));
+        setTracks(fetchedTracks);
+      }
+    } catch (error) {
+      logger.error('Failed to load tracks:', error);
+    }
   };
 
   const loadSeasonData = async (seasonId: string) => {
@@ -573,7 +584,7 @@ export const ManageSeasons: React.FC<ManageSeasonsProps> = ({ onSeasonSelect, se
                   <option value="">Select a track</option>
                   {tracks.map((track) => (
                     <option key={track.id} value={track.id}>
-                      {track.name} ({track.country})
+                      {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                     </option>
                   ))}
                 </select>

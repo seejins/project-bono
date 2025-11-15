@@ -11,6 +11,7 @@ export const F123_TRACKS: F123Track[] = [
   { id: 'bahrain', name: 'Bahrain International Circuit', country: 'Bahrain', location: 'Sakhir', length: 5.412, laps: 57 },
   { id: 'jeddah', name: 'Jeddah Corniche Circuit', country: 'Saudi Arabia', location: 'Jeddah', length: 6.174, laps: 50 },
   { id: 'albert_park', name: 'Albert Park Circuit', country: 'Australia', location: 'Melbourne', length: 5.303, laps: 58 },
+  { id: 'shanghai', name: 'Shanghai International Circuit', country: 'China', location: 'Shanghai', length: 5.451, laps: 56 },
   { id: 'baku', name: 'Baku City Circuit', country: 'Azerbaijan', location: 'Baku', length: 6.003, laps: 51 },
   { id: 'miami', name: 'Miami International Autodrome', country: 'USA', location: 'Miami', length: 5.412, laps: 57 },
   { id: 'imola', name: 'Autodromo Enzo e Dino Ferrari', country: 'Italy', location: 'Imola', length: 4.909, laps: 63 },

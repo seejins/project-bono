@@ -194,32 +194,37 @@ export class RaceJSONImportService {
       
       console.log(`📏 Track length: ${trackLengthMeters}m (${trackLengthKm}km), Total laps: ${totalLaps}`);
       
-      // Get or create race/event
+      // Require race/event to exist - uploads must be done through event cards which provide raceId
       let targetRaceId = raceId;
       if (!targetRaceId) {
-        // Find or create track with length information (use full track name for track table)
-        const trackDbId = await this.dbService.findOrCreateTrack(trackName, trackLengthKm ? parseFloat(trackLengthKm) : undefined);
+        // Find track by name (tracks must be pre-seeded)
+        const trackResult = await this.dbService.query(
+          'SELECT id FROM tracks WHERE name = $1',
+          [trackName],
+        );
         
-        // Try to find existing event for this event name (use event name, not track name)
+        if (trackResult.rows.length === 0) {
+          throw new Error(
+            `Track "${trackName}" not found in database. ` +
+            `Please create the event first by selecting a track from the schedule dashboard.`
+          );
+        }
+        
+        const trackDbId = trackResult.rows[0].id;
+        
+        // Try to find existing event for this event name
         const existingEvent = await this.dbService.findActiveEventByTrack(eventName);
         if (existingEvent) {
           targetRaceId = existingEvent;
-          // Update track_name to event name in case it was set to the mapped track name previously
-          await this.dbService.updateEventInSeason(existingEvent, {
-            track_name: eventName // Ensure event name (track-id) is stored, not mapped track name
-          });
-          console.log(`✅ Found existing event for ${eventName}: ${existingEvent} (updated track_name)`);
+          console.log(`✅ Found existing event for ${eventName}: ${existingEvent}`);
         } else {
-          // Create new event (use event name as track_name in races table)
+          // Create new event using the found track
           targetRaceId = await this.dbService.addEventToSeason(seasonId, {
-            track_name: eventName, // Event name (e.g., "Austria")
-            track_id: trackDbId, // Link to tracks table with full track name
-            full_track_name: trackName, // Full track name for reference
-            track_length: trackLengthKm ? parseFloat(trackLengthKm) : undefined,
+            track_id: trackDbId, // Use pre-seeded track
             date: sessionDate,
             status: 'scheduled'
           });
-          console.log(`✅ Created new event "${eventName}" (track: ${trackName}): ${targetRaceId}`);
+          console.log(`✅ Created new event for "${eventName}" (track: ${trackName}): ${targetRaceId}`);
         }
       }
       

@@ -653,6 +653,7 @@ export default function createSeasonsRoutes(
     try {
       const { id } = req.params;
       const {
+        track_id,
         track_name,
         event_name,
         status,
@@ -665,12 +666,15 @@ export default function createSeasonsRoutes(
         weather_rain_percentage,
       } = req.body;
       
-      if (!track_name && !event_name) {
-        return res.status(400).json({ error: 'Event or track name is required' });
+      // If track_id is provided, track_name/event_name are optional (will use track's event name)
+      // If track_id is not provided, require track_name or event_name
+      if (!track_id && !track_name && !event_name) {
+        return res.status(400).json({ error: 'Track selection or track name is required' });
       }
 
       await seasons.ensureInitialized();
       const eventId = await races.addEventToSeason(id, {
+        track_id,
         track_name,
         event_name,
         status,

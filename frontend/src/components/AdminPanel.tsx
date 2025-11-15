@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { DriversManagement } from './DriversManagement';
 import { SeasonsManagement } from './SeasonsManagement';
-import { RaceJSONUpload } from './RaceJSONUpload';
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -11,7 +10,7 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthenticate }) => {
   const [password, setPassword] = useState('');
-  const [activeSection, setActiveSection] = useState<'members' | 'seasons' | 'races'>('members');
+  const [activeSection, setActiveSection] = useState<'members' | 'seasons'>('members');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,12 +76,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
         {[
           { id: 'members', label: 'Members', icon: '👥' },
-          { id: 'seasons', label: 'Seasons', icon: '🏆' },
-          { id: 'races', label: 'Races', icon: '🏁' }
+          { id: 'seasons', label: 'Seasons', icon: '🏆' }
         ].map((section) => (
             <button
               key={section.id}
-              onClick={() => setActiveSection(section.id as any)}
+              onClick={() => setActiveSection(section.id as 'members' | 'seasons')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
                 activeSection === section.id
                   ? 'bg-red-600 text-white'
@@ -98,7 +96,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
       {/* Content */}
       {activeSection === 'members' && <DriversManagement />}
       {activeSection === 'seasons' && <SeasonsManagement />}
-      {activeSection === 'races' && <RaceJSONUpload />}
     </div>
   );
 };

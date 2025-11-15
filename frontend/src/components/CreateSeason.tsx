@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, X, Calendar, Save } from 'lucide-react';
-import { F123_TRACKS } from '../data/f123Tracks';
+import { apiGet } from '../utils/api';
 
 interface SeasonEvent {
   id: string;
@@ -28,6 +28,7 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
   const [pointsSystem, setPointsSystem] = useState<'f1_standard' | 'custom'>('f1_standard');
   const [fastestLapPoint, setFastestLapPoint] = useState(true);
   const [events, setEvents] = useState<SeasonEvent[]>([]);
+  const [tracks, setTracks] = useState<Array<{ id: string; name: string; country: string; eventName?: string | null }>>([]);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [newEvent, setNewEvent] = useState<Partial<SeasonEvent>>({
     trackId: '',
@@ -38,17 +39,32 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
     includeRace: true
   });
 
+  useEffect(() => {
+    const loadTracks = async () => {
+      try {
+        const response = await apiGet('/api/tracks');
+        if (response.ok) {
+          const data = await response.json();
+          setTracks(data.tracks || []);
+        }
+      } catch (error) {
+        console.error('Failed to load tracks:', error);
+      }
+    };
+    loadTracks();
+  }, []);
+
   const handleAddEvent = () => {
     if (!newEvent.trackId) {
       alert('Please select a track');
       return;
     }
 
-    const track = F123_TRACKS.find(t => t.id === newEvent.trackId);
+    const track = tracks.find(t => t.id === newEvent.trackId);
     const event: SeasonEvent = {
       id: Date.now().toString(),
       trackId: newEvent.trackId!,
-      trackName: track?.name || 'Unknown Track',
+      trackName: track?.eventName || track?.name || 'Unknown Track',
       date: newEvent.date || '',
       time: newEvent.time || '15:00',
       type: 'full_event',
@@ -278,7 +294,7 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
             ) : (
               <div className="space-y-2">
                 {events.map((event) => {
-                  const track = F123_TRACKS.find(t => t.id === event.trackId);
+                  const track = tracks.find(t => t.id === event.trackId);
                   return (
                     <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                       <div className="flex-1">
@@ -356,9 +372,9 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
                   <option value="">Select a track...</option>
-                  {F123_TRACKS.map(track => (
+                  {tracks.map(track => (
                     <option key={track.id} value={track.id}>
-                      {track.name} ({track.country})
+                      {track.eventName ? `${track.eventName} (${track.name})` : track.name}
                     </option>
                   ))}
                 </select>

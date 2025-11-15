@@ -65,6 +65,7 @@ export class DatabaseInitializer {
           ['Bahrain International Circuit', 'Bahrain Grand Prix', 'Bahrain GP'],
           ['Jeddah Corniche Circuit', 'Saudi Arabian Grand Prix', 'Saudi Arabian GP'],
           ['Albert Park Circuit', 'Australian Grand Prix', 'Australian GP'],
+          ['Shanghai International Circuit', 'Chinese Grand Prix', 'Chinese GP'],
           ['Baku City Circuit', 'Azerbaijan Grand Prix', 'Azerbaijan GP'],
           ['Miami International Autodrome', 'Miami Grand Prix', 'Miami GP'],
           ['Circuit de Monaco', 'Monaco Grand Prix', 'Monaco GP'],
@@ -95,6 +96,64 @@ export class DatabaseInitializer {
                AND (event_name IS DISTINCT FROM $2 OR short_event_name IS DISTINCT FROM $3)`,
             [trackName, eventName, shortName],
           );
+        }
+      });
+
+      // Seed all F1 2023/2024 tracks
+      await this.runMigration('seed_f1_tracks', async () => {
+        const tracks = [
+          { name: 'Bahrain International Circuit', country: 'Bahrain', length: 5.412, eventName: 'Bahrain Grand Prix', shortEventName: 'Bahrain GP' },
+          { name: 'Jeddah Corniche Circuit', country: 'Saudi Arabia', length: 6.174, eventName: 'Saudi Arabian Grand Prix', shortEventName: 'Saudi Arabian GP' },
+          { name: 'Albert Park Circuit', country: 'Australia', length: 5.303, eventName: 'Australian Grand Prix', shortEventName: 'Australian GP' },
+          { name: 'Shanghai International Circuit', country: 'China', length: 5.451, eventName: 'Chinese Grand Prix', shortEventName: 'Chinese GP' },
+          { name: 'Baku City Circuit', country: 'Azerbaijan', length: 6.003, eventName: 'Azerbaijan Grand Prix', shortEventName: 'Azerbaijan GP' },
+          { name: 'Miami International Autodrome', country: 'USA', length: 5.412, eventName: 'Miami Grand Prix', shortEventName: 'Miami GP' },
+          { name: 'Autodromo Enzo e Dino Ferrari', country: 'Italy', length: 4.909, eventName: 'Emilia Romagna Grand Prix', shortEventName: 'Emilia Romagna GP' },
+          { name: 'Circuit de Monaco', country: 'Monaco', length: 3.337, eventName: 'Monaco Grand Prix', shortEventName: 'Monaco GP' },
+          { name: 'Circuit de Barcelona-Catalunya', country: 'Spain', length: 4.675, eventName: 'Spanish Grand Prix', shortEventName: 'Spanish GP' },
+          { name: 'Circuit Gilles Villeneuve', country: 'Canada', length: 4.361, eventName: 'Canadian Grand Prix', shortEventName: 'Canadian GP' },
+          { name: 'Red Bull Ring', country: 'Austria', length: 4.318, eventName: 'Austrian Grand Prix', shortEventName: 'Austrian GP' },
+          { name: 'Silverstone Circuit', country: 'United Kingdom', length: 5.891, eventName: 'British Grand Prix', shortEventName: 'British GP' },
+          { name: 'Hungaroring', country: 'Hungary', length: 4.381, eventName: 'Hungarian Grand Prix', shortEventName: 'Hungarian GP' },
+          { name: 'Circuit de Spa-Francorchamps', country: 'Belgium', length: 7.004, eventName: 'Belgian Grand Prix', shortEventName: 'Belgian GP' },
+          { name: 'Circuit Zandvoort', country: 'Netherlands', length: 4.259, eventName: 'Dutch Grand Prix', shortEventName: 'Dutch GP' },
+          { name: 'Autodromo Nazionale Monza', country: 'Italy', length: 5.793, eventName: 'Italian Grand Prix', shortEventName: 'Italian GP' },
+          { name: 'Marina Bay Street Circuit', country: 'Singapore', length: 5.063, eventName: 'Singapore Grand Prix', shortEventName: 'Singapore GP' },
+          { name: 'Suzuka International Racing Course', country: 'Japan', length: 5.807, eventName: 'Japanese Grand Prix', shortEventName: 'Japanese GP' },
+          { name: 'Lusail International Circuit', country: 'Qatar', length: 5.380, eventName: 'Qatar Grand Prix', shortEventName: 'Qatar GP' },
+          { name: 'Circuit of the Americas', country: 'USA', length: 5.513, eventName: 'United States Grand Prix', shortEventName: 'United States GP' },
+          { name: 'Autodromo Hermanos Rodriguez', country: 'Mexico', length: 4.304, eventName: 'Mexico City Grand Prix', shortEventName: 'Mexico City GP' },
+          { name: 'Autodromo Jose Carlos Pace', country: 'Brazil', length: 4.309, eventName: 'São Paulo Grand Prix', shortEventName: 'São Paulo GP' },
+          { name: 'Las Vegas Street Circuit', country: 'USA', length: 6.120, eventName: 'Las Vegas Grand Prix', shortEventName: 'Las Vegas GP' },
+          { name: 'Yas Marina Circuit', country: 'UAE', length: 5.281, eventName: 'Abu Dhabi Grand Prix', shortEventName: 'Abu Dhabi GP' },
+        ];
+
+        for (const track of tracks) {
+          // Check if track already exists (by name)
+          const existing = await this.db.query(
+            'SELECT id FROM tracks WHERE name = $1',
+            [track.name],
+          );
+
+          if (existing.rows.length === 0) {
+            // Insert new track
+            await this.db.query(
+              `INSERT INTO tracks (id, name, country, length_km, event_name, short_event_name, created_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+              [track.name, track.country, track.length, track.eventName, track.shortEventName],
+            );
+          } else {
+            // Update existing track with event names if missing
+            await this.db.query(
+              `UPDATE tracks
+               SET event_name = COALESCE(NULLIF(event_name, ''), $2),
+                   short_event_name = COALESCE(NULLIF(short_event_name, ''), $3),
+                   country = CASE WHEN country = 'Unknown' THEN $4 ELSE country END,
+                   length_km = CASE WHEN length_km = 0 THEN $5 ELSE length_km END
+               WHERE name = $1`,
+              [track.name, track.eventName, track.shortEventName, track.country, track.length],
+            );
+          }
         }
       });
 

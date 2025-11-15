@@ -46,7 +46,7 @@ function ScrollToTop() {
   useEffect(() => {
     // Only scroll to top on new navigation (PUSH/REPLACE), not on back/forward (POP)
     if (navigationType !== 'POP') {
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
     }
   }, [pathname, navigationType]);
 
@@ -209,10 +209,10 @@ function DriverSeasonStatsPage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <DriverSeasonStats
-          driverId={driverId}
-          onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
-        />
+      <DriverSeasonStats
+        driverId={driverId}
+        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+      />
       </Suspense>
     </PageTransition>
   );
@@ -239,10 +239,10 @@ function DriverCareerProfilePage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <DriverCareerProfileComponent
-          memberId={driverId}
-          onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
-        />
+      <DriverCareerProfileComponent
+        memberId={driverId}
+        onRaceSelect={(raceId) => navigate(`/races/${raceId}`)}
+      />
       </Suspense>
     </PageTransition>
   );
@@ -268,7 +268,7 @@ function RacesPage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <RacesDashboard seasonId={seasonId} onRaceSelect={(raceId) => navigate(`/races/${raceId}`)} />
+      <RacesDashboard seasonId={seasonId} onRaceSelect={(raceId) => navigate(`/races/${raceId}`)} />
       </Suspense>
     </PageTransition>
   );
@@ -313,11 +313,11 @@ function DriverRaceAnalysisPage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <DriverRaceAnalysis
-          raceId={raceId}
-          driverId={driverId}
-          initialSessionType={initialSessionType}
-        />
+      <DriverRaceAnalysis
+        raceId={raceId}
+        driverId={driverId}
+        initialSessionType={initialSessionType}
+      />
       </Suspense>
     </PageTransition>
   );
@@ -327,7 +327,7 @@ function LivePage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <LiveTimings />
+      <LiveTimings />
       </Suspense>
     </PageTransition>
   );
@@ -339,7 +339,7 @@ function AdminPage() {
   return (
     <PageTransition>
       <Suspense fallback={<RouteLoadingFallback />}>
-        <AdminPanel isAuthenticated={adminAuthenticated} onAuthenticate={authenticate} />
+      <AdminPanel isAuthenticated={adminAuthenticated} onAuthenticate={authenticate} />
       </Suspense>
     </PageTransition>
   );
@@ -369,16 +369,16 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <ScrollToTop />
-        <ThemeProvider>
-          <SeasonProvider>
-            <AdminProvider>
-              <AppRoutes />
-            </AdminProvider>
-          </SeasonProvider>
-        </ThemeProvider>
-      </BrowserRouter>
+    <BrowserRouter>
+      <ScrollToTop />
+      <ThemeProvider>
+        <SeasonProvider>
+          <AdminProvider>
+            <AppRoutes />
+          </AdminProvider>
+        </SeasonProvider>
+      </ThemeProvider>
+    </BrowserRouter>
     </ErrorBoundary>
   );
 }
