@@ -54,7 +54,7 @@ export const CREATE_TABLES_SQL = `
     weather_track_temp INTEGER,
     weather_rain_percentage INTEGER,
     session_config JSONB, -- New column for dynamic session rendering
-    primary_session_result_id UUID REFERENCES session_results(id) ON DELETE SET NULL,
+    primary_session_result_id UUID, -- Foreign key constraint added via migration (circular dependency: session_results references races)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
