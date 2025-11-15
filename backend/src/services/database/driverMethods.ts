@@ -169,25 +169,11 @@ export const driverMethods = {
       throw new Error(`Driver ${driver.name} is already in this season`);
     }
 
-    if (!driver.seasonId) {
-      await this.db.query(
-        'INSERT INTO drivers (id, name, team, number, season_id, steam_id, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [
-          driverId,
-          driver.name,
-          driver.team || 'TBD',
-          driver.number || 0,
-          seasonId,
-          driver.steam_id || null,
-          driver.isActive,
-        ],
-      );
-    } else {
-      await this.db.query(
-        'UPDATE drivers SET season_id = $1 WHERE id = $2',
-        [seasonId, driverId],
-      );
-    }
+    // Update the existing driver to set season_id (don't INSERT with existing ID)
+    await this.db.query(
+      'UPDATE drivers SET season_id = $1 WHERE id = $2',
+      [seasonId, driverId],
+    );
 
     console.log(`✅ Driver ${driver.name} added to season ${seasonId}`);
   },
