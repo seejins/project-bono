@@ -55,6 +55,8 @@ const formatEventDate = (dateString: string | null) => {
   if (Number.isNaN(parsed.getTime())) return 'TBD';
   const weekday = parsed.toLocaleDateString('en-US', {
     weekday: 'short',
+    // Display weekday in Pacific Time (PST/PDT) to match main date formatting
+    timeZone: 'America/Los_Angeles',
   });
   const date = formatFullDate(dateString);
   return `${weekday}, ${date}`;

@@ -29,7 +29,9 @@ export const formatFullDate = (value: string | null | undefined): string => {
   return date.toLocaleDateString('en-US', { 
     year: 'numeric',
     month: 'short', 
-    day: 'numeric' 
+    day: 'numeric',
+    // Force display in Pacific Time (PST/PDT) so dates are consistent
+    timeZone: 'America/Los_Angeles',
   });
 };
 
