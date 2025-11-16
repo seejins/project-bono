@@ -4,17 +4,35 @@
  */
 
 /**
+ * Parse a date string as a local calendar date.
+ * - For plain "YYYY-MM-DD" strings, construct Date(year, month-1, day) in local time.
+ * - For other formats (full ISO, etc.), fall back to new Date(value).
+ */
+const parseLocalDate = (value: string): Date | null => {
+  // Plain date string from backend / <input type="date">
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yearStr, monthStr, dayStr] = value.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return null;
+    const date = new Date(year, month - 1, day);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  // Fallback for other formats
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
  * Format date as "Jan 15" (short format)
  * Returns "TBD" if date is null/undefined/invalid
  */
 export const formatDate = (value: string | null | undefined): string => {
-  if (!value) {
-    return 'TBD';
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'TBD';
-  }
+  if (!value) return 'TBD';
+  const date = parseLocalDate(value);
+  if (!date) return 'TBD';
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
@@ -24,14 +42,12 @@ export const formatDate = (value: string | null | undefined): string => {
  */
 export const formatFullDate = (value: string | null | undefined): string => {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseLocalDate(value);
+  if (!date) return '';
   return date.toLocaleDateString('en-US', { 
     year: 'numeric',
     month: 'short', 
     day: 'numeric',
-    // Force display in Pacific Time (PST/PDT) so dates are consistent
-    timeZone: 'America/Los_Angeles',
   });
 };
 

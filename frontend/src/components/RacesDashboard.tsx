@@ -49,15 +49,27 @@ interface RacesDashboardProps {
 
 type ViewMode = 'cards' | 'list';
 
+// Parse a date string as a local calendar date (avoids UTC shifting plain YYYY-MM-DD)
+const parseLocalDate = (value: string): Date | null => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yearStr, monthStr, dayStr] = value.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return null;
+    const date = new Date(year, month - 1, day);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const formatEventDate = (dateString: string | null) => {
   if (!dateString) return 'TBD';
-  const parsed = new Date(dateString);
-  if (Number.isNaN(parsed.getTime())) return 'TBD';
-  const weekday = parsed.toLocaleDateString('en-US', {
-    weekday: 'short',
-    // Display weekday in Pacific Time (PST/PDT) to match main date formatting
-    timeZone: 'America/Los_Angeles',
-  });
+  const parsed = parseLocalDate(dateString);
+  if (!parsed) return 'TBD';
+  const weekday = parsed.toLocaleDateString('en-US', { weekday: 'short' });
   const date = formatFullDate(dateString);
   return `${weekday}, ${date}`;
 };
