@@ -211,7 +211,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
                     className="h-3 w-3 rounded-full"
                     style={{ backgroundColor: entry.color as string }}
                   />
-                  <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
                 </span>
                 <span className="font-semibold text-slate-900 dark:text-white">
                   {formatSecondsValue(typeof entry.value === 'number' ? entry.value : null)}
@@ -298,23 +298,23 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <ChartCard
-          title="Pace by Lap"
-          description={`${driverName}'s lap and sector pace across the session.`}
-        >
-          <div className="h-80">
-            <BaseLineChart
-              data={paceSeries}
-              lines={paceLines}
-              tooltipContent={renderPaceTooltip}
-              yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
-              referenceLines={pitReferenceLines}
-              legend
-              enableSeriesHighlight
-              dimmedOpacity={1}
-            />
-          </div>
-        </ChartCard>
+      <ChartCard
+        title="Pace by Lap"
+        description={`${driverName}'s lap and sector pace across the session.`}
+      >
+        <div className="h-80">
+          <BaseLineChart
+            data={paceSeries}
+            lines={paceLines}
+            tooltipContent={renderPaceTooltip}
+            yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
+            referenceLines={pitReferenceLines}
+            legend
+            enableSeriesHighlight
+            dimmedOpacity={1}
+          />
+        </div>
+      </ChartCard>
 
         <ChartCard
           title="ERS Usage"

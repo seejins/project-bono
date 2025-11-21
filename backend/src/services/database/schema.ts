@@ -216,6 +216,8 @@ export const CREATE_TABLES_SQL = `
     pit_stop BOOLEAN DEFAULT FALSE,
     ers_store_energy DECIMAL(10,2),
     ers_deployed_this_lap DECIMAL(10,2),
+    ers_harvested_this_lap_mguk DECIMAL(10,2),
+    ers_harvested_this_lap_mguh DECIMAL(10,2),
     ers_deploy_mode VARCHAR(50),
     fuel_in_tank DECIMAL(10,2),
     fuel_remaining_laps DECIMAL(10,2),
