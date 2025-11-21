@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Calendar, Award, Star, Flag } from 'lucide-react';
+import clsx from 'clsx';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
 import { OverviewStatStrip, type OverviewStatConfig } from './common/OverviewStatStrip';
@@ -11,6 +12,7 @@ import { DashboardTable } from './layout/DashboardTable';
 import {
   useSeasonAnalysis,
   type DriverSeasonSummary,
+  type ConstructorSeasonSummary,
   type SeasonAnalysisHighlight,
   type SeasonEventSummary,
 } from '../hooks/useSeasonAnalysis';
@@ -51,13 +53,50 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
   const { currentSeason } = useSeason();
   const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'drivers' | 'constructors'>('drivers');
+  const [showAllDrivers, setShowAllDrivers] = useState(false);
+  const [rowsVisible, setRowsVisible] = useState(false);
+  
+  const ROW_STAGGER_MS = 100;
+  const ROW_INITIAL_DELAY_MS = 100;
 
   const driverSummaries: DriverSeasonSummary[] = useMemo(() => {
     if (!analysis) {
       return [];
     }
 
-    return [...analysis.drivers].sort((a, b) => {
+    // Get all drivers (league + AI) or just league drivers based on toggle
+    let standingsList: DriverSeasonSummary[] = [];
+    
+    if (showAllDrivers) {
+      // Show all drivers including AI from standings
+      standingsList = analysis.standings || [];
+    } else {
+      // Show only league drivers (exclude AI)
+      standingsList = analysis.drivers || [];
+    }
+    
+    return [...standingsList]
+      .filter((driver) => {
+        // If showing season drivers only, exclude AI drivers
+        if (!showAllDrivers) {
+          return !driver.isAi;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const positionA = a.position ?? Number.MAX_SAFE_INTEGER;
+        const positionB = b.position ?? Number.MAX_SAFE_INTEGER;
+        return positionA - positionB;
+      });
+  }, [analysis, showAllDrivers]);
+
+  const constructorSummaries: ConstructorSeasonSummary[] = useMemo(() => {
+    if (!analysis?.constructors) {
+      return [];
+    }
+
+    return [...analysis.constructors].sort((a, b) => {
       const positionA = a.position ?? Number.MAX_SAFE_INTEGER;
       const positionB = b.position ?? Number.MAX_SAFE_INTEGER;
       return positionA - positionB;
@@ -194,7 +233,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         label: 'Driver',
         align: 'left' as const,
         headerClassName: 'text-left',
-        className: 'font-medium text-slate-900 dark:text-slate-100',
+        render: (_: string, row: DriverSeasonSummary) => (
+          <span className={clsx('font-medium text-slate-900 dark:text-slate-100', row.isAi && 'opacity-70')}>
+            {row.name}{row.isAi && <span className="ml-2 text-xs text-slate-400">(AI)</span>}
+          </span>
+        ),
       },
       {
         key: 'team',
@@ -229,6 +272,82 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       },
     ],
     []
+  );
+
+  const constructorColumns = useMemo(
+    () => [
+      {
+        key: 'position',
+        label: 'Pos',
+        render: (_: number | undefined, row: ConstructorSeasonSummary) => (
+          <span className={getPositionBadgeClass(row.position)}>P{row.position ?? '—'}</span>
+        ),
+        className: 'font-semibold text-slate-800 dark:text-slate-100',
+      },
+      {
+        key: 'team',
+        label: 'Team',
+        align: 'left' as const,
+        headerClassName: 'text-left',
+        render: (_: string, row: ConstructorSeasonSummary) => (
+          <span
+            className="font-medium"
+            style={{ color: F123DataService.getTeamColorHex(row.team ?? '') }}
+          >
+            {row.team ?? '—'}
+          </span>
+        ),
+      },
+      {
+        key: 'wins',
+        label: 'Wins',
+        className: 'text-slate-500 dark:text-slate-400',
+      },
+      {
+        key: 'podiums',
+        label: 'Podiums',
+        className: 'text-slate-500 dark:text-slate-400',
+      },
+      {
+        key: 'points',
+        label: 'Points',
+        render: (_: number, row: ConstructorSeasonSummary) => (
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{row.points} pts</span>
+        ),
+      },
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (driverSummaries.length > 0 || constructorSummaries.length > 0) {
+      // First animate out (fade/slide down)
+      setRowsVisible(false);
+      
+      // After animation completes, animate back in
+      const frame = requestAnimationFrame(() => {
+        setTimeout(() => {
+          setRowsVisible(true);
+        }, 500); // Wait for fade-out to complete
+      });
+      
+      return () => {
+        cancelAnimationFrame(frame);
+      };
+    } else {
+      setRowsVisible(false);
+    }
+  }, [driverSummaries, constructorSummaries, activeTab, showAllDrivers]);
+
+  const previousRaceComponent = useMemo(
+    () => (
+      <PreviousRaceResultsComponent 
+        seasonId={currentSeason?.id || ''} 
+        onRaceSelect={onRaceSelect}
+        onDriverSelect={onDriverSelect}
+      />
+    ),
+    [currentSeason?.id, onRaceSelect, onDriverSelect]
   );
 
   return (
@@ -270,23 +389,88 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
           <OverviewStatStrip items={summaryCards} />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <DashboardTable
-              className="lg:col-span-2"
-              title="Championship Standings"
-              icon={<div className="flex h-10 w-10 items-center justify-center text-red-500"><Trophy className="h-5 w-5" /></div>}
-              columns={standingsColumns}
-              rows={driverSummaries}
-              rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
-              onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
-              emptyMessage="No drivers registered for this season yet."
-            />
+            <div className="lg:col-span-2 space-y-4">
+              {/* Tab Navigation */}
+              <div className="flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-900">
+                <button
+                  onClick={() => setActiveTab('drivers')}
+                  className={clsx(
+                    'flex-1 rounded-md px-3 py-1 transition-colors',
+                    activeTab === 'drivers'
+                      ? 'bg-red-600 text-white'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                  )}
+                >
+                  Drivers Championship
+                </button>
+                <button
+                  onClick={() => setActiveTab('constructors')}
+                  className={clsx(
+                    'flex-1 rounded-md px-3 py-1 transition-colors',
+                    activeTab === 'constructors'
+                      ? 'bg-red-600 text-white'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                  )}
+                >
+                  Constructors Championship
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'drivers' ? (
+                <DashboardTable
+                  title="Championship Standings"
+                  icon={<div className="flex h-10 w-10 items-center justify-center text-red-500"><Trophy className="h-5 w-5" /></div>}
+                  headerActions={
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">AI</span>
+                      <div className="relative inline-block">
+                        <input
+                          type="checkbox"
+                          checked={showAllDrivers}
+                          onChange={(e) => setShowAllDrivers(e.target.checked)}
+                          className="peer sr-only"
+                        />
+                        <div className="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-red-600 dark:bg-slate-700 dark:peer-checked:bg-red-600">
+                          <div className={clsx(
+                            "absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200",
+                            showAllDrivers && "translate-x-5"
+                          )}></div>
+                        </div>
+                      </div>
+                    </label>
+                  }
+                  columns={standingsColumns}
+                  rows={driverSummaries}
+                  rowKey={(row, index) => row.id ?? `${row.name}-${index}`}
+                  onRowClick={onDriverSelect ? (row) => {
+                    // Only allow clicking on league drivers (not AI drivers)
+                    if (!row.isAi && row.id) {
+                      onDriverSelect(row.id);
+                    }
+                  } : undefined}
+                  emptyMessage="No drivers registered for this season yet."
+                  rowsVisible={rowsVisible}
+                  rowStaggerMs={ROW_STAGGER_MS}
+                  rowInitialDelayMs={ROW_INITIAL_DELAY_MS}
+                />
+              ) : (
+                <DashboardTable
+                  title="Championship Standings"
+                  icon={<div className="flex h-10 w-10 items-center justify-center text-red-500"><Trophy className="h-5 w-5" /></div>}
+                  columns={constructorColumns}
+                  rows={constructorSummaries}
+                  rowKey={(row, index) => `${row.team}-${index}`}
+                  emptyMessage="No constructors registered for this season yet."
+                  rowsVisible={rowsVisible}
+                  rowStaggerMs={ROW_STAGGER_MS}
+                  rowInitialDelayMs={ROW_INITIAL_DELAY_MS}
+                />
+              )}
+            </div>
 
             <div className="space-y-6">
-              <PreviousRaceResultsComponent 
-                seasonId={currentSeason?.id || ''} 
-                onRaceSelect={onRaceSelect}
-                onDriverSelect={onDriverSelect}
-              />
+              {previousRaceComponent}
             </div>
           </div>
         </>

@@ -91,34 +91,16 @@ const teams: F123Team[] = [
     ],
   },
   {
-    id: 'rb',
-    name: 'RB',
-    shortName: 'RB',
-    color: '#469BFF',
-    textClass: 'text-sky-500',
-    aliases: [
-      'racing bulls',
-      'visa cash app rb',
-      'visa cash app rb f1 team',
-      'vcarb',
-      'alpha tauri',
-      'alphatauri'
-    ],
-  },
-  {
     id: 'sauber',
-    name: 'Sauber',
-    shortName: 'SAU',
+    name: 'Alfa Romeo',
+    shortName: 'ARO',
     color: '#9B0000',
     textClass: 'text-red-400',
     aliases: [
-      'stake f1 team',
-      'stake f1 team kick sauber',
-      'stake',
-      'kick sauber',
-      'sauber f1',
       'alfa romeo',
-      'alfa romeo racing'
+      'alfa romeo racing',
+      'alfa romeo f1',
+      'sauber'
     ],
   },
   {
@@ -149,8 +131,8 @@ const teams: F123Team[] = [
     id: 'alphatauri',
     name: 'AlphaTauri',
     shortName: 'AT',
-    color: '#0A1E2E',
-    textClass: 'text-slate-400',
+    color: '#469BFF',
+    textClass: 'text-sky-500',
     aliases: [
       'scuderia alphatauri',
       'alpha tauri',

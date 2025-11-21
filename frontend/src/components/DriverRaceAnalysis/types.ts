@@ -25,6 +25,8 @@ export interface LapData {
   pit_stop?: boolean;
   ers_store_energy?: number;
   ers_deployed_this_lap?: number;
+  ers_harvested_this_lap_mguk?: number;
+  ers_harvested_this_lap_mguh?: number;
   ers_deploy_mode?: string;
   fuel_in_tank?: number;
   fuel_remaining_laps?: number;

@@ -24,6 +24,7 @@ export interface DriverSeasonSummary {
   pointsFinishes: number;
   consistency: number;
   position: number | null;
+  isAi?: boolean;
   recentResults: Array<{
     raceId: string;
     trackName: string;
@@ -34,6 +35,16 @@ export interface DriverSeasonSummary {
     fastestLap: boolean;
     resultStatus: number | null;
   }>;
+}
+
+export interface ConstructorSeasonSummary {
+  team: string;
+  points: number;
+  wins: number;
+  podiums: number;
+  fastestLaps: number;
+  polePositions: number;
+  position: number | null;
 }
 
 export interface SeasonEventSummary {
@@ -76,6 +87,8 @@ export interface SeasonAnalysis {
     };
   };
   drivers: DriverSeasonSummary[];
+  standings?: DriverSeasonSummary[];
+  constructors: ConstructorSeasonSummary[];
   events: {
     all: SeasonEventSummary[];
     completed: SeasonEventSummary[];

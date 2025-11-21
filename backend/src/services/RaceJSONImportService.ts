@@ -715,6 +715,8 @@ export class RaceJSONImportService {
           pitStop?: boolean;
           ersStoreEnergy?: number;
           ersDeployedThisLap?: number;
+          ersHarvestedThisLapMguk?: number;
+          ersHarvestedThisLapMguh?: number;
           ersDeployMode?: string;
           fuelInTank?: number;
           fuelRemainingLaps?: number;
@@ -740,8 +742,10 @@ export class RaceJSONImportService {
           // Iterate with index to get lap number (lap-history-data doesn't include lap-number field)
           for (let lapIndex = 0; lapIndex < lapHistoryData.length; lapIndex++) {
             const lap = lapHistoryData[lapIndex];
-            // Lap number is 1-indexed (first lap is lap 1, not lap 0)
-            const lapNumber = lap['lap-number'] || lap.lapNumber || (lapIndex + 1);
+            // Get lap number - check if explicitly set, otherwise use array index + 1 (1-indexed)
+            // But allow lap 0 if explicitly set in JSON
+            const explicitLapNumber = lap['lap-number'] ?? lap.lapNumber;
+            const lapNumber = explicitLapNumber !== undefined ? explicitLapNumber : (lapIndex + 1);
             const lapTimeMs = lap['lap-time-in-ms'] || lap.lapTimeInMs || 0;
             const sector1Ms = lap['sector-1-time-in-ms'] || lap.sector1TimeInMs || 0;
             const sector2Ms = lap['sector-2-time-in-ms'] || lap.sector2TimeInMs || 0;
@@ -751,8 +755,9 @@ export class RaceJSONImportService {
             const sector3TimeMinutes = lap['sector-3-time-minutes'] || lap.sector3TimeMinutes || 0;
             const lapValidBitFlags = lap['lap-valid-bit-flags'] || lap.lapValidBitFlags || 0;
             
-            // Only include valid laps (lap time > 0)
-            if (lapNumber > 0 && lapTimeMs > 0) {
+            // Include lap if it has a valid time, OR if it's explicitly lap 0 (formation/out lap may have no time)
+            const isLapZero = lapNumber === 0;
+            if (lapTimeMs > 0 || isLapZero) {
               // Find matching per-lap-info entry
               let perLapData: any = null;
               if (additionalDriverData.perLapInfo && Array.isArray(additionalDriverData.perLapInfo)) {
@@ -839,6 +844,10 @@ export class RaceJSONImportService {
                                perLapData?.['car-status-data']?.['ersStoreEnergy'],
                 ersDeployedThisLap: perLapData?.['car-status-data']?.['ers-deployed-this-lap'] || 
                                    perLapData?.['car-status-data']?.['ersDeployedThisLap'],
+                ersHarvestedThisLapMguk: perLapData?.['car-status-data']?.['ers-harvested-this-lap-mguk'] || 
+                                        perLapData?.['car-status-data']?.['ersHarvestedThisLapMguk'],
+                ersHarvestedThisLapMguh: perLapData?.['car-status-data']?.['ers-harvested-this-lap-mguh'] || 
+                                        perLapData?.['car-status-data']?.['ersHarvestedThisLapMguh'],
                 ersDeployMode: perLapData?.['car-status-data']?.['ers-deploy-mode'] || 
                               perLapData?.['car-status-data']?.['ersDeployMode'],
                 fuelInTank: perLapData?.['car-status-data']?.['fuel-in-tank'] || 

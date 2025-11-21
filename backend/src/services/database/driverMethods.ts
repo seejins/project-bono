@@ -9,6 +9,25 @@ import {
   MemberData,
 } from './types';
 
+/**
+ * Normalize team name to canonical form
+ * Maps common variations to standard team names (e.g., "Scuderia Ferrari" -> "Ferrari")
+ */
+function normalizeTeamName(teamName: string | null | undefined): string | null {
+  if (!teamName) return null;
+  
+  const normalized = teamName.toLowerCase().trim();
+  
+  // Ferrari variations
+  if (normalized.includes('ferrari') || normalized.includes('scuderia')) {
+    return 'Ferrari';
+  }
+  
+  // Add other team normalizations as needed
+  // For now, return the original team name
+  return teamName;
+}
+
 export const driverMethods = {
   async getDriversBySeason(this: DatabaseService, seasonId: string): Promise<Driver[]> {
     const result = await this.db.query(
@@ -382,30 +401,35 @@ export const driverMethods = {
       wins: number;
       podiums: number;
       position: number;
+      isAi?: boolean;
     }>
   > {
     const result = await this.db.query(
       `
       SELECT 
-        d.id,
-        d.name,
-        d.team,
-        d.number,
+        CASE 
+          WHEN MIN(dsr.user_id::text) IS NOT NULL THEN MIN(dsr.user_id::text)
+          ELSE 'ai_' || MAX(dsr.json_driver_name) || '_' || COALESCE(MAX(dsr.json_team_name), 'unknown')
+        END as id,
+        COALESCE(MAX(d.name), MAX(dsr.json_driver_name)) as name,
+        COALESCE(MAX(d.team), MAX(dsr.json_team_name)) as team,
+        COALESCE(MAX(d.number), MAX(dsr.json_car_number)) as number,
         COALESCE(SUM(dsr.points), 0) AS points,
         COUNT(*) FILTER (WHERE dsr.position = 1) AS wins,
-        COUNT(*) FILTER (WHERE dsr.position <= 3) AS podiums
-      FROM drivers d
-        LEFT JOIN driver_session_results dsr 
-          ON dsr.user_id = d.id
-        LEFT JOIN session_results sr 
-          ON sr.id = dsr.session_result_id
-        LEFT JOIN races r 
-          ON r.id = sr.race_id
-      WHERE d.season_id = $1
+        COUNT(*) FILTER (WHERE dsr.position <= 3) AS podiums,
+        BOOL_OR(dsr.user_id IS NULL) as is_ai
+      FROM driver_session_results dsr
+      JOIN session_results sr ON sr.id = dsr.session_result_id
+      JOIN races r ON r.id = sr.race_id
+      LEFT JOIN drivers d ON dsr.user_id = d.id AND d.season_id = $1
+      WHERE r.season_id = $1
         AND sr.session_type = 10
-        AND r.season_id = $1
-      GROUP BY d.id, d.name, d.team, d.number
-      ORDER BY points DESC, wins DESC, podiums DESC, d.name ASC
+      GROUP BY 
+        CASE 
+          WHEN dsr.user_id IS NOT NULL THEN dsr.user_id::text
+          ELSE dsr.json_driver_name || '|' || COALESCE(dsr.json_team_name, '')
+        END
+      ORDER BY points DESC, wins DESC, podiums DESC, name ASC
       `,
       [seasonId],
     );
@@ -413,12 +437,13 @@ export const driverMethods = {
     return result.rows.map((row: QueryResultRow, index: number) => ({
       id: row.id,
       name: row.name,
-      team: row.team,
+      team: normalizeTeamName(row.team),
       number: row.number,
       points: Number(row.points) || 0,
       wins: Number(row.wins) || 0,
       podiums: Number(row.podiums) || 0,
       position: index + 1,
+      isAi: row.is_ai === true,
     }));
   },
 

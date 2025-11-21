@@ -155,17 +155,76 @@ export const seasonMethods = {
     return null;
   },
 
+  async getConstructorStandings(
+    this: DatabaseService,
+    seasonId: string,
+  ): Promise<
+    Array<{
+      team: string;
+      points: number;
+      wins: number;
+      podiums: number;
+      fastestLaps: number;
+      polePositions: number;
+      position: number;
+    }>
+  > {
+    const result = await this.db.query(
+      `
+      SELECT 
+        CASE 
+          WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
+            OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
+          THEN 'Ferrari'
+          ELSE COALESCE(d.team, dsr.json_team_name)
+        END as team,
+        COALESCE(SUM(dsr.points), 0) AS points,
+        COUNT(*) FILTER (WHERE dsr.position = 1) AS wins,
+        COUNT(*) FILTER (WHERE dsr.position <= 3) AS podiums,
+        COUNT(*) FILTER (WHERE dsr.fastest_lap = true) AS fastest_laps,
+        COUNT(*) FILTER (WHERE dsr.pole_position = true) AS pole_positions
+      FROM driver_session_results dsr
+      JOIN session_results sr ON sr.id = dsr.session_result_id
+      JOIN races r ON r.id = sr.race_id
+      LEFT JOIN drivers d ON dsr.user_id = d.id AND d.season_id = $1
+      WHERE r.season_id = $1
+        AND sr.session_type = 10
+        AND COALESCE(d.team, dsr.json_team_name) IS NOT NULL
+      GROUP BY 
+        CASE 
+          WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
+            OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
+          THEN 'Ferrari'
+          ELSE COALESCE(d.team, dsr.json_team_name)
+        END
+      ORDER BY points DESC, wins DESC, podiums DESC
+      `,
+      [seasonId],
+    );
+
+    return result.rows.map((row: QueryResultRow, index: number) => ({
+      team: row.team,
+      points: Number(row.points) || 0,
+      wins: Number(row.wins) || 0,
+      podiums: Number(row.podiums) || 0,
+      fastestLaps: Number(row.fastest_laps) || 0,
+      polePositions: Number(row.pole_positions) || 0,
+      position: index + 1,
+    }));
+  },
+
   async getSeasonAnalysis(this: DatabaseService, seasonId: string): Promise<any> {
     const season = await this.getSeasonById(seasonId);
     if (!season) {
       return null;
     }
 
-    const [eventsRaw, standings, driverList, previousRace] = await Promise.all([
+    const [eventsRaw, standings, driverList, previousRace, constructorStandings] = await Promise.all([
       this.getEventsBySeason(seasonId),
       this.getSeasonStandings(seasonId),
       this.getDriversBySeason(seasonId),
       this.getPreviousRaceResults(seasonId).catch(() => null),
+      this.getConstructorStandings(seasonId),
     ]);
 
     const events = (eventsRaw ?? []).map((event: any) => {
@@ -348,6 +407,8 @@ export const seasonMethods = {
         highlights,
       },
       drivers: driverSummaries,
+      standings: standings,
+      constructors: constructorStandings,
       events: {
         all: events,
         completed: completedEvents,

@@ -54,6 +54,7 @@ export class DatabaseService extends RepositoryBase {
   public setCurrentSeason!: (seasonId: string) => Promise<void>;
   public getActiveSeason!: () => Promise<Season | null>;
   public getSeasonAnalysis!: (seasonId: string) => Promise<any>;
+  public getConstructorStandings!: (seasonId: string) => Promise<any>;
   public getHistoricInsights!: () => Promise<any>;
   public getSeasonsForHistory!: () => Promise<any[]>;
   public getPreviousRaceResults!: (seasonId: string) => Promise<any>;

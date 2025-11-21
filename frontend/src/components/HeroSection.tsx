@@ -7,6 +7,7 @@ import logger from '../utils/logger';
 import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
 import { STATUS_COLORS } from '../theme/colors';
+import { useSeasonAnalysis } from '../hooks/useSeasonAnalysis';
 
 interface HeroSectionProps {
   onExplore: () => void;
@@ -96,10 +97,11 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
     const { currentSeason } = useSeason();
     const navigate = useNavigate();
-    const [raceLabel, setRaceLabel] = useState('Season Leaders');
+    const { analysis } = useSeasonAnalysis(currentSeason?.id);
+    const [isShowingConstructors, setIsShowingConstructors] = useState(false);
+    const [driverStandings, setDriverStandings] = useState<Array<{ position?: number; name: string; team?: string }>>([]);
     const [seasonTag, setSeasonTag] = useState<string | null>(null);
     const [raceDate, setRaceDate] = useState<string | null>(null);
-    const [podiumEntries, setPodiumEntries] = useState<PodiumEntry[]>([]);
     const [previousRacePodium, setPreviousRacePodium] = useState<PodiumEntry[]>([]);
     const [nextEvent, setNextEvent] = useState<EventSummary | null>(null);
     const [previousEvent, setPreviousEvent] = useState<EventSummary | null>(null);
@@ -109,6 +111,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
     });
     const [isLoading, setIsLoading] = useState(true);
     const [heroContentVisible, setHeroContentVisible] = useState(false);
+    const [podiumContentVisible, setPodiumContentVisible] = useState(false);
     const [cardsVisible, setCardsVisible] = useState(false);
     const [buttonVisible, setButtonVisible] = useState(false);
     const [videoRevealed, setVideoRevealed] = useState(false);
@@ -125,13 +128,49 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
       PODIUM_INITIAL_DELAY_MS + PODIUM_ANIMATION_DURATION_MS + PODIUM_STAGGER_MS * (PODIUM_COUNT - 1);
     const CARDS_DELAY_OFFSET_MS = 200;
     const PODIUM_BUTTON_DELAY_MS = PODIUM_INITIAL_DELAY_MS + PODIUM_STAGGER_MS * PODIUM_COUNT;
+    const ALTERNATE_INTERVAL_MS = 5000; // 5 seconds
+
+    // Alternating interval with animation - triggers fade out, update, fade in
+    useEffect(() => {
+      if (!currentSeason?.id || isLoading) {
+        return;
+      }
+
+      // Wait for initial animation to complete before starting interval
+      const initialDelay = HERO_DELAY_MS + PODIUM_INITIAL_DELAY_MS + PODIUM_ANIMATION_DURATION_MS + PODIUM_STAGGER_MS * PODIUM_COUNT;
+      
+      let intervalId: NodeJS.Timeout | null = null;
+      
+      const startIntervalTimeout = setTimeout(() => {
+        intervalId = setInterval(() => {
+          // Fade out current content
+          setPodiumContentVisible(false);
+          
+          // After fade out completes, update the view and fade in
+          setTimeout(() => {
+            setIsShowingConstructors((prev) => !prev);
+            // Small delay before fading in to ensure smooth transition
+            setTimeout(() => {
+              setPodiumContentVisible(true);
+            }, 50);
+          }, PODIUM_ANIMATION_DURATION_MS);
+        }, ALTERNATE_INTERVAL_MS);
+      }, initialDelay);
+
+      return () => {
+        clearTimeout(startIntervalTimeout);
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      };
+    }, [currentSeason?.id, isLoading]);
 
     useEffect(() => {
       let isCancelled = false;
 
       const fetchHeroData = async () => {
         if (!currentSeason?.id) {
-          setPodiumEntries([]);
+          setDriverStandings([]);
           setPreviousRacePodium([]);
           setNextEvent(null);
           setPreviousEvent(null);
@@ -157,20 +196,10 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           const standings: Array<{ position?: number; name: string; team?: string }> =
             standingsPayload.standings || [];
 
-          const leaders = standings.slice(0, 3).map((driver, index) => {
-            const position = driver.position ?? index + 1;
-            const rawTeamName = driver.team || 'Unknown Team';
-            const teamName = F123DataService.getTeamDisplayName(rawTeamName);
-            return {
-              position,
-              driver: driver.name || `Driver ${position}`,
-              team: teamName,
-              teamColor: F123DataService.getTeamColorHex(rawTeamName),
-            };
-          });
+          if (!isCancelled) {
+            setDriverStandings(standings);
+          }
 
-          setPodiumEntries(leaders);
-          setRaceLabel('Season Leaders');
           setSeasonTag(currentSeason?.name ?? null);
           setRaceDate(null);
 
@@ -261,9 +290,9 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                     if (!position || position > 3) return null;
 
                     const driverName =
-                      driver.json_driver_name ||
                       driver.driver_name ||
                       driver.mapping_driver_name ||
+                      driver.json_driver_name ||
                       'Unknown Driver';
 
                     const rawTeamName =
@@ -297,7 +326,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           if (!isCancelled) {
             logger.error('Hero podium load error:', err);
             setError(err instanceof Error ? err.message : 'Unable to load race podium');
-            setPodiumEntries([]);
+            setDriverStandings([]);
             setPreviousRacePodium([]);
             setNextEvent(null);
             setPreviousEvent(null);
@@ -338,6 +367,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         frame = requestAnimationFrame(() => {
           heroTimeout = window.setTimeout(() => {
             setHeroContentVisible(true);
+            setPodiumContentVisible(true);
             cardsTimeout = window.setTimeout(() => {
               setCardsVisible(true);
             }, Math.max(PODIUM_TOTAL_DURATION_MS - CARDS_DELAY_OFFSET_MS, 0));
@@ -348,6 +378,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         });
       } else {
         setHeroContentVisible(false);
+        setPodiumContentVisible(false);
         setCardsVisible(false);
         setButtonVisible(false);
       }
@@ -451,6 +482,41 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
       };
     }, [nextEvent]);
 
+    // Compute podium entries based on current view - memoized to avoid recalculation
+    const podiumEntries = useMemo(() => {
+      if (isShowingConstructors && analysis?.constructors && analysis.constructors.length > 0) {
+        return analysis.constructors.slice(0, 3).map((constructor, index) => {
+          const position = constructor.position ?? index + 1;
+          const rawTeamName = constructor.team || 'Unknown Team';
+          const teamName = F123DataService.getTeamDisplayName(rawTeamName);
+          return {
+            position,
+            driver: teamName,
+            team: teamName,
+            teamColor: F123DataService.getTeamColorHex(rawTeamName),
+          };
+        });
+      }
+
+      return driverStandings.slice(0, 3).map((driver, index) => {
+        const position = driver.position ?? index + 1;
+        const rawTeamName = driver.team || 'Unknown Team';
+        const teamName = F123DataService.getTeamDisplayName(rawTeamName);
+        return {
+          position,
+          driver: driver.name || `Driver ${position}`,
+          team: teamName,
+          teamColor: F123DataService.getTeamColorHex(rawTeamName),
+        };
+      });
+    }, [isShowingConstructors, analysis?.constructors, driverStandings]);
+
+    // Compute label based on current view - memoized
+    const raceLabel = useMemo(
+      () => (isShowingConstructors ? 'Constructors Leaders' : 'Season Leaders'),
+      [isShowingConstructors]
+    );
+
     const displayPodium = useMemo(() => {
       return [1, 2, 3].map((position) => {
         const match = podiumEntries.find((entry) => entry.position === position);
@@ -503,14 +569,25 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 )}
               >
                 <div>
-                  <h1 className="text-lg font-semibold uppercase tracking-[0.35em] text-white/90 sm:text-xl">
-                    {raceLabel}
-                  </h1>
                   {subtitle && (
-                    <p className="mt-2 text-sm sm:text-base uppercase tracking-[0.4em] text-white/60">
+                    <p className="text-sm sm:text-base uppercase tracking-[0.4em] text-white/60 mb-2">
                       {subtitle}
                     </p>
                   )}
+                  <h1
+                    key={raceLabel}
+                    className={clsx(
+                      'text-lg font-semibold uppercase tracking-[0.35em] text-white/90 sm:text-xl transition-all duration-[1000ms] ease-out',
+                      podiumContentVisible && heroContentVisible
+                        ? 'opacity-100 translate-x-0'
+                        : 'opacity-0 -translate-x-5'
+                    )}
+                    style={{
+                      transitionDelay: podiumContentVisible ? `${PODIUM_INITIAL_DELAY_MS}ms` : '0ms',
+                    }}
+                  >
+                    {raceLabel}
+                  </h1>
                 </div>
 
                 {error && <p className="text-sm text-red-300">{error}</p>}
@@ -518,12 +595,18 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 <div className="space-y-6 md:space-y-8">
                   {displayPodium.map(({ position, driver, teamColor }, index) => (
                     <div
-                      key={position}
+                      key={`${isShowingConstructors ? 'constructors' : 'drivers'}-${position}`}
                       className={clsx(
                         'flex items-center gap-8 transition-all duration-[1000ms] ease-out',
-                        heroContentVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-5'
+                        podiumContentVisible && heroContentVisible
+                          ? 'opacity-100 translate-x-0'
+                          : 'opacity-0 -translate-x-5'
                       )}
-                      style={{ transitionDelay: `${PODIUM_INITIAL_DELAY_MS + index * PODIUM_STAGGER_MS}ms` }}
+                      style={{
+                        transitionDelay: podiumContentVisible
+                          ? `${PODIUM_INITIAL_DELAY_MS + index * PODIUM_STAGGER_MS}ms`
+                          : '0ms',
+                      }}
                     >
                       <span className="inline-flex w-20 justify-center text-sm sm:text-base md:text-lg font-semibold uppercase tracking-[0.45em] text-white/70">
                         {PODIUM_LABEL_MAP[position] ?? `${position}TH`}

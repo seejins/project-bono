@@ -773,7 +773,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
                 reversed: true,
                 allowDecimals: false,
               }}
-              xTickFormatter={(_, index) => trendData[index]?.shortLabel ?? ''}
+              xTickFormatter={(_, index) => `Round ${trendData[index]?.order ?? index + 1}`}
               yTickFormatter={(value) => `P${Number(value).toFixed(0)}`}
               tooltipContent={buildTrendTooltip(chartType)}
               height="100%"

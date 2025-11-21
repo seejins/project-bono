@@ -959,6 +959,8 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 DeltaTooltipContent={DeltaTooltipContent}
                 hexToRgba={hexToRgba}
                 pitReferenceLines={pitReferenceLines}
+                lapData={lapData}
+                comparisonDriver={comparisonDriver}
               />
           )}
           {activeTab === 'strategy' && (
@@ -972,6 +974,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 StintLapTooltip={StintLapTooltip}
                 CompoundBarTooltip={CompoundBarTooltip}
                 pitReferenceLines={pitReferenceLines}
+                lapData={lapData}
               />
             )}
           </motion.div>

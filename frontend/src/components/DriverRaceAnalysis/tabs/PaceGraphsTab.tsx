@@ -5,6 +5,9 @@ import { BaseLineChart } from '../../charts/BaseLineChart';
 import { LapData } from '../types';
 import { buildPitReferenceLines } from '../utils';
 
+// ERS maximum load capacity in Joules (F1 23 spec)
+const ERS_MAX_LOAD = 4000000.0;
+
 interface PaceGraphsTabProps {
   driverName: string;
   lapData: LapData[];
@@ -164,6 +167,30 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
 
   const pitReferenceLines = useMemo(() => buildPitReferenceLines(pitLaps), [pitLaps]);
 
+  const ersUsageData = useMemo(() => {
+    if (!lapData || lapData.length === 0) {
+      return [];
+    }
+
+    return lapData
+      .filter((lap) => lap.lap_number != null)
+      .map((lap) => {
+        const remaining = lap.ers_store_energy != null ? Number(lap.ers_store_energy) : null;
+        const deployed = lap.ers_deployed_this_lap != null ? Number(lap.ers_deployed_this_lap) : null;
+        const harvestedMguk = lap.ers_harvested_this_lap_mguk != null ? Number(lap.ers_harvested_this_lap_mguk) : 0;
+        const harvestedMguh = lap.ers_harvested_this_lap_mguh != null ? Number(lap.ers_harvested_this_lap_mguh) : 0;
+        const harvested = harvestedMguk + harvestedMguh;
+
+        return {
+          lap: lap.lap_number,
+          remaining: remaining !== null && Number.isFinite(remaining) ? remaining : null,
+          deployed: deployed !== null && Number.isFinite(deployed) ? deployed : null,
+          harvested: harvested > 0 ? harvested : null,
+        };
+      })
+      .sort((a, b) => a.lap - b.lap);
+  }, [lapData]);
+
   const renderPaceTooltip = useCallback(
     ({ active, payload, label }: TooltipProps<number, string>) => {
       if (!active || !payload || payload.length === 0) {
@@ -226,25 +253,111 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
     [driverMetadata, hoveredSeries, primaryDriverKey]
   );
 
+  const renderERSTooltip = useCallback(
+    ({ active, payload, label }: TooltipProps<number, string>) => {
+      if (!active || !payload || payload.length === 0) {
+        return null;
+      }
+
+      const entries = payload.filter((item) => item?.value != null);
+      if (entries.length === 0) {
+        return null;
+      }
+
+      return (
+        <div className="rounded-lg border border-white/20 bg-white/90 px-3 py-2 text-xs text-slate-800 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/80 dark:text-slate-200">
+          <div className="font-semibold text-slate-900 dark:text-white">Lap {label}</div>
+          <div className="mt-1 space-y-1">
+            {entries.map((entry) => {
+              const value = typeof entry.value === 'number' ? entry.value : 0;
+              const percentage = (value / ERS_MAX_LOAD) * 100;
+              return (
+                <div key={entry.dataKey} className="flex items-center justify-between gap-3">
+                  <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{percentage.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    },
+    []
+  );
+
   return (
     <div className="space-y-6">
-      <ChartCard
-        title="Pace by Lap"
-        description={`${driverName}'s lap and sector pace across the session.`}
-      >
-        <div className="h-80">
-          <BaseLineChart
-            data={paceSeries}
-            lines={paceLines}
-            tooltipContent={renderPaceTooltip}
-            yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
-            referenceLines={pitReferenceLines}
-            legend
-            enableSeriesHighlight
-            dimmedOpacity={1}
-          />
-        </div>
-      </ChartCard>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <ChartCard
+          title="Pace by Lap"
+          description={`${driverName}'s lap and sector pace across the session.`}
+        >
+          <div className="h-80">
+            <BaseLineChart
+              data={paceSeries}
+              lines={paceLines}
+              tooltipContent={renderPaceTooltip}
+              yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
+              referenceLines={pitReferenceLines}
+              legend
+              enableSeriesHighlight
+              dimmedOpacity={1}
+            />
+          </div>
+        </ChartCard>
+
+        <ChartCard
+          title="ERS Usage"
+          description="Energy Recovery System usage per lap — remaining energy, deployed energy, and harvested energy."
+        >
+          <div className="h-80">
+            {ersUsageData.length > 0 ? (
+              <BaseLineChart
+                data={ersUsageData}
+                lines={[
+                  {
+                    dataKey: 'remaining',
+                    name: 'Remaining',
+                    stroke: '#3b82f6',
+                    dot: false,
+                  },
+                  {
+                    dataKey: 'deployed',
+                    name: 'Deployed',
+                    stroke: '#ef4444',
+                    dot: false,
+                  },
+                  {
+                    dataKey: 'harvested',
+                    name: 'Harvested',
+                    stroke: '#10b981',
+                    dot: false,
+                  },
+                ]}
+                yAxisProps={{
+                  domain: [0, ERS_MAX_LOAD],
+                }}
+                yTickFormatter={(value) => {
+                  if (typeof value === 'number') {
+                    const percentage = (value / ERS_MAX_LOAD) * 100;
+                    return `${Math.round(percentage)}%`;
+                  }
+                  return '';
+                }}
+                tooltipContent={renderERSTooltip}
+                legend
+                referenceLines={pitReferenceLines}
+                enableSeriesHighlight
+                dimmedOpacity={1}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                ERS data is not available for this session.
+              </div>
+            )}
+          </div>
+        </ChartCard>
+      </div>
 
       <ChartCard
         title="Position by Lap"

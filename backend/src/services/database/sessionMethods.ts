@@ -432,8 +432,8 @@ export const sessionMethods = {
 
     for (const lap of lapData) {
       const rowValues: string[] = [];
-      // 30 parameters per row
-      for (let i = 0; i < 30; i++) {
+      // 32 parameters per row (added 2 for ERS harvested)
+      for (let i = 0; i < 32; i++) {
         rowValues.push(`$${paramIndex++}`);
       }
       values.push(`(${rowValues.join(', ')})`);
@@ -462,6 +462,8 @@ export const sessionMethods = {
           lap.pitStop || false,
           lap.ersStoreEnergy || null,
           lap.ersDeployedThisLap || null,
+          lap.ersHarvestedThisLapMguk || null,
+          lap.ersHarvestedThisLapMguh || null,
           lap.ersDeployMode || null,
           lap.fuelInTank || null,
           lap.fuelRemainingLaps || null,
@@ -480,7 +482,7 @@ export const sessionMethods = {
         sector1_time_minutes, sector2_time_minutes, sector3_time_minutes,
         lap_valid_bit_flags, tire_compound, track_position, tire_age_laps,
         top_speed_kmph, max_safety_car_status, vehicle_fia_flags, pit_stop,
-        ers_store_energy, ers_deployed_this_lap, ers_deploy_mode,
+        ers_store_energy, ers_deployed_this_lap, ers_harvested_this_lap_mguk, ers_harvested_this_lap_mguh, ers_deploy_mode,
         fuel_in_tank, fuel_remaining_laps, gap_to_leader_ms, gap_to_position_ahead_ms,
         car_damage_data, tyre_sets_data, created_at
       ) VALUES ${values.join(', ')}
@@ -566,6 +568,8 @@ export const sessionMethods = {
                  'pit_stop', lt.pit_stop,
                  'ers_store_energy', lt.ers_store_energy,
                  'ers_deployed_this_lap', lt.ers_deployed_this_lap,
+                 'ers_harvested_this_lap_mguk', lt.ers_harvested_this_lap_mguk,
+                 'ers_harvested_this_lap_mguh', lt.ers_harvested_this_lap_mguh,
                  'ers_deploy_mode', lt.ers_deploy_mode,
                  'fuel_in_tank', lt.fuel_in_tank,
                  'fuel_remaining_laps', lt.fuel_remaining_laps,

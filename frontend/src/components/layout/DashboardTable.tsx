@@ -21,6 +21,9 @@ interface DashboardTableProps<TRow> {
   emptyMessage?: ReactNode;
   className?: string;
   headerActions?: ReactNode;
+  rowsVisible?: boolean;
+  rowStaggerMs?: number;
+  rowInitialDelayMs?: number;
 }
 
 export function DashboardTable<TRow>({
@@ -34,6 +37,9 @@ export function DashboardTable<TRow>({
   emptyMessage = 'No results available.',
   className,
   headerActions,
+  rowsVisible = true,
+  rowStaggerMs = 0,
+  rowInitialDelayMs = 0,
 }: DashboardTableProps<TRow>) {
   const hasHeader = title || subtitle || icon || headerActions;
 
@@ -96,9 +102,17 @@ export function DashboardTable<TRow>({
                   <tr
                     key={key}
                     className={clsx(
-                      'transition hover:bg-slate-50 dark:hover:bg-slate-900',
-                      onRowClick && 'cursor-pointer'
+                      rowsVisible ? 'opacity-100' : 'opacity-0',
+                      rowsVisible && 'transition-opacity duration-500 linear',
+                      'hover:bg-slate-50 dark:hover:bg-slate-900',
+                      onRowClick && 'cursor-pointer',
                     )}
+                    style={{
+                      transitionProperty: rowsVisible ? 'opacity' : undefined,
+                      transitionDelay: rowsVisible && rowStaggerMs && rowInitialDelayMs
+                        ? `${rowInitialDelayMs + index * rowStaggerMs}ms`
+                        : undefined
+                    }}
                     onClick={() => onRowClick?.(row)}
                   >
                     {columns.map((column) => {
