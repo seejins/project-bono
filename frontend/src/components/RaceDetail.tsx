@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import logger from '../utils/logger';
+import { formatFullDate } from '../utils/dateUtils';
 import { useSearchParams } from 'react-router-dom';
 import { getApiUrl } from '../utils/api';
 import clsx from 'clsx';
@@ -1542,7 +1543,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
   const heroTitle = raceData?.trackName ?? 'Race Overview';
   const heroSubtitle = 'Race Results';
   const heroDescription = raceData?.raceDate
-    ? `${new Date(raceData.raceDate).toLocaleDateString()} • ${distanceLabel} • ${lapsLabel}`
+    ? `${formatFullDate(raceData.raceDate)} • ${distanceLabel} • ${lapsLabel}`
     : `${distanceLabel} • ${lapsLabel}`;
   const heroBase = {
     imageSrc: raceHeroImage,

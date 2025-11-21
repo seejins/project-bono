@@ -4,6 +4,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 import logger from '../utils/logger';
 import { useSeason } from '../contexts/SeasonContext';
 import { SeasonDetail } from './SeasonDetail';
+import { formatFullDate } from '../utils/dateUtils';
 
 type SeasonStatus = 'draft' | 'active' | 'completed';
 
@@ -1040,7 +1041,7 @@ export const SeasonsManagement: React.FC<SeasonsManagementProps> = () => {
                     <p className="text-gray-900 dark:text-white font-medium">{season.name}</p>
                     <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                       <span>Year: {season.year}</span>
-                      <span>Started: {new Date(season.startDate).toLocaleDateString()}</span>
+                      <span>Started: {formatFullDate(season.startDate)}</span>
                       <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(season.status)}`}>
                         {getStatusText(season.status)}
                       </span>

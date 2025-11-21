@@ -5,6 +5,7 @@ import { useSeason } from '../contexts/SeasonContext';
 import logger from '../utils/logger';
 import { SeasonDetail } from './SeasonDetail';
 import { F123_TEAMS } from '../data/f123Teams';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface Season {
   id: string;
@@ -693,7 +694,7 @@ const SeasonsList: React.FC<SeasonsListProps> = ({ seasons, onSeasonSelect, onCr
                     </p>
                     {season.start_date && season.end_date && (
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(season.start_date).toLocaleDateString()} - {new Date(season.end_date).toLocaleDateString()}
+                        {formatFullDate(season.start_date)} - {formatFullDate(season.end_date)}
                       </p>
                     )}
                   </div>
@@ -771,7 +772,7 @@ const SeasonManagement: React.FC<SeasonManagementProps> = ({
             </p>
             {season.start_date && season.end_date && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                {new Date(season.start_date).toLocaleDateString()} - {new Date(season.end_date).toLocaleDateString()}
+                {formatFullDate(season.start_date)} - {formatFullDate(season.end_date)}
               </p>
             )}
           </div>
@@ -872,7 +873,7 @@ const SeasonManagement: React.FC<SeasonManagementProps> = ({
                       <div>
                         <p className="text-gray-900 dark:text-white font-medium text-lg">{event.track.name}</p>
                         <p className="text-gray-500 dark:text-gray-400">
-                          {event.date ? new Date(event.date).toLocaleDateString() : 'TBD'} • {formatSessionTypes(event.sessionTypes)}
+                          {event.date ? formatFullDate(event.date) : 'TBD'} • {formatSessionTypes(event.sessionTypes)}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{event.track.country}</p>
                       </div>

@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { getApiUrl } from '../utils/api';
 import { PreviousRaceResults } from '../types';
 import { F123DataService } from '../services/F123DataService';
+import { formatFullDate } from '../utils/dateUtils';
 import './PreviousRace/animations.css';
 
 interface PreviousRaceResultsProps {
@@ -285,13 +286,9 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
     <CardShell>
       <div className="mb-5 space-y-1.5">
         <div className="px-2">
-          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            {new Date(previousRace.date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </div>
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+             {formatFullDate(previousRace.date)}
+            </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             {eventTitle}
           </h3>

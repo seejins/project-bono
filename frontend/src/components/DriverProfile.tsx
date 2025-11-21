@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Trophy, Award, Clock, TrendingUp, Target, Users, Calendar } from 'lucide-react';
 import logger from '../utils/logger';
 import { getApiUrl } from '../utils/api';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface Driver {
   id: string;
@@ -342,7 +343,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
                     onClick={() => onRaceSelect(result.id)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{result.trackName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-400">{new Date(result.date).toLocaleDateString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-400">{formatFullDate(result.date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-sm font-semibold ${getPositionColor(result.position)}`}>
                         P{result.position}
@@ -379,7 +380,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
                     </div>
                   </div>
                   <div className="text-xs text-gray-500">
-                    Earned: {new Date(achievement.dateEarned).toLocaleDateString()} at {achievement.raceName}
+                    Earned: {formatFullDate(achievement.dateEarned)} at {achievement.raceName}
                   </div>
                 </div>
               ))}

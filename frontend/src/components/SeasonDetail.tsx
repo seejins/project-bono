@@ -13,6 +13,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
 import { F123_TEAMS } from '../data/f123Teams';
 import logger from '../utils/logger';
 import { useSeason } from '../contexts/SeasonContext';
+import { parseLocalDate, getDateTimestamp } from '../utils/dateUtils';
 
 const TEAM_OPTIONS = F123_TEAMS.map((team) => team.name);
 
@@ -141,8 +142,8 @@ const editTeamOptions = useMemo(() => {
     if (!value) {
       return 'TBD';
     }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
+    const parsed = parseLocalDate(value);
+    if (!parsed) {
       return 'TBD';
     }
     return parsed.toLocaleDateString('en-US', {
@@ -239,8 +240,8 @@ const editTeamOptions = useMemo(() => {
             const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
             const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
             if (aOrder !== bOrder) return aOrder - bOrder;
-            const aDate = a.race_date ? Date.parse(a.race_date) : Number.POSITIVE_INFINITY;
-            const bDate = b.race_date ? Date.parse(b.race_date) : Number.POSITIVE_INFINITY;
+            const aDate = getDateTimestamp(a.race_date);
+            const bDate = getDateTimestamp(b.race_date);
             if (aDate !== bDate) return aDate - bDate;
             return a.created_at.localeCompare(b.created_at);
           });

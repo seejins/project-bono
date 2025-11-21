@@ -3,6 +3,7 @@ import { Trophy, Zap, TrendingUp, Calendar, Flag, Loader2 } from 'lucide-react';
 import { MemberCareerProfile, MemberCareerStats, RaceHistoryEntry } from '../types';
 import { apiGet, getApiUrl } from '../utils/api';
 import logger from '../utils/logger';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface DriverCareerProfileProps {
   memberId: string; // Keep for backward compatibility, but treat as driverId
@@ -325,7 +326,7 @@ export const DriverCareerProfileComponent: React.FC<DriverCareerProfileProps> = 
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-500 dark:text-gray-400">{race.seasonYear}</div>
-                          <div className="text-xs text-gray-400 dark:text-gray-500">{new Date(race.date).toLocaleDateString()}</div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500">{formatFullDate(race.date)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`text-sm font-medium ${getPositionColor(race.position)}`}>

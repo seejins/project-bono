@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { apiGet, apiPostFormData } from '../utils/api';
 import logger from '../utils/logger';
 import { Grid3X3, List, Calendar, MapPin, Flag } from 'lucide-react';
-import { formatFullDate } from '../utils/dateUtils';
+import { formatFullDate, getDateTimestamp } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 import { DashboardPage } from './layout/DashboardPage';
 import { useAdmin } from '../contexts/AdminContext';
@@ -155,8 +155,8 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
             const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
             const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;
             if (aOrder !== bOrder) return aOrder - bOrder;
-            const aDate = a.race_date ? Date.parse(a.race_date) : Number.POSITIVE_INFINITY;
-            const bDate = b.race_date ? Date.parse(b.race_date) : Number.POSITIVE_INFINITY;
+            const aDate = getDateTimestamp(a.race_date);
+            const bDate = getDateTimestamp(b.race_date);
             if (aDate !== bDate) return aDate - bDate;
             return a.created_at.localeCompare(b.created_at);
           });
@@ -192,8 +192,8 @@ export const RacesDashboard: React.FC<RacesDashboardProps> = ({ seasonId, onRace
     const completedSorted = finished
       .slice()
       .sort((a, b) => {
-        const aDate = a.race_date ? Date.parse(a.race_date) : Number.NEGATIVE_INFINITY;
-        const bDate = b.race_date ? Date.parse(b.race_date) : Number.NEGATIVE_INFINITY;
+        const aDate = getDateTimestamp(a.race_date);
+        const bDate = getDateTimestamp(b.race_date);
         if (aDate !== bDate) return bDate - aDate;
         const aOrder = a.order_index ?? Number.MAX_SAFE_INTEGER;
         const bOrder = b.order_index ?? Number.MAX_SAFE_INTEGER;

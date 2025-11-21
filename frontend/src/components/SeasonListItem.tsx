@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Calendar, Users, MapPin, X } from 'lucide-react';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface Season {
   id: string;
@@ -32,16 +33,6 @@ export const SeasonListItem: React.FC<SeasonListItemProps> = ({
   onDelete, 
   onSelect 
 }) => {
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'Not set';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid date';
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
@@ -59,8 +50,8 @@ export const SeasonListItem: React.FC<SeasonListItemProps> = ({
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{season.name}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {season.startDate && season.endDate && formatDate(season.startDate) !== 'Not set' && formatDate(season.endDate) !== 'Not set'
-                ? `${formatDate(season.startDate)} - ${formatDate(season.endDate)}`
+              {season.startDate && season.endDate && formatFullDate(season.startDate) && formatFullDate(season.endDate)
+                ? `${formatFullDate(season.startDate)} - ${formatFullDate(season.endDate)}`
                 : `Season ${season.year}`
               }
             </p>

@@ -24,7 +24,7 @@ import { BaseLineChart, type LineConfig } from './charts/BaseLineChart';
 import { BRAND_COLORS } from '../theme/colors';
 import { getResultStatus } from '../utils/f123DataMapping';
 import { apiGet } from '../utils/api';
-import { formatDate, formatFullDate } from '../utils/dateUtils';
+import { formatDate, formatFullDate, getDateTimestamp } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
 
 interface DriverSeasonStatsProps {
@@ -380,8 +380,8 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
       return [];
     }
     return [...analysis.events.completed].sort((a, b) => {
-      const dateA = a?.raceDate ? new Date(a.raceDate).getTime() : Number.POSITIVE_INFINITY;
-      const dateB = b?.raceDate ? new Date(b.raceDate).getTime() : Number.POSITIVE_INFINITY;
+      const dateA = getDateTimestamp(a?.raceDate);
+      const dateB = getDateTimestamp(b?.raceDate);
       return dateA - dateB;
     });
   }, [analysis]);

@@ -8,7 +8,7 @@
  * - For plain "YYYY-MM-DD" strings, construct Date(year, month-1, day) in local time.
  * - For other formats (full ISO, etc.), fall back to new Date(value).
  */
-const parseLocalDate = (value: string): Date | null => {
+export const parseLocalDate = (value: string): Date | null => {
   // Plain date string from backend / <input type="date">
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [yearStr, monthStr, dayStr] = value.split('-');
@@ -23,6 +23,17 @@ const parseLocalDate = (value: string): Date | null => {
   // Fallback for other formats
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * Get timestamp from date string for sorting/comparisons.
+ * Returns Number.POSITIVE_INFINITY if date is invalid/null (for sorting purposes).
+ */
+export const getDateTimestamp = (value: string | null | undefined): number => {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const parsed = parseLocalDate(value);
+  if (!parsed) return Number.POSITIVE_INFINITY;
+  return parsed.getTime();
 };
 
 /**

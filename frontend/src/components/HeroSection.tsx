@@ -8,6 +8,7 @@ import { useSeason } from '../contexts/SeasonContext';
 import { F123DataService } from '../services/F123DataService';
 import { STATUS_COLORS } from '../theme/colors';
 import { useSeasonAnalysis } from '../hooks/useSeasonAnalysis';
+import { parseLocalDate, getDateTimestamp } from '../utils/dateUtils';
 
 interface HeroSectionProps {
   onExplore: () => void;
@@ -220,18 +221,16 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
             return entry.index;
           };
           const getTimestamp = (value?: string | null) => {
-            if (!value) return Number.POSITIVE_INFINITY;
-            const parsed = Date.parse(value);
-            return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+            return getDateTimestamp(value);
           };
           const getCompletedTimestamp = (event: EventSummary) => {
             const candidates = [event.completed_at, event.race_date, event.updated_at];
             let best = Number.NEGATIVE_INFINITY;
             for (const candidate of candidates) {
               if (!candidate) continue;
-              const parsed = Date.parse(candidate);
-              if (!Number.isNaN(parsed)) {
-                best = Math.max(best, parsed);
+              const parsed = parseLocalDate(candidate);
+              if (parsed) {
+                best = Math.max(best, parsed.getTime());
               }
             }
             return best;
@@ -252,8 +251,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
           const nextScheduledEvent =
             upcomingEvents.find((event) => {
               if (!event.race_date) return false;
-              const parsed = Date.parse(event.race_date);
-              return !Number.isNaN(parsed) && parsed >= nowTimestamp;
+              const parsed = parseLocalDate(event.race_date);
+              return parsed && parsed.getTime() >= nowTimestamp;
             }) ?? upcomingEvents[0] ?? null;
 
           const completedEvents = indexedEvents
@@ -401,8 +400,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
 
     const formattedRaceDate = useMemo(() => {
       if (!raceDate) return null;
-      const parsed = new Date(raceDate);
-      if (Number.isNaN(parsed.getTime())) return null;
+      const parsed = parseLocalDate(raceDate);
+      if (!parsed) return null;
 
       return parsed.toLocaleDateString('en-US', {
         month: 'long',
@@ -423,8 +422,8 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
         return 'Date TBD';
       }
 
-      const parsed = new Date(nextEvent.race_date);
-      if (Number.isNaN(parsed.getTime())) {
+      const parsed = parseLocalDate(nextEvent.race_date);
+      if (!parsed) {
         return 'Date TBD';
       }
 

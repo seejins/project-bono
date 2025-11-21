@@ -16,6 +16,7 @@ import {
   type SeasonAnalysisHighlight,
   type SeasonEventSummary,
 } from '../hooks/useSeasonAnalysis';
+import { parseLocalDate } from '../utils/dateUtils';
 // @ts-expect-error - vite-imagetools query parameters aren't recognized by TypeScript
 import seasonHeroImage from '../assets/images/94mliza3aat71.jpg?w=1920&format=webp&q=85';
 
@@ -37,8 +38,8 @@ const formatEventMeta = (event: SeasonEventSummary | null) => {
     return 'Awaiting confirmation';
   }
 
-  const parsed = new Date(event.raceDate);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseLocalDate(event.raceDate);
+  if (!parsed) {
     return 'Awaiting confirmation';
   }
 

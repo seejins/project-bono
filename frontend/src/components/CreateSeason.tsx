@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, X, Calendar, Save } from 'lucide-react';
 import { apiGet } from '../utils/api';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface SeasonEvent {
   id: string;
@@ -300,11 +301,7 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
                       <div className="flex-1">
                         <h3 className="font-medium text-gray-900 dark:text-white">{event.trackName}</h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(event.date).toLocaleDateString('en-US', { 
-                            year: 'numeric', 
-                            month: 'short', 
-                            day: 'numeric' 
-                          })} at {event.time}
+                          {formatFullDate(event.date)} at {event.time}
                         </p>
                         <div className="flex items-center space-x-2 mt-1">
                           {event.includePractice && (

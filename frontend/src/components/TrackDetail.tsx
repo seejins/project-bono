@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Trophy, Clock, Calendar, BarChart, Award } from 'lucide-react';
 import logger from '../utils/logger';
 import { getApiUrl } from '../utils/api';
+import { formatFullDate } from '../utils/dateUtils';
 
 interface TrackDetailProps {
   trackId: string;
@@ -217,7 +218,7 @@ export const TrackDetail: React.FC<TrackDetailProps> = ({ trackId, onBack }) => 
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {track.races.map((race) => (
                 <tr key={race.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white">{new Date(race.date).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white">{formatFullDate(race.date)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center space-x-2">
                       <Trophy className="w-4 h-4 text-yellow-500" />

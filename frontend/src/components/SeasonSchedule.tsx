@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatDate, formatTime } from '../utils/dateUtils';
+import { formatDate, formatTime, parseLocalDate } from '../utils/dateUtils';
 import { Calendar, Clock, MapPin, Flag, ChevronLeft, ChevronRight, Plus, Edit, Trash2 } from 'lucide-react';
 
 interface Race {
@@ -87,7 +87,8 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
 
   const getRacesForMonth = (month: number, year: number) => {
     return season.races.filter(race => {
-      const raceDate = new Date(race.date);
+      const raceDate = parseLocalDate(race.date);
+      if (!raceDate) return false;
       return raceDate.getMonth() === month && raceDate.getFullYear() === year;
     });
   };
@@ -124,9 +125,11 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
     
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayRaces = racesForMonth.filter(race => 
-        new Date(race.date).getDate() === day
-      );
+      const dayRaces = racesForMonth.filter(race => {
+        const raceDate = parseLocalDate(race.date);
+        if (!raceDate) return false;
+        return raceDate.getDate() === day;
+      });
       
       days.push(
         <div key={day} className="h-24 border border-gray-200 dark:border-gray-700 p-1">
@@ -190,7 +193,7 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
 
   const renderListView = () => {
     const sortedRaces = [...season.races].sort((a, b) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
+      (parseLocalDate(a.date)?.getTime() ?? 0) - (parseLocalDate(b.date)?.getTime() ?? 0)
     );
 
     return (
