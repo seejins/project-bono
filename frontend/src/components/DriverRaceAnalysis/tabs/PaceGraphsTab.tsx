@@ -4,9 +4,7 @@ import { ChartCard } from '../../charts/ChartCard';
 import { BaseLineChart } from '../../charts/BaseLineChart';
 import { LapData } from '../types';
 import { buildPitReferenceLines } from '../utils';
-
-// ERS maximum load capacity in Joules (F1 23 spec)
-const ERS_MAX_LOAD = 4000000.0;
+import { ERS_MAX_LOAD } from '../../../services/analytics';
 
 interface PaceGraphsTabProps {
   driverName: string;
@@ -208,7 +206,13 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
           <div className="mt-1 space-y-1">
             {entries.map((entry) => (
               <div key={entry.dataKey} className="flex items-center justify-between gap-3">
-                <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                <span className="flex items-center gap-2">
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: entry.color as string }}
+                  />
+                  <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                </span>
                 <span className="font-semibold text-slate-900 dark:text-white">
                   {formatSecondsValue(typeof entry.value === 'number' ? entry.value : null)}
                 </span>
@@ -273,7 +277,13 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
               const percentage = (value / ERS_MAX_LOAD) * 100;
               return (
                 <div key={entry.dataKey} className="flex items-center justify-between gap-3">
-                  <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                  <span className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: entry.color as string }}
+                    />
+                    <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                  </span>
                   <span className="font-semibold text-slate-900 dark:text-white">{percentage.toFixed(1)}%</span>
                 </div>
               );
