@@ -4,6 +4,9 @@ import { calculatePaceMetrics, LapDataWithPace } from './paceAnalytics';
 import { calculateERSMetrics, LapDataWithERS } from './ersAnalytics';
 import { calculateStintMetrics, LapDataWithStint, StintSegment } from './stintAnalytics';
 
+// Re-export RaceAnalytics for convenience
+export type { RaceAnalytics } from './types';
+
 export interface CompleteLapData extends LapDataWithWear, LapDataWithPace, LapDataWithERS, LapDataWithStint {
   gap_to_leader_ms?: number | null;
   pit_stop?: boolean | null;
@@ -21,6 +24,7 @@ export interface RaceAnalyticsParams {
   };
   sessionDrivers?: Array<{
     fastestLap?: boolean | any;
+    fastest_lap?: boolean | any; // Support snake_case for backward compatibility
     fastestLapTime?: number | null;
     raceBestLapTime?: number | null;
     best_lap_time_ms?: number | null;
