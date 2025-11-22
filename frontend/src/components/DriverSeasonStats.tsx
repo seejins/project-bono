@@ -26,6 +26,7 @@ import { getResultStatus } from '../utils/f123DataMapping';
 import { apiGet } from '../utils/api';
 import { formatDate, formatFullDate } from '../utils/dateUtils';
 import { DashboardTable, type DashboardTableColumn } from './layout/DashboardTable';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface DriverSeasonStatsProps {
   driverId: string;
@@ -80,8 +81,8 @@ interface RaceRow {
 }
 
 const HighlightBadge: React.FC<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/80 px-3 py-1 text-xs font-semibold text-slate-100">
-    <Star className="h-3 w-3 text-amber-400" />
+  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-900/80 px-3 py-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
+    <Star className="h-3 w-3 text-amber-500 dark:text-amber-400" />
     {label}
   </span>
 );
@@ -419,26 +420,33 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   }, [comparisonHistory]);
 
   const raceRows = useMemo<RaceRow[]>(() => {
-    return completedEvents.map((event) => {
-      const driverResult = driverHistoryMap.get(event.id ?? '') ?? null;
-      const raceDate = driverResult?.raceDate ?? event.raceDate ?? null;
-      const sessionTypes = buildSessionTypeList(event.sessionTypes);
+    // Only show races where the driver actually participated
+    // Filter completedEvents to only include races where driver has a result
+    return completedEvents
+      .filter((event) => {
+        // Only include events where driver has a result in driverHistoryMap
+        return driverHistoryMap.has(event.id ?? '');
+      })
+      .map((event) => {
+        const driverResult = driverHistoryMap.get(event.id ?? '') ?? null;
+        const raceDate = driverResult?.raceDate ?? event.raceDate ?? null;
+        const sessionTypes = buildSessionTypeList(event.sessionTypes);
 
-      return {
-        raceId: event.id ?? driverResult?.raceId ?? '',
-        eventName: event.eventName ?? event.shortEventName ?? driverResult?.trackName ?? event.trackName ?? 'Race',
-        trackName: event.track?.name ?? event.trackName ?? driverResult?.trackName ?? 'Track',
-        date: raceDate,
-        points: driverResult?.points ?? null,
-        position: driverResult?.position ?? null,
-        gridPosition: driverResult?.gridPosition ?? null,
-        fastestLap: driverResult?.fastestLap ?? false,
-        polePosition: driverResult?.polePosition ?? false,
-        resultStatus: driverResult?.resultStatus ?? null,
-        raceStatus: driverResult?.raceStatus ?? event.status ?? null,
-        sessionTypes,
-      };
-    });
+        return {
+          raceId: event.id ?? driverResult?.raceId ?? '',
+          eventName: event.eventName ?? event.shortEventName ?? driverResult?.trackName ?? event.trackName ?? 'Race',
+          trackName: event.track?.name ?? event.trackName ?? driverResult?.trackName ?? 'Track',
+          date: raceDate,
+          points: driverResult?.points ?? null,
+          position: driverResult?.position ?? null,
+          gridPosition: driverResult?.gridPosition ?? null,
+          fastestLap: driverResult?.fastestLap ?? false,
+          polePosition: driverResult?.polePosition ?? false,
+          resultStatus: driverResult?.resultStatus ?? null,
+          raceStatus: driverResult?.raceStatus ?? event.status ?? null,
+          sessionTypes,
+        };
+      });
   }, [completedEvents, driverHistoryMap]);
 
   const raceTableColumns = useMemo<DashboardTableColumn<RaceRow>[]>(() => [
@@ -525,7 +533,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
             row.sessionTypes.map((session) => (
               <span
                 key={`${row.raceId}-${session}`}
-                className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300"
+                className="rounded-full bg-slate-200 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300"
               >
                 {session}
               </span>
@@ -649,9 +657,9 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
             : datum.comparisonQualifyingPosition;
 
         return (
-          <div className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 shadow-lg">
-            <div className="font-semibold text-slate-100">{datum.label}</div>
-            {datum.date && <div className="text-slate-400">{formatFullDate(datum.date)}</div>}
+          <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 shadow-lg">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">{datum.label}</div>
+            {datum.date && <div className="text-slate-600 dark:text-slate-400">{formatFullDate(datum.date)}</div>}
             <div className="mt-2 space-y-1">
               <div>
                 {(driverSummary?.name ?? 'Driver')}: {primary != null ? `P${primary}` : '—'}
@@ -683,6 +691,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   const comparisonQualLineColor = comparisonTeamColorHex || BRAND_COLORS.accent;
 
   const isLoading = loading || historyLoading;
+  const { isDark } = useTheme();
 
   const latestRaceId = seasonRaceHistory.length > 0 ? seasonRaceHistory[0].raceId : null;
   const raceTableRows = historyLoading || historyError ? [] : raceRows;
@@ -745,18 +754,18 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
     const average = chartType === 'race' ? averageRacePosition : averageQualifyingPosition;
 
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-6">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-6 shadow-md">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-100">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {chartType === 'race' ? 'Race Finish Trend' : 'Qualifying Trend'}
             </h3>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-600 dark:text-slate-500">
               {trendData.length > 0 ? `${trendData.length} events` : 'Awaiting data'}
             </p>
           </div>
           {average !== null && (
-            <div className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
+            <div className="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
               Avg: P{average.toFixed(1)}
             </div>
           )}
@@ -783,12 +792,12 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
                   ? [
                       {
                         y: average,
-                        stroke: 'white',
+                        stroke: isDark ? '#ffffff' : '#475569',
                         strokeDasharray: '4 4',
                         label: {
                           position: 'right',
                           value: `Avg P${average.toFixed(1)}`,
-                          fill: 'white',
+                          fill: isDark ? '#ffffff' : '#475569',
                         },
                       },
                     ]
@@ -797,7 +806,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
             />
           </div>
         ) : (
-          <div className="flex h-64 items-center justify-center text-sm text-slate-500">
+          <div className="flex h-64 items-center justify-center text-sm text-slate-600 dark:text-slate-500">
             No {chartType === 'race' ? 'race' : 'qualifying'} data yet.
           </div>
         )}
@@ -889,7 +898,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
                   <select
                     value={comparisonDriverId}
                     onChange={(event) => setComparisonDriverId(event.target.value)}
-                    className="min-w-[200px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+                    className="min-w-[200px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-500/30"
                   >
                     <option value="">Driver only</option>
                     {comparisonOptions.map((option) => (
@@ -923,7 +932,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
                   return (
                     <div
                       key={card.id}
-                      className="rounded-3xl border border-slate-200/40 bg-white/5 p-6 shadow-md backdrop-blur-lg dark:border-slate-800 dark:bg-slate-950/60"
+                      className="rounded-3xl border border-slate-200/40 bg-white/80 p-6 shadow-md dark:border-slate-800 dark:bg-slate-950/90"
                     >
                       <div className="mb-4 flex items-center gap-3">
                         <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${card.iconClasses}`}>

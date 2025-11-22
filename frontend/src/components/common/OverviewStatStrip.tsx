@@ -20,22 +20,22 @@ interface OverviewStatStripProps {
 export function OverviewStatStrip({ items, className, variant = 'default' }: OverviewStatStripProps) {
   const cardBaseClasses =
     variant === 'muted'
-      ? 'group rounded-2xl border border-slate-800/60 bg-slate-900/70 p-4 text-left shadow-md transition duration-200 hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 dark:border-slate-700'
-      : 'group rounded-2xl border border-slate-800/50 bg-slate-900/70 p-4 text-left shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] backdrop-blur-lg transition duration-200 hover:bg-slate-800/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40';
+      ? 'group rounded-2xl border border-slate-200 dark:border-slate-800/60 bg-white dark:bg-slate-900/70 p-4 text-left shadow-md transition duration-200 hover:bg-slate-50 dark:hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50'
+      : 'group rounded-2xl border border-slate-200 dark:border-slate-800/50 bg-white dark:bg-slate-900/70 p-4 text-left shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] backdrop-blur-lg transition duration-200 hover:bg-slate-50 dark:hover:bg-slate-800/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40';
 
   const iconBaseClasses =
     variant === 'muted'
-      ? 'flex h-10 w-10 items-center justify-center text-slate-200 transition-transform duration-300 group-hover:scale-105'
+      ? 'flex h-10 w-10 items-center justify-center text-slate-700 dark:text-slate-200 transition-transform duration-300 group-hover:scale-105'
       : 'flex h-10 w-10 items-center justify-center text-slate-900 transition-transform duration-300 group-hover:scale-105 dark:text-white';
 
   const titleClasses =
     variant === 'muted'
-      ? 'text-xs font-semibold uppercase tracking-[0.28em] text-slate-400'
-      : 'text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400';
+      ? 'text-xs font-semibold uppercase tracking-[0.28em] text-slate-600 dark:text-slate-400'
+      : 'text-xs font-semibold uppercase tracking-[0.28em] text-slate-600 dark:text-slate-500';
 
-  const valueClasses = variant === 'muted' ? 'text-lg font-semibold text-slate-100' : 'text-lg font-semibold text-slate-900 dark:text-white';
+  const valueClasses = variant === 'muted' ? 'text-lg font-semibold text-slate-900 dark:text-slate-100' : 'text-lg font-semibold text-slate-900 dark:text-white';
 
-  const metaClasses = variant === 'muted' ? 'text-xs text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400';
+  const metaClasses = variant === 'muted' ? 'text-xs text-slate-600 dark:text-slate-400' : 'text-xs text-slate-600 dark:text-slate-500';
 
   return (
     <div className={clsx('grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>

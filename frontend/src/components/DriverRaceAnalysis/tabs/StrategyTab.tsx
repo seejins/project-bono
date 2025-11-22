@@ -262,7 +262,7 @@ export const StrategyTab: React.FC<StrategyTabProps> = ({
 
         {/* Stint Tire Wear Stats */}
         {stintStats.length > 0 && (
-          <div className="mt-6 space-y-4">
+          <div className="mt-3 space-y-4">
             <div className="flex flex-wrap gap-4 justify-evenly">
               {stintStats.map((stint) => {
                 const tireIcon = F123DataService.getTireCompoundIcon(stint.compound);

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { DriversManagement } from './DriversManagement';
 import { SeasonsManagement } from './SeasonsManagement';
+import { DashboardPage } from './layout/DashboardPage';
+// @ts-expect-error - vite-imagetools query parameters aren't recognized by TypeScript
+import adminHeroImage from '../assets/images/pexels-hudson-mcdonald-692563691-28193003.jpg?w=1920&format=webp&q=85';
 
 interface AdminPanelProps {
   isAuthenticated: boolean;
@@ -60,24 +63,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 relative z-20">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Settings className="w-6 h-6 text-red-600 dark:text-blue-400" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Panel</h1>
-        </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          League Management
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-        {[
-          { id: 'members', label: 'Members', icon: '👥' },
-          { id: 'seasons', label: 'Seasons', icon: '🏆' }
-        ].map((section) => (
+    <DashboardPage
+      hero={{
+        imageSrc: adminHeroImage,
+        title: 'Admin Panel',
+        subtitle: 'League Management',
+        description: 'Manage drivers, seasons, and race data for your F1 league.',
+      }}
+    >
+      <div className="space-y-6">
+        {/* Navigation */}
+        <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {[
+            { id: 'members', label: 'Members', icon: '👥' },
+            { id: 'seasons', label: 'Seasons', icon: '🏆' }
+          ].map((section) => (
             <button
               key={section.id}
               onClick={() => setActiveSection(section.id as 'members' | 'seasons')}
@@ -87,15 +87,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isAuthenticated, onAuthe
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-            <span className="text-lg">{section.icon}</span>
+              <span className="text-lg">{section.icon}</span>
               <span>{section.label}</span>
             </button>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* Content */}
-      {activeSection === 'members' && <DriversManagement />}
-      {activeSection === 'seasons' && <SeasonsManagement />}
-    </div>
+        {/* Content */}
+        {activeSection === 'members' && <DriversManagement />}
+        {activeSection === 'seasons' && <SeasonsManagement />}
+      </div>
+    </DashboardPage>
   );
 };

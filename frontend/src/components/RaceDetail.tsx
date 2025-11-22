@@ -1629,12 +1629,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       headerClassName: clsx(baseHeaderPadding, 'text-left'),
       className: clsx(baseCellPadding, 'w-40'),
       render: (_: unknown, row) => {
-        const teamColor = getTeamColorHex(row.team);
         return (
-          <span
-            className="text-base font-medium"
-            style={{ color: teamColor }}
-          >
+          <span className={clsx('text-base font-medium', F123DataService.getTeamColor(row.team))}>
             {row.team}
           </span>
         );

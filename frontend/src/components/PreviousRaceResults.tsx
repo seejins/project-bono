@@ -23,12 +23,6 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const teamColorStyle = (team?: string | null) => {
-    if (!team) return undefined;
-    const color = F123DataService.getTeamColorHex(team);
-    return color ? { color } : undefined;
-  };
-
   useEffect(() => {
     const fetchPreviousRaceResults = async () => {
     try {
@@ -105,10 +99,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                 {item.name ?? 'Awaiting data'}
               </span>
               {item.team ? (
-                <span
-                  className="text-xs text-slate-500 dark:text-slate-400"
-                  style={teamColorStyle(item.team)}
-                >
+                <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
                   {item.team}
                 </span>
               ) : null}
@@ -133,10 +124,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                 {item.name ?? 'Awaiting data'}
               </span>
               {item.team ? (
-                <span
-                  className="text-xs text-slate-500 dark:text-slate-400"
-                  style={teamColorStyle(item.team)}
-                >
+                <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
                   {item.team}
                 </span>
               ) : null}
@@ -163,10 +151,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                 {item.name ?? 'Awaiting data'}
               </span>
               {item.team ? (
-                <span
-                  className="text-xs text-slate-500 dark:text-slate-400"
-                  style={teamColorStyle(item.team)}
-                >
+                <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
                   {item.team}
                 </span>
               ) : null}
@@ -199,10 +184,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                 {item.name ?? 'Awaiting data'}
               </span>
               {item.team ? (
-                <span
-                  className="text-xs text-slate-500 dark:text-slate-400"
-                  style={teamColorStyle(item.team)}
-                >
+                <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
                   {item.team}
                 </span>
               ) : null}
@@ -378,10 +360,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                     {driver.name}
                   </span>
                   {driver.team ? (
-                    <span
-                      className="text-xs text-slate-500 dark:text-slate-400"
-                      style={teamColorStyle(driver.team)}
-                    >
+                    <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(driver.team))}>
                       {driver.team}
                     </span>
                   ) : null}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, X, Calendar, Save } from 'lucide-react';
 import { apiGet } from '../utils/api';
+import logger from '../utils/logger';
 
 interface SeasonEvent {
   id: string;
@@ -48,7 +49,7 @@ export const CreateSeason: React.FC<CreateSeasonProps> = ({ onBack, onSave }) =>
           setTracks(data.tracks || []);
         }
       } catch (error) {
-        console.error('Failed to load tracks:', error);
+        logger.error('Failed to load tracks:', error);
       }
     };
     loadTracks();

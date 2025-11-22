@@ -31,7 +31,7 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
     topOffset = -96,
     height = '45vh',
     minHeight = '360px',
-    overlayClassName = 'bg-gradient-to-r from-black/90 via-black/75 to-black/55',
+    overlayClassName = 'bg-gradient-to-r from-black/70 via-black/60 to-black/50',
     content,
   } = hero;
   const [imageLoaded, setImageLoaded] = useState(false);

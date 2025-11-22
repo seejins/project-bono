@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({ isConnected }) => {
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
-          <ThemeToggle />
+          <ThemeToggle hasHeroImage={false} isOverlay={false} />
         </div>
       </div>
     </header>

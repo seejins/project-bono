@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, useState } from 'react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from '../../charts/ChartCard';
 import { BaseLineChart } from '../../charts/BaseLineChart';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { LapData } from '../types';
 import { buildPitReferenceLines } from '../utils';
 import { ERS_MAX_LOAD } from '../../../services/analytics';
@@ -25,6 +26,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
   pitLaps,
   primaryDriverId = null,
 }) => {
+  const { isDark } = useTheme();
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
   const pitLapSet = useMemo(() => new Set(pitLaps), [pitLaps]);
 
@@ -163,7 +165,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
     return driverMetadata.find((driver) => driver.strokeOpacity === 1)?.id ?? null;
   }, [driverMetadata]);
 
-  const pitReferenceLines = useMemo(() => buildPitReferenceLines(pitLaps), [pitLaps]);
+  const pitReferenceLines = useMemo(() => buildPitReferenceLines(pitLaps, isDark), [pitLaps, isDark]);
 
   const ersUsageData = useMemo(() => {
     if (!lapData || lapData.length === 0) {
@@ -211,7 +213,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
                     className="h-3 w-3 rounded-full"
                     style={{ backgroundColor: entry.color as string }}
                   />
-                  <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
+                <span className="text-slate-600 dark:text-slate-300">{entry.name}</span>
                 </span>
                 <span className="font-semibold text-slate-900 dark:text-white">
                   {formatSecondsValue(typeof entry.value === 'number' ? entry.value : null)}
@@ -298,23 +300,23 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <ChartCard
-          title="Pace by Lap"
-          description={`${driverName}'s lap and sector pace across the session.`}
-        >
-          <div className="h-80">
-            <BaseLineChart
-              data={paceSeries}
-              lines={paceLines}
-              tooltipContent={renderPaceTooltip}
-              yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
-              referenceLines={pitReferenceLines}
-              legend
-              enableSeriesHighlight
-              dimmedOpacity={1}
-            />
-          </div>
-        </ChartCard>
+      <ChartCard
+        title="Pace by Lap"
+        description={`${driverName}'s lap and sector pace across the session.`}
+      >
+        <div className="h-80">
+          <BaseLineChart
+            data={paceSeries}
+            lines={paceLines}
+            tooltipContent={renderPaceTooltip}
+            yTickFormatter={(value) => formatSecondsValue(typeof value === 'number' ? value : null)}
+            referenceLines={pitReferenceLines}
+            legend
+            enableSeriesHighlight
+            dimmedOpacity={1}
+          />
+        </div>
+      </ChartCard>
 
         <ChartCard
           title="ERS Usage"

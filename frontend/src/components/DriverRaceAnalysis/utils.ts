@@ -98,7 +98,7 @@ export const isPitStopFlag = (value: any): boolean => {
   return false;
 };
 
-export const buildPitReferenceLines = (lapNumbers: number[]): ReferenceLineConfig[] => {
+export const buildPitReferenceLines = (lapNumbers: number[], isDark: boolean = false): ReferenceLineConfig[] => {
   const unique = Array.from(
     new Set(
       lapNumbers.filter(
@@ -107,16 +107,25 @@ export const buildPitReferenceLines = (lapNumbers: number[]): ReferenceLineConfi
     )
   ).sort((a, b) => a - b);
 
+  // Use lighter colors in dark mode, darker colors in light mode
+  const strokeColor = isDark 
+    ? 'rgba(255, 255, 255, 0.6)' // white with opacity for dark mode
+    : 'rgba(51, 65, 85, 0.8)'; // slate-700 with opacity for light mode
+  
+  const labelColor = isDark
+    ? '#e2e8f0' // slate-200 for dark mode
+    : '#334155'; // slate-700 for light mode
+
   return unique.map((lap) => ({
     x: lap,
-    stroke: 'rgba(255,255,255,0.7)',
+    stroke: strokeColor,
     strokeWidth: 1.2,
     strokeDasharray: '3 3',
     ifFront: true,
     label: {
       position: 'top',
       value: 'PIT',
-      fill: '#ffffff',
+      fill: labelColor,
       fontSize: 9,
       fontWeight: 600,
       dy: 2,

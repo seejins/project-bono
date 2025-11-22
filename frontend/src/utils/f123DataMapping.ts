@@ -1,4 +1,5 @@
 import { findTeamByName } from '../data/f123Teams';
+import { F123DataService } from '../services/F123DataService';
 
 // Utility functions for mapping F1 23 UDP data to display format
 
@@ -111,11 +112,7 @@ export const calculatePositionChange = (gridPosition: number, currentPosition: n
   return gridPosition - currentPosition; // +2 = gained 2 positions, -1 = lost 1 position
 };
 
-// Team Color Mapping
-export const getTeamColor = (teamName: string): string => {
-  const team = findTeamByName(teamName);
-  return team?.color ?? '#FFFFFF';
-};
+// Team Color Mapping - Use F123DataService.getTeamColorHex() instead
 
 // Driver Abbreviation
 export const getDriverAbbreviation = (driverName: string): string => {
@@ -173,7 +170,7 @@ export const convertToLiveTimingsFormat = (udpData: any, leaderBestLapTime?: num
     // isFastestLap removed - now using event-based fastestLapCarIndex from FTLP event packet
     driverName: udpData.driverName || 'Unknown Driver',
     driverAbbreviation: getDriverAbbreviation(udpData.driverName),
-    teamColor: getTeamColor(udpData.teamName),
+    teamColor: F123DataService.getTeamColorHex(udpData.teamName),
     
     // Timing data
     fastestLap: formatLapTime(lapData.bestLapTimeInMS || lapData.lastLapTimeInMS || 0),

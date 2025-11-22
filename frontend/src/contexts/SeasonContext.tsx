@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getApiUrl } from '../utils/api';
+import logger from '../utils/logger';
 
 interface Season {
   id: string;
@@ -73,13 +74,13 @@ export const SeasonProvider: React.FC<SeasonProviderProps> = ({ children }) => {
         
         setCurrentSeason(newCurrentSeason);
       } else {
-        console.error('Invalid API response:', data);
+        logger.error('Invalid API response:', data);
         // Fallback to empty array if API fails
         setSeasons([]);
         setCurrentSeason(null);
       }
     } catch (error) {
-      console.error('Error fetching seasons:', error);
+      logger.error('Error fetching seasons:', error);
       // Fallback to empty array if API fails
       setSeasons([]);
       setCurrentSeason(null);
