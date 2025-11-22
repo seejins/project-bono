@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, useState } from 'react';
 import type { TooltipProps } from 'recharts';
 import { ChartCard } from '../../charts/ChartCard';
 import { BaseLineChart } from '../../charts/BaseLineChart';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { LapData } from '../types';
 import { buildPitReferenceLines } from '../utils';
 import { ERS_MAX_LOAD } from '../../../services/analytics';
@@ -25,6 +26,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
   pitLaps,
   primaryDriverId = null,
 }) => {
+  const { isDark } = useTheme();
   const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
   const pitLapSet = useMemo(() => new Set(pitLaps), [pitLaps]);
 
@@ -163,7 +165,7 @@ export const PaceGraphsTab: React.FC<PaceGraphsTabProps> = ({
     return driverMetadata.find((driver) => driver.strokeOpacity === 1)?.id ?? null;
   }, [driverMetadata]);
 
-  const pitReferenceLines = useMemo(() => buildPitReferenceLines(pitLaps), [pitLaps]);
+  const pitReferenceLines = useMemo(() => buildPitReferenceLines(pitLaps, isDark), [pitLaps, isDark]);
 
   const ersUsageData = useMemo(() => {
     if (!lapData || lapData.length === 0) {

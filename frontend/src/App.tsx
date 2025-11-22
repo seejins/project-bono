@@ -34,6 +34,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SeasonProvider, useSeason } from './contexts/SeasonContext';
 import { PageTransition } from './components/layout/PageTransition';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import logger from './utils/logger';
 
 type AlertPayload = { id: string; type: string; message: string; timestamp: number };
 
@@ -70,11 +71,11 @@ function AppLayout() {
     const socket = io(apiUrl);
 
     socket.on('connect', () => {
-      console.log('Connected to Project Bono backend');
+      logger.debug('Connected to Project Bono backend');
     });
 
     socket.on('disconnect', () => {
-      console.log('Disconnected from backend');
+      logger.debug('Disconnected from backend');
     });
 
     socket.on('alert', (alert: { type: string; message: string }) => {
@@ -115,7 +116,7 @@ function AppLayout() {
   );
 
   return (
-    <div className="relative min-h-screen bg-[#060b1d] text-white">
+    <div className="relative min-h-screen bg-gray-50 dark:bg-[#060b1d] text-gray-900 dark:text-white transition-colors duration-300">
       {!isAuthenticated ? (
         <PasswordGate onAuthenticated={handleAppAuthentication} />
       ) : (

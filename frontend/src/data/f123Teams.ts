@@ -13,7 +13,7 @@ const teams: F123Team[] = [
     name: 'Red Bull Racing',
     shortName: 'RBR',
     color: '#1E41FF',
-    textClass: 'text-blue-500',
+    textClass: 'team-redbull',
     aliases: [
       'red bull',
       'redbull',
@@ -27,7 +27,7 @@ const teams: F123Team[] = [
     name: 'Mercedes',
     shortName: 'MER',
     color: '#00D2BE',
-    textClass: 'text-cyan-400',
+    textClass: 'team-mercedes',
     aliases: [
       'mercedes-amg',
       'mercedes amg',
@@ -43,7 +43,7 @@ const teams: F123Team[] = [
     name: 'Ferrari',
     shortName: 'FER',
     color: '#DC143C',
-    textClass: 'text-red-500',
+    textClass: 'team-ferrari',
     aliases: [
       'scuderia ferrari',
       'ferrari f1',
@@ -56,7 +56,7 @@ const teams: F123Team[] = [
     name: 'McLaren',
     shortName: 'MCL',
     color: '#FF8700',
-    textClass: 'text-orange-500',
+    textClass: 'team-mclaren',
     aliases: [
       'mclaren f1',
       'mclaren formula 1',
@@ -69,7 +69,7 @@ const teams: F123Team[] = [
     name: 'Aston Martin',
     shortName: 'AMR',
     color: '#006F62',
-    textClass: 'text-green-500',
+    textClass: 'team-aston-martin',
     aliases: [
       'aston martin aramco cognizant',
       'aston martin f1',
@@ -82,7 +82,7 @@ const teams: F123Team[] = [
     name: 'Alpine',
     shortName: 'ALP',
     color: '#0090FF',
-    textClass: 'text-blue-400',
+    textClass: 'team-alpine',
     aliases: [
       'bwt alpine f1 team',
       'alpine f1',
@@ -95,7 +95,7 @@ const teams: F123Team[] = [
     name: 'Alfa Romeo',
     shortName: 'ARO',
     color: '#9B0000',
-    textClass: 'text-red-400',
+    textClass: 'team-sauber',
     aliases: [
       'alfa romeo',
       'alfa romeo racing',
@@ -107,8 +107,8 @@ const teams: F123Team[] = [
     id: 'haas',
     name: 'Haas',
     shortName: 'HAA',
-    color: '#FFFFFF',
-    textClass: 'text-gray-200',
+    color: '#E10600', // 2023 Haas red
+    textClass: 'team-haas',
     aliases: [
       'haas f1 team',
       'haas f1'
@@ -119,7 +119,7 @@ const teams: F123Team[] = [
     name: 'Williams',
     shortName: 'WIL',
     color: '#005AFF',
-    textClass: 'text-blue-400',
+    textClass: 'team-williams',
     aliases: [
       'williams racing',
       'williams f1',
@@ -131,8 +131,8 @@ const teams: F123Team[] = [
     id: 'alphatauri',
     name: 'AlphaTauri',
     shortName: 'AT',
-    color: '#469BFF',
-    textClass: 'text-sky-500',
+    color: '#1E2A5A', // 2023 AlphaTauri slate/navy blue
+    textClass: 'team-alphatauri',
     aliases: [
       'scuderia alphatauri',
       'alpha tauri',

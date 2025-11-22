@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatDate, formatTime, parseLocalDate } from '../utils/dateUtils';
+import { formatDate, formatTime, parseLocalDate, getDateTimestamp } from '../utils/dateUtils';
 import { Calendar, Clock, MapPin, Flag, ChevronLeft, ChevronRight, Plus, Edit, Trash2 } from 'lucide-react';
 
 interface Race {
@@ -193,7 +193,7 @@ export const SeasonSchedule: React.FC<SeasonScheduleProps> = ({ season, onBack, 
 
   const renderListView = () => {
     const sortedRaces = [...season.races].sort((a, b) => 
-      (parseLocalDate(a.date)?.getTime() ?? 0) - (parseLocalDate(b.date)?.getTime() ?? 0)
+      getDateTimestamp(a.date) - getDateTimestamp(b.date)
     );
 
     return (

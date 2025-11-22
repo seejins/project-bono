@@ -83,7 +83,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
         driverId,
         penaltyPoints,
         reason,
-        editedBy: 'Admin' // TODO: Get from auth context
+        editedBy: 'Admin'
       });
 
       if (response.ok) {
@@ -103,7 +103,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
       const response = await apiPut(`/api/races/sessions/${sessionId}/positions/${driverId}`, {
         newPosition,
         reason,
-        editedBy: 'Admin' // TODO: Get from auth context
+        editedBy: 'Admin'
       });
 
       if (response.ok) {

@@ -8,6 +8,32 @@
     font-family: 'Inter', system-ui, sans-serif;
     overflow-x: hidden; /* Prevent horizontal scrolling */
     overflow-y: scroll; /* Always show scrollbar - prevents layout shift */
+    
+    /* F1 Team Colors - Light Mode */
+    --team-redbull: #1E41FF;
+    --team-mercedes: #00D2BE;
+    --team-ferrari: #DC143C;
+    --team-mclaren: #FF8700;
+    --team-aston-martin: #006F62;
+    --team-alpine: #0090FF;
+    --team-sauber: #9B0000;
+    --team-haas: #E10600;
+    --team-williams: #005AFF;
+    --team-alphatauri: #1E2A5A;
+  }
+  
+  html.dark {
+    /* F1 Team Colors - Dark Mode (slightly brighter for better visibility) */
+    --team-redbull: #4A6FFF;
+    --team-mercedes: #00F5E1;
+    --team-ferrari: #FF2D4D;
+    --team-mclaren: #FFA64D;
+    --team-aston-martin: #00A68A;
+    --team-alpine: #FF69B4; /* BWT pink variant for dark mode */
+    --team-sauber: #D40000;
+    --team-haas: #FFFFFF; /* White variant for dark mode */
+    --team-williams: #4D8AFF;
+    --team-alphatauri: #6A7A9A; /* Lighter slate blue for dark mode */
   }
   
   body {
@@ -57,45 +83,45 @@
     @apply bg-amber-600 text-white font-bold;
   }
 
-  /* F1 Team Colors */
-  .team-mercedes {
-    @apply text-cyan-400;
+  /* F1 Team Colors - Using CSS Custom Properties for exact team colors */
+  .team-redbull {
+    color: var(--team-redbull);
   }
 
-  .team-redbull {
-    @apply text-blue-400;
+  .team-mercedes {
+    color: var(--team-mercedes);
   }
 
   .team-ferrari {
-    @apply text-red-400;
+    color: var(--team-ferrari);
   }
 
   .team-mclaren {
-    @apply text-orange-400;
+    color: var(--team-mclaren);
   }
 
-  .team-aston {
-    @apply text-green-400;
+  .team-aston-martin {
+    color: var(--team-aston-martin);
   }
 
   .team-alpine {
-    @apply text-pink-400;
+    color: var(--team-alpine);
   }
 
-  .team-alphatauri {
-    @apply text-white;
-  }
-
-  .team-alfa {
-    @apply text-red-300;
+  .team-sauber {
+    color: var(--team-sauber);
   }
 
   .team-haas {
-    @apply text-gray-300;
+    color: var(--team-haas);
   }
 
   .team-williams {
-    @apply text-blue-300;
+    color: var(--team-williams);
+  }
+
+  .team-alphatauri {
+    color: var(--team-alphatauri);
   }
   
   /* Live Timings Animations */

@@ -196,10 +196,11 @@ export class F123DataService {
   }
 
   /**
-   * Get team color class (Tailwind classes)
+   * Get team color class - uses CSS custom properties for exact team colors
+   * Theme-aware via CSS custom properties defined in index.css
    */
   static getTeamColor(team: string): string {
-    return this.getTeamInfo(team)?.textClass ?? 'text-gray-400';
+    return this.getTeamInfo(team)?.textClass ?? 'text-gray-600 dark:text-gray-400';
   }
 
   /**
@@ -223,6 +224,23 @@ export class F123DataService {
     if (position <= 3) return 'text-gray-300'; // Silver/Bronze for podium
     if (position <= 10) return 'text-gray-400'; // Points positions
     return 'text-gray-500'; // Outside points
+  }
+
+  /**
+   * Get position badge class for displaying position badges
+   * Standardized across all components
+   */
+  static getPositionBadgeClass(position?: number | null): string {
+    if (position === 1) {
+      return 'inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-amber-500';
+    }
+    if (position === 2) {
+      return 'inline-flex items-center rounded-full bg-slate-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-400';
+    }
+    if (position === 3) {
+      return 'inline-flex items-center rounded-full bg-orange-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-orange-400';
+    }
+    return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300';
   }
 
   /**

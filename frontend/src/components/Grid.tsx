@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Trophy, Award, ChevronRight } from 'lucide-react';
+import { Users } from 'lucide-react';
+import clsx from 'clsx';
 import { useSeason } from '../contexts/SeasonContext';
 import { useSeasonAnalysis, type DriverSeasonSummary } from '../hooks/useSeasonAnalysis';
 import { F123DataService } from '../services/F123DataService';
@@ -16,7 +17,6 @@ interface DriverListProps {
 const formatNumber = (value: number) => value.toLocaleString();
 
 export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const { currentSeason } = useSeason();
   const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
 
@@ -74,10 +74,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         align: 'left' as const,
         headerClassName: 'text-left',
         render: (_: string | undefined, row: DriverSeasonSummary) => (
-          <span
-            className="font-medium"
-            style={{ color: F123DataService.getTeamColorHex(row.team ?? '') }}
-          >
+          <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
             {row.team ?? '—'}
           </span>
         ),
@@ -161,42 +158,15 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
       contentClassName="space-y-6"
     >
       <motion.div
-        className="flex items-center justify-between"
+        className="flex items-center space-x-3"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
       >
-        <div className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center text-slate-900 dark:text-slate-100">
-            <Users className="h-6 w-6" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Grid Overview</h1>
+        <div className="flex h-10 w-10 items-center justify-center text-slate-900 dark:text-slate-100">
+          <Users className="h-6 w-6" />
         </div>
-
-        <div className="flex items-center space-x-4">
-          <div className="flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-900">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`rounded-md px-3 py-1 transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-red-600 text-white'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              List
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`rounded-md px-3 py-1 transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-red-600 text-white'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              Grid
-            </button>
-          </div>
-        </div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Grid Overview</h1>
       </motion.div>
 
       <motion.div
@@ -204,63 +174,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
       >
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {drivers.map((driver, index) => {
-            const teamColorClass = F123DataService.getTeamColor(driver.team ?? '');
-
-            return (
-                <motion.div
-                key={driver.id}
-                className="cursor-pointer rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-md transition hover:bg-slate-900"
-                onClick={() => onDriverSelect?.(driver.id)}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: easing, delay: 0.22 + index * 0.05 }}
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-slate-200">
-                      {driver.number ?? '--'}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-100">{driver.name}</h3>
-                      <p className={`text-sm ${teamColorClass}`}>{driver.team ?? 'Independent'}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-600" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-sm text-slate-300">
-                  <div className="rounded-xl bg-slate-900 p-3">
-                    <p className="text-slate-500">Championship</p>
-                    <p className={`text-lg font-bold ${getPositionColor(driver.position)}`}>
-                      P{driver.position ?? '—'}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-900 p-3">
-                    <p className="text-slate-500">Points</p>
-                    <p className="text-lg font-bold text-slate-100">{formatNumber(driver.points)}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-900 p-3">
-                    <p className="text-slate-500">Wins</p>
-                    <p className="text-lg font-bold text-slate-100">{driver.wins}</p>
-                  </div>
-                  <div className="rounded-xl bg-slate-900 p-3">
-                    <p className="text-slate-500">Podiums</p>
-                    <p className="text-lg font-bold text-slate-100">{driver.podiums}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                  <span>Average finish: {driver.averageFinish ? `P${driver.averageFinish.toFixed(1)}` : '—'}</span>
-                  <span>Consistency: {driver.consistency.toFixed(1)}%</span>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      ) : (
         <DashboardTable
           columns={tableColumns}
           rows={drivers}
@@ -268,7 +181,6 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
           onRowClick={onDriverSelect ? (row) => row.id && onDriverSelect(row.id) : undefined}
           emptyMessage="No drivers registered for this season yet."
         />
-      )}
       </motion.div>
     </DashboardPage>
   );

@@ -4,6 +4,7 @@ import { BarChart3, TrendingUp, Award, LineChart } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
 import { F123DataService } from '../services/F123DataService';
+import { useTheme } from '../contexts/ThemeContext';
 import { useDriverRaceData } from './DriverRaceAnalysis/hooks/useDriverRaceData';
 import { useLapAnalytics } from './DriverRaceAnalysis/hooks/useLapAnalytics';
 import { useStintAnalytics } from './DriverRaceAnalysis/hooks/useStintAnalytics';
@@ -135,9 +136,10 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
     [lapData]
   );
 
+  const { isDark } = useTheme();
   const pitReferenceLines = useMemo(
-    () => buildPitReferenceLines(pitLapNumbers),
-    [pitLapNumbers]
+    () => buildPitReferenceLines(pitLapNumbers, isDark),
+    [pitLapNumbers, isDark]
   );
 
   const getDriverDisplayName = (driverResult: any): string => {

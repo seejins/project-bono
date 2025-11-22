@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { convertToLiveTimingsFormat, getSessionTypeName, getSessionCategory } from '../utils/f123DataMapping';
 import { F123DataService } from '../services/F123DataService';
+import logger from '../utils/logger';
 
 // Driver data interface for live timings
 interface DriverData {
@@ -113,13 +114,13 @@ const getRetirementStatusColor = (status: string): string => {
     case 'PITTING': 
     case 'PIT': 
     case 'FINISHED':
-      return 'text-white'; // Active - normal color
+      return 'text-gray-900 dark:text-white'; // Active - normal color
     case 'DNF': return 'text-red-500'; // DNF
     case 'RET': return 'text-red-500'; // RETIRED
     case 'DSQ': return 'text-red-500'; // DISQUALIFIED
-    case 'NCL': return 'text-white/50'; // NOT CLASSIFIED
+    case 'NCL': return 'text-gray-500 dark:text-white/50'; // NOT CLASSIFIED
     case 'OUT': return 'text-orange-500'; // OUT
-    default: return 'text-white';
+    default: return 'text-gray-900 dark:text-white';
   }
 };
 
@@ -524,7 +525,7 @@ export const LiveTimings = () => {
         if (seenCarIndices.has(carIndex)) {
           // Warn only once per carIndex per session (avoid console spam)
           if (!duplicateWarningRef.current.has(carIndex)) {
-            console.warn(`⚠️ Duplicate carIndex ${carIndex} detected - skipping duplicate entry`);
+            logger.warn(`⚠️ Duplicate carIndex ${carIndex} detected - skipping duplicate entry`);
             duplicateWarningRef.current.add(carIndex);
           }
           return false;
@@ -750,20 +751,19 @@ export const LiveTimings = () => {
 
   if (!sessionData) {
     return (
-      <div className="-mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen min-h-[calc(100vh+96px)] overflow-hidden bg-[#060b1d] text-slate-100 relative">
+      <div className="-mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen min-h-[calc(100vh+96px)] overflow-hidden bg-gray-50 dark:bg-[#060b1d] text-gray-900 dark:text-slate-100 relative">
         <div className="pointer-events-none absolute inset-0 z-0">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(252,70,107,0.08),transparent_62%),radial-gradient(circle_at_bottom,_rgba(63,94,251,0.05),transparent_52%)]" />
           <div className="absolute inset-x-0 -top-[480px] h-[960px] bg-[radial-gradient(circle_at_top,_rgba(248,113,113,0.22),transparent_76%)] blur-[120px]" />
-          <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-[#060b1d] via-transparent to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#060b1d] via-transparent to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-gray-50 dark:from-[#060b1d] via-transparent to-transparent" />
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh+96px)] max-w-[1600px] items-center justify-center px-6 pt-24">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-10 py-12 text-center backdrop-blur-md shadow-[0_35px_90px_-45px_rgba(6,11,29,0.85)]">
+          <div className="rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-10 py-12 text-center backdrop-blur-md shadow-[0_35px_90px_-45px_rgba(6,11,29,0.85)]">
             <div className="text-6xl mb-4">🏁</div>
-            <h1 className="text-3xl font-extrabold uppercase tracking-[0.35em] text-white">Live Timings</h1>
-            <p className="mt-3 text-sm uppercase tracking-[0.25em] text-white/60">Awaiting Connection</p>
-            <p className="mt-6 text-base text-white/50">
+            <h1 className="text-3xl font-extrabold uppercase tracking-[0.35em] text-gray-900 dark:text-white">Live Timings</h1>
+            <p className="mt-3 text-sm uppercase tracking-[0.25em] text-gray-600 dark:text-white/60">Awaiting Connection</p>
+            <p className="mt-6 text-base text-gray-700 dark:text-white/50">
               Enable telemetry in F1® 23 and keep this page open to follow every split in real time.
             </p>
           </div>
@@ -772,36 +772,35 @@ export const LiveTimings = () => {
     );
   }
   return (
-    <div className="-mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen min-h-[calc(100vh+96px)] overflow-hidden bg-[#060b1d] text-slate-100 relative">
+    <div className="-mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen min-h-[calc(100vh+96px)] overflow-hidden bg-gray-50 dark:bg-[#060b1d] text-gray-900 dark:text-slate-100 relative">
       <div className="pointer-events-none absolute inset-0 z-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(252,70,107,0.08),transparent_62%),radial-gradient(circle_at_bottom,_rgba(63,94,251,0.05),transparent_52%)]" />
         <div className="absolute inset-x-0 -top-[480px] h-[960px] bg-[radial-gradient(circle_at_top,_rgba(248,113,113,0.22),transparent_76%)] blur-[120px]" />
-        <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-[#060b1d] via-transparent to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#060b1d] via-transparent to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-gray-50 dark:from-[#060b1d] via-transparent to-transparent" />
       </div>
 
       <div className="relative z-10 mx-auto max-w-[1600px] px-6 pt-24 pb-12">
         {/* Header with Notification System */}
         <div
-          className={`relative border-b border-white/10 px-6 py-6 backdrop-blur-sm transition-colors duration-300 ${
+          className={`relative border-b border-gray-200 dark:border-white/10 px-6 py-6 backdrop-blur-sm transition-colors duration-300 ${
             headerNotification?.type === 'redFlag'
               ? 'bg-red-500/20 text-red-100'
               : headerNotification?.type === 'safetyCar' || headerNotification?.type === 'vsc' || headerNotification?.type === 'formation'
                 ? 'bg-amber-400/20 text-amber-100'
-                : 'bg-white/5 text-slate-100'
+                : 'bg-white dark:bg-white/5 text-gray-900 dark:text-slate-100'
           }`}
         >
         <div className="relative flex items-center justify-between">
           {/* Left: Track/Session Info */}
           <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
-            <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.3em] text-white/80">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-bold tracking-[0.4em]">
+            <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.3em] text-gray-800 dark:text-white/80">
+              <span className="inline-flex items-center gap-2 rounded-full border border-gray-300 dark:border-white/20 bg-gray-100 dark:bg-white/10 px-4 py-1.5 text-xs font-bold tracking-[0.4em] text-gray-900 dark:text-white">
                 Live
               </span>
-              <span className="hidden md:inline-block text-white/60">•</span>
-              <span className="text-white/70">{sessionData.trackName}</span>
+              <span className="hidden md:inline-block text-gray-500 dark:text-white/60">•</span>
+              <span className="text-gray-700 dark:text-white/70">{sessionData.trackName}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-base font-medium tracking-[0.12em] text-white">
+            <div className="flex flex-wrap items-center gap-4 text-base font-medium tracking-[0.12em] text-gray-900 dark:text-white">
               <span className="flex items-center gap-2">
                 🏁 <span className="uppercase">{sessionData.sessionTypeName || sessionData.sessionType}</span>
               </span>
@@ -817,7 +816,7 @@ export const LiveTimings = () => {
                 )}
               </span>
               {sessionData.sessionType === 'RACE' && (
-                <span className="flex items-center gap-2 text-white/60">
+                <span className="flex items-center gap-2 text-gray-600 dark:text-white/60">
                   Laps {sessionData.currentLap || 0}/{sessionData.totalLaps || 0}
                 </span>
               )}
@@ -827,7 +826,7 @@ export const LiveTimings = () => {
           {/* Center: Header Notification (persistent) - Absolutely positioned for true centering */}
           {headerNotification && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-              <span className="rounded-full border border-white/20 bg-white/10 px-5 py-1 text-base font-semibold uppercase tracking-[0.3em] text-white">
+              <span className="rounded-full border border-gray-300 dark:border-white/20 bg-gray-100 dark:bg-white/10 px-5 py-1 text-base font-semibold uppercase tracking-[0.3em] text-gray-900 dark:text-white">
                 {headerNotification.message}
               </span>
             </div>
@@ -835,7 +834,7 @@ export const LiveTimings = () => {
 
           {/* Right: Connection Status */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+            <div className="flex items-center gap-2 rounded-full border border-gray-300 dark:border-white/15 bg-gray-100 dark:bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-gray-700 dark:text-white/70">
               <span className={`block h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(244,114,182,0.7)]'}`} />
               {isConnected ? 'Connected' : 'Disconnected'}
             </div>
@@ -845,13 +844,13 @@ export const LiveTimings = () => {
 
         {/* Main Content - Constrained Width for 1440p Optimization */}
         <div className="mx-auto max-w-[2048px] px-6 py-10">
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_25px_80px_-45px_rgba(8,10,25,0.95)] backdrop-blur-md">
+          <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 shadow-[0_25px_80px_-45px_rgba(8,10,25,0.95)] backdrop-blur-md">
               {/* Loading state overlay - show when session exists but no drivers loaded yet */}
               {sessionData && drivers.length === 0 && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#060b1d]/75 backdrop-blur-lg">
-                  <div className="mb-4 h-12 w-12 animate-spin rounded-full border-2 border-white/40 border-b-transparent"></div>
-                  <p className="text-lg font-medium tracking-[0.18em] uppercase text-white/80">Loading driver data…</p>
-                  <p className="mt-2 text-sm text-white/60">Waiting for participants packet</p>
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-50/90 dark:bg-[#060b1d]/75 backdrop-blur-lg">
+                  <div className="mb-4 h-12 w-12 animate-spin rounded-full border-2 border-gray-400 dark:border-white/40 border-b-transparent"></div>
+                  <p className="text-lg font-medium tracking-[0.18em] uppercase text-gray-800 dark:text-white/80">Loading driver data…</p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-white/60">Waiting for participants packet</p>
                 </div>
               )}
               
@@ -953,7 +952,7 @@ const useSectorColoring = (drivers: DriverData[]) => {
         return 'text-green-400';
       }
       
-      return 'text-white';
+      return 'text-gray-900 dark:text-white';
     };
   }, [fastestSectors, parseSectorTimeString]); // Only recreates when fastestSectors changes
 
@@ -1002,13 +1001,13 @@ const PracticeDriverRow = React.memo(({
               return (
     <div className="relative transition-all duration-150 ease-out">
       <div
-        className="grid grid-cols-13 gap-0 items-center border-b border-white/10 p-3 hover:bg-white/10"
+        className="grid grid-cols-13 gap-0 items-center border-b border-gray-200 dark:border-white/10 p-3 hover:bg-gray-50 dark:hover:bg-white/10"
         style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}
       >
         {/* POS */}
-            <div className="px-2 border-r border-white/10 flex items-center justify-center">
+            <div className="px-2 border-r border-gray-200 dark:border-white/10 flex items-center justify-center">
               <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-                driver.position === 1 ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(248,113,113,0.75)]' : 'bg-white/15 text-white/80'
+                driver.position === 1 ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(248,113,113,0.75)]' : 'bg-gray-200 dark:bg-white/15 text-gray-700 dark:text-white/80'
               }`}>
                 {driver.position}
               </div>
@@ -1016,28 +1015,28 @@ const PracticeDriverRow = React.memo(({
             
         {/* Driver */}
         <div className={`px-3 border-r border-white/10 flex items-center ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/40' : ''
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/40' : ''
             }`}>
               <div className="flex items-center space-x-2">
                 <div 
                   className="w-1 h-6 rounded"
                   style={{ backgroundColor: driver.teamColor }}
                 ></div>
-            <span className="font-semibold text-sm text-white">{driver.driverAbbreviation}</span>
+            <span className="font-semibold text-sm text-gray-900 dark:text-white">{driver.driverAbbreviation}</span>
               </div>
             </div>
             
         {/* Lap Time */}
         <div className={`px-[11px] border-r border-white/10 flex items-center justify-between ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : ''
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         }`}>
-          <span className="text-base font-mono tabular-nums tracking-tighter text-white">{driver.fastestLap}</span>
+          <span className="text-base font-mono tabular-nums tracking-tighter text-gray-900 dark:text-white">{driver.fastestLap}</span>
           {driver.fastestLapTire && (() => {
             const icon = F123DataService.getTireCompoundIcon(driver.fastestLapTire);
             const fullName = F123DataService.getTireCompoundFullName(driver.fastestLapTire);
             if (!icon) {
               return (
-                <span className="text-xs font-semibold text-white/70">
+                <span className="text-xs font-semibold text-gray-600 dark:text-white/70">
                   {driver.fastestLapTire}
                 </span>
               );
@@ -1053,35 +1052,35 @@ const PracticeDriverRow = React.memo(({
             </div>
             
         {/* Gap */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : ''
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
         {/* S1 (Best Lap) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
         } ${isFastestS1 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
           {driver.sector1Time || '--:--'}
             </div>
             
         {/* S2 (Best Lap) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
         } ${isFastestS2 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
           {driver.sector2Time || '--:--'}
         </div>
         
         {/* S3 (Best Lap) */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
         } ${isFastestS3 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
           {driver.sector3Time || '--:--'}
         </div>
         
         {/* Micro-sectors */}
-        <div className={`px-8 border-r border-white/10 flex justify-center items-center ${
+        <div className={`px-8 border-r border-gray-200 dark:border-white/10 flex justify-center items-center ${
           isDriverRetired(driver.status) ? 'opacity-40' : ''
         }`}>
           <div className="flex items-center gap-x-0.5 w-full">
@@ -1097,7 +1096,7 @@ const PracticeDriverRow = React.memo(({
                           sector === 'purple' ? 'bg-purple-500' :
                           sector === 'green' ? 'bg-green-500' :
                           sector === 'yellow' ? 'bg-amber-300' :
-                          'bg-white/20'
+                          'bg-gray-300 dark:bg-white/20'
                         }`}
                       ></div>
                   {isMainSectorEnd && <div className="w-1.5 flex-shrink-0"></div>}
@@ -1109,35 +1108,35 @@ const PracticeDriverRow = React.memo(({
             
             {/* Driver Last Name */}
         <div className={`px-2 border-r border-white/10 text-sm text-left ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
         {/* Status */}
         <div className={`px-2 border-r border-white/10 text-sm text-center ${getStatusColor(driver.status || '')} ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : ''
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         }`}>
           {driver.status || ''}
     </div>
         
         {/* S1 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS1 || '--:--'}
         </div>
         
         {/* S2 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS2 || '--:--'}
         </div>
         
         {/* S3 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS3 || '--:--'}
         </div>
@@ -1185,9 +1184,9 @@ const RaceDriverRow = React.memo(({
         style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}
       >
         {/* POS */}
-            <div className="px-2 border-r border-white/10 flex items-center justify-center">
+            <div className="px-2 border-r border-gray-200 dark:border-white/10 flex items-center justify-center">
               <div className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center position-indicator ${
-                driver.position === 1 ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(248,113,113,0.75)]' : 'bg-white/15 text-white/80'
+                driver.position === 1 ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(248,113,113,0.75)]' : 'bg-gray-200 dark:bg-white/15 text-gray-700 dark:text-white/80'
               }`}>
                 {driver.position}
               </div>
@@ -1200,7 +1199,7 @@ const RaceDriverRow = React.memo(({
                   className="w-1 h-6 rounded"
                   style={{ backgroundColor: driver.teamColor }}
                 ></div>
-            <span className="font-semibold text-sm text-white">{driver.driverAbbreviation}</span>
+            <span className="font-semibold text-sm text-gray-900 dark:text-white">{driver.driverAbbreviation}</span>
               </div>
           <div className="flex items-center justify-end space-x-1 w-14">
                 {driver.positionChange > 0 ? (
@@ -1215,37 +1214,37 @@ const RaceDriverRow = React.memo(({
                   </>
                 ) : (
                   <>
-                    <Minus className="w-3 h-3 text-white/30" />
-                    <span className="text-xs text-white/40">0</span>
+                    <Minus className="w-3 h-3 text-gray-400 dark:text-white/30" />
+                    <span className="text-xs text-gray-500 dark:text-white/40">0</span>
                   </>
                 )}
               </div>
             </div>
             
         {/* Gap */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : ''
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* Interval */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.interval}
             </div>
             
             {/* Best Lap */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
         } ${driver.id === fastestLapCarIndex ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
               {driver.bestLap}
             </div>
             
             {/* Last Lap */}
-        <div className={`px-2 border-r border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.lastLapTime}
             </div>
@@ -1261,35 +1260,35 @@ const RaceDriverRow = React.memo(({
             
             {/* Driver Last Name */}
         <div className={`px-2 border-r border-white/10 text-sm text-left ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : 'text-white/80'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.driverName.split(' ').pop()}
             </div>
             
         {/* Status */}
         <div className={`px-2 border-r border-white/10 text-sm text-center ${getStatusColor(driver.status || '')} ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : ''
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         }`}>
           {driver.status || ''}
         </div>
         
         {/* S1 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS1 || '--:--'}
         </div>
         
         {/* S2 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS2 || '--:--'}
         </div>
         
         {/* S3 (Current) */}
         <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-white/70'
+          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS3 || '--:--'}
         </div>
@@ -1334,8 +1333,8 @@ const PracticeQualifyingTimingTable = ({
   const driversWithFlags = useSectorFastestFlags(drivers, fastestSectors, parseSectorTimeString);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-      <div className="grid grid-cols-13 gap-0 border-b border-white/10 bg-white/10 px-3 py-4 text-xs font-semibold uppercase tracking-[0.3em] text-white/60" style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}>
+    <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5">
+      <div className="grid grid-cols-13 gap-0 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/10 px-3 py-4 text-xs font-semibold uppercase tracking-[0.3em] text-gray-600 dark:text-white/60" style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}>
           <div className="px-2 text-center">Pos</div>
           <div className="px-2 text-center">Driver</div>
           <div className="px-[7px] text-center">Lap Time</div>
@@ -1382,8 +1381,8 @@ const RaceTimingTable = ({
   // Use shared logic from parent (no local calculations)
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-      <div className="grid grid-cols-12 gap-0 border-b border-white/10 bg-white/10 px-3 py-4 text-xs font-semibold uppercase tracking-[0.3em] text-white/60" style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}>
+    <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5">
+      <div className="grid grid-cols-12 gap-0 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/10 px-3 py-4 text-xs font-semibold uppercase tracking-[0.3em] text-gray-600 dark:text-white/60" style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}>
           <div className="px-2 text-center">Pos</div>
           <div className="px-2 text-center">Driver</div>
           <div className="px-2 text-center">Gap</div>

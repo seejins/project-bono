@@ -246,10 +246,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         align: 'left' as const,
         headerClassName: 'text-left',
         render: (_: string, row: DriverSeasonSummary) => (
-          <span
-            className="font-medium"
-            style={{ color: F123DataService.getTeamColorHex(row.team ?? '') }}
-          >
+          <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
             {row.team ?? '—'}
           </span>
         ),
@@ -291,10 +288,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         align: 'left' as const,
         headerClassName: 'text-left',
         render: (_: string, row: ConstructorSeasonSummary) => (
-          <span
-            className="font-medium"
-            style={{ color: F123DataService.getTeamColorHex(row.team ?? '') }}
-          >
+          <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
             {row.team ?? '—'}
           </span>
         ),

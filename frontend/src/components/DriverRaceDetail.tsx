@@ -14,8 +14,6 @@ interface DriverRaceDetailProps {
 }
 
 export const DriverRaceDetail: React.FC<DriverRaceDetailProps> = ({ driver, raceData, onClose }) => {
-  const getTeamColor = (team: string) => F123DataService.getTeamColor(team);
-  const getPositionColor = (position: number) => F123DataService.getPositionColor(position);
 
   return (
     <div className="modal-overlay">
@@ -30,7 +28,7 @@ export const DriverRaceDetail: React.FC<DriverRaceDetailProps> = ({ driver, race
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{driver.name}</h2>
-              <p className={`text-lg ${getTeamColor(driver.team)}`}>{driver.team}</p>
+              <p className={`text-lg ${F123DataService.getTeamColor(driver.team)}`}>{driver.team}</p>
             </div>
           </div>
           <button
@@ -76,7 +74,7 @@ export const DriverRaceDetail: React.FC<DriverRaceDetailProps> = ({ driver, race
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                      <span className={`text-lg font-bold ${getPositionColor(driver.racePosition!)}`}>
+                      <span className={`text-lg font-bold ${F123DataService.getPositionColor(driver.racePosition!)}`}>
                         {driver.racePosition}
                       </span>
                     </div>

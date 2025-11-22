@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import logger from '../utils/logger';
-import { formatFullDate } from '../utils/dateUtils';
+import { formatFullDate, getDateTimestamp } from '../utils/dateUtils';
 import { useSearchParams } from 'react-router-dom';
 import { getApiUrl } from '../utils/api';
 import clsx from 'clsx';
@@ -114,7 +114,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
         createdAt: penalty.created_at || penalty.createdAt || new Date().toISOString(),
         createdBy: penalty.created_by ?? penalty.createdBy ?? null
       }))
-      .sort((a: DriverPenalty, b: DriverPenalty) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a: DriverPenalty, b: DriverPenalty) => getDateTimestamp(b.createdAt) - getDateTimestamp(a.createdAt));
   }, []);
 
   useEffect(() => {
@@ -1353,8 +1353,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     const matchingPenalties = penaltyMap.get(driverSessionResultId) || [];
     
     return [...matchingPenalties].sort((a, b) => {
-      const aDate = new Date(a.createdAt).getTime();
-      const bDate = new Date(b.createdAt).getTime();
+      const aDate = getDateTimestamp(a.createdAt);
+      const bDate = getDateTimestamp(b.createdAt);
       return bDate - aDate;
     });
   }, [penaltyMap]);
@@ -1630,12 +1630,8 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       headerClassName: clsx(baseHeaderPadding, 'text-left'),
       className: clsx(baseCellPadding, 'w-40'),
       render: (_: unknown, row) => {
-        const teamColor = getTeamColorHex(row.team);
         return (
-          <span
-            className="text-base font-medium"
-            style={{ color: teamColor }}
-          >
+          <span className={clsx('text-base font-medium', F123DataService.getTeamColor(row.team))}>
             {row.team}
           </span>
         );

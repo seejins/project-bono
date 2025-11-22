@@ -154,10 +154,10 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
   if (!driver) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-white mb-4">Driver Not Found</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Driver Not Found</h2>
         <button
           onClick={onBack}
-          className="text-blue-400 hover:text-blue-300"
+          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
         >
           ← Back
         </button>
@@ -171,7 +171,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
       <div className="flex items-center space-x-4">
         <button
           onClick={onBack}
-          className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
+          className="flex items-center space-x-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
           <span>Back</span>
@@ -179,59 +179,59 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
       </div>
 
       {/* Driver Header */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6">
-            <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">#{driver.number}</span>
+            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">#{driver.number}</span>
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white">{driver.name}</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{driver.name}</h1>
               <p className={`text-lg ${getTeamColor(driver.team)}`}>{driver.team}</p>
-              <p className="text-gray-400">Championship Position: #{driver.position}</p>
+              <p className="text-gray-600 dark:text-gray-400">Championship Position: #{driver.position}</p>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">{driver.points} pts</div>
-            <div className="text-sm text-gray-400">Current Season</div>
+            <div className="text-3xl font-bold text-gray-900 dark:text-white">{driver.points} pts</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Current Season</div>
           </div>
         </div>
       </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2 mb-2">
-            <Trophy className="w-5 h-5 text-yellow-400" />
-            <span className="text-sm text-gray-400">Wins</span>
+            <Trophy className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Wins</span>
           </div>
-          <div className="text-2xl font-bold text-white">{driver.wins}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{driver.wins}</div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2 mb-2">
-            <Award className="w-5 h-5 text-green-400" />
-            <span className="text-sm text-gray-400">Podiums</span>
+            <Award className="w-5 h-5 text-green-500 dark:text-green-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Podiums</span>
           </div>
-          <div className="text-2xl font-bold text-white">{driver.podiums}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{driver.podiums}</div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2 mb-2">
-            <Clock className="w-5 h-5 text-purple-400" />
-            <span className="text-sm text-gray-400">Fastest Laps</span>
+            <Clock className="w-5 h-5 text-purple-500 dark:text-purple-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Fastest Laps</span>
           </div>
-          <div className="text-2xl font-bold text-white">{driver.fastestLaps}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{driver.fastestLaps}</div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2 mb-2">
-            <TrendingUp className="w-5 h-5 text-blue-400" />
-            <span className="text-sm text-gray-400">Avg Finish</span>
+            <TrendingUp className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Avg Finish</span>
           </div>
-          <div className="text-2xl font-bold text-white">{driver.averageFinish.toFixed(1)}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{driver.averageFinish.toFixed(1)}</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 bg-gray-800 rounded-lg p-1">
+      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
         {[
           { id: 'overview', label: 'Overview', icon: Target },
           { id: 'results', label: 'Results', icon: Calendar },
@@ -245,8 +245,8 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -260,59 +260,59 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Season Performance */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Season Performance</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Season Performance</h3>
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span className="text-gray-400">Points</span>
-                <span className="text-white font-semibold">{driver.points}</span>
+                <span className="text-gray-600 dark:text-gray-400">Points</span>
+                <span className="text-gray-900 dark:text-white font-semibold">{driver.points}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Wins</span>
-                <span className="text-yellow-400 font-semibold">{driver.wins}</span>
+                <span className="text-gray-600 dark:text-gray-400">Wins</span>
+                <span className="text-yellow-600 dark:text-yellow-400 font-semibold">{driver.wins}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Podiums</span>
-                <span className="text-green-400 font-semibold">{driver.podiums}</span>
+                <span className="text-gray-600 dark:text-gray-400">Podiums</span>
+                <span className="text-green-600 dark:text-green-400 font-semibold">{driver.podiums}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Fastest Laps</span>
-                <span className="text-purple-400 font-semibold">{driver.fastestLaps}</span>
+                <span className="text-gray-600 dark:text-gray-400">Fastest Laps</span>
+                <span className="text-purple-600 dark:text-purple-400 font-semibold">{driver.fastestLaps}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Average Finish</span>
-                <span className="text-white font-semibold">{driver.averageFinish.toFixed(1)}</span>
+                <span className="text-gray-600 dark:text-gray-400">Average Finish</span>
+                <span className="text-gray-900 dark:text-white font-semibold">{driver.averageFinish.toFixed(1)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Consistency</span>
-                <span className="text-blue-400 font-semibold">{driver.consistency}%</span>
+                <span className="text-gray-600 dark:text-gray-400">Consistency</span>
+                <span className="text-blue-600 dark:text-blue-400 font-semibold">{driver.consistency}%</span>
               </div>
             </div>
           </div>
 
           {/* Career Stats */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Career Statistics</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Career Statistics</h3>
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span className="text-gray-400">Career Points</span>
-                <span className="text-white font-semibold">{driver.careerPoints}</span>
+                <span className="text-gray-600 dark:text-gray-400">Career Points</span>
+                <span className="text-gray-900 dark:text-white font-semibold">{driver.careerPoints}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Career Wins</span>
-                <span className="text-yellow-400 font-semibold">{driver.careerWins}</span>
+                <span className="text-gray-600 dark:text-gray-400">Career Wins</span>
+                <span className="text-yellow-600 dark:text-yellow-400 font-semibold">{driver.careerWins}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Career Podiums</span>
-                <span className="text-green-400 font-semibold">{driver.careerPodiums}</span>
+                <span className="text-gray-600 dark:text-gray-400">Career Podiums</span>
+                <span className="text-green-600 dark:text-green-400 font-semibold">{driver.careerPodiums}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Best Finish</span>
-                <span className="text-yellow-400 font-semibold">P{driver.bestFinish}</span>
+                <span className="text-gray-600 dark:text-gray-400">Best Finish</span>
+                <span className="text-yellow-600 dark:text-yellow-400 font-semibold">P{driver.bestFinish}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Worst Finish</span>
-                <span className="text-red-400 font-semibold">P{driver.worstFinish}</span>
+                <span className="text-gray-600 dark:text-gray-400">Worst Finish</span>
+                <span className="text-red-600 dark:text-red-400 font-semibold">P{driver.worstFinish}</span>
               </div>
             </div>
           </div>
@@ -320,41 +320,41 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
       )}
 
       {activeTab === 'results' && (
-        <div className="bg-gray-800 rounded-lg overflow-hidden">
-          <div className="p-6 border-b border-gray-700">
-            <h3 className="text-lg font-semibold text-white">Race Results</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Race Results</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Race</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Position</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Points</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Flags</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Race</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Position</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Points</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300 uppercase">Flags</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {raceResults.map((result) => (
                   <tr 
                     key={result.id} 
-                    className="hover:bg-gray-700 cursor-pointer transition-colors"
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     onClick={() => onRaceSelect(result.id)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{result.trackName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-400">{formatFullDate(result.date)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white font-medium">{result.trackName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-400">{formatFullDate(result.date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-sm font-semibold ${getPositionColor(result.position)}`}>
                         P{result.position}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-white font-semibold">{result.points}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white font-semibold">{result.points}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-1">
-                        {result.polePosition && <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded">Pole</span>}
-                        {result.fastestLap && <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded">FL</span>}
-                        {result.dnf && <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded">DNF</span>}
+                        {result.polePosition && <span className="px-2 py-1 bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs rounded">Pole</span>}
+                        {result.fastestLap && <span className="px-2 py-1 bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs rounded">FL</span>}
+                        {result.dnf && <span className="px-2 py-1 bg-red-500/20 text-red-600 dark:text-red-400 text-xs rounded">DNF</span>}
                       </div>
                     </td>
                   </tr>
@@ -367,19 +367,19 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
 
       {activeTab === 'achievements' && (
         <div className="space-y-4">
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Achievements ({achievements.length})</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Achievements ({achievements.length})</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {achievements.map((achievement) => (
-                <div key={achievement.id} className="bg-gray-700 rounded-lg p-4">
+                <div key={achievement.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
                   <div className="flex items-center space-x-3 mb-2">
-                    <Trophy className="w-6 h-6 text-yellow-400" />
+                    <Trophy className="w-6 h-6 text-yellow-500 dark:text-yellow-400" />
                     <div>
-                      <h4 className="text-white font-semibold">{achievement.name}</h4>
-                      <p className="text-sm text-gray-400">{achievement.description}</p>
+                      <h4 className="text-gray-900 dark:text-white font-semibold">{achievement.name}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{achievement.description}</p>
                     </div>
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 dark:text-gray-500">
                     Earned: {formatFullDate(achievement.dateEarned)} at {achievement.raceName}
                   </div>
                 </div>
@@ -391,8 +391,8 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
 
       {activeTab === 'comparison' && (
         <div className="text-center py-12">
-          <h3 className="text-xl font-semibold text-white mb-4">Driver Comparison</h3>
-          <p className="text-gray-400">Compare with other drivers coming soon...</p>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Driver Comparison</h3>
+          <p className="text-gray-600 dark:text-gray-400">Compare with other drivers coming soon...</p>
         </div>
       )}
     </div>
