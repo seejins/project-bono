@@ -1,31 +1,47 @@
 import { Server } from 'socket.io';
 import { TelemetryService } from '../services/TelemetryService';
+import { TelemetryBridge } from '../services/TelemetryBridge';
+import logger from '../utils/logger';
 
 export function setupSocketHandlers(
   io: Server,
   services: {
     telemetryService: TelemetryService;
+    telemetryBridge?: TelemetryBridge;
   }
 ) {
+  // Setup TelemetryBridge if provided (for remote packet streaming)
+  if (services.telemetryBridge) {
+    services.telemetryBridge.setupHandlers();
+  }
+
   io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+    // Check if this is a telemetry source connection (handled by TelemetryBridge)
+    const auth = socket.handshake.auth;
+    const isTelemetrySource = auth?.apiKey === process.env.API_KEY;
+    
+    if (!isTelemetrySource) {
+      // Regular frontend client
+      logger.debug('Client connected:', socket.id);
 
-    // Handle voice commands
-    const handleVoiceCommand = (command: any) => {
-      console.log('Voice command received:', command);
-      
-      // Process voice command and generate response
-      const response = processVoiceCommand(command);
-      socket.emit('voice_response', response);
-    };
-    socket.on('voice_command', handleVoiceCommand);
+      // Handle voice commands
+      const handleVoiceCommand = (command: any) => {
+        logger.debug('Voice command received:', command);
+        
+        // Process voice command and generate response
+        const response = processVoiceCommand(command);
+        socket.emit('voice_response', response);
+      };
+      socket.on('voice_command', handleVoiceCommand);
 
-    // Handle disconnection - cleanup all listeners
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-      // Remove all event listeners to prevent memory leaks
-      socket.off('voice_command', handleVoiceCommand);
-    });
+      // Handle disconnection - cleanup all listeners
+      socket.on('disconnect', () => {
+        logger.debug('Client disconnected:', socket.id);
+        // Remove all event listeners to prevent memory leaks
+        socket.off('voice_command', handleVoiceCommand);
+      });
+    }
+    // Telemetry source connections are handled by TelemetryBridge
   });
 
   // Helper function to convert BigInt to number for JSON serialization

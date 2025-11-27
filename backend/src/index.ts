@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { TelemetryService } from './services/TelemetryService';
+import { TelemetryBridge } from './services/TelemetryBridge';
 import { DatabaseService } from './services/DatabaseService';
 import { RaceResultsEditor } from './services/RaceResultsEditor';
 import { setupRoutes } from './routes';
@@ -73,6 +74,7 @@ app.use(express.json({ limit: '10mb' })); // Limit JSON payload size to prevent 
 const pool = createPgPool();
 const databaseService = new DatabaseService(pool);
 const telemetryService = new TelemetryService();
+const telemetryBridge = new TelemetryBridge(io, telemetryService);
 const raceResultsEditor = new RaceResultsEditor(databaseService);
 
 // Initialize database tables
@@ -80,7 +82,13 @@ databaseService.ensureInitialized().then(() => {
   logger.log('✅ Database initialized successfully');
 }).catch((error) => {
   logger.error('❌ Database initialization failed:', error);
-  process.exit(1);
+  if (isProduction) {
+    // In production, database is required - exit
+    process.exit(1);
+  } else {
+    // In development, allow server to start without database for UDP testing
+    logger.warn('⚠️  Continuing without database (development mode). Some features may be unavailable.');
+  }
 });
 
 // Setup routes
@@ -91,7 +99,7 @@ setupRoutes(app, io, {
 });
 
 // Setup Socket.IO handlers
-setupSocketHandlers(io, { telemetryService });
+setupSocketHandlers(io, { telemetryService, telemetryBridge });
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

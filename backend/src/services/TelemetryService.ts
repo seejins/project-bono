@@ -2,6 +2,7 @@ import { F123UDP } from 'f1-23-udp';
 import { EventEmitter } from 'events';
 import { getTrackName, getTeamName, getSessionTypeName } from '../utils/f123Constants';
 import { calculateS3TimeForCompletedLap } from '../utils/f123Helpers';
+import logger from '../utils/logger';
 
 // F1 23 UDP Packet Types
 export interface PacketHeader {
@@ -187,6 +188,7 @@ export class TelemetryService extends EventEmitter {
   public isRunning: boolean = false;
   private lastData: F123TelemetryData | null = null;
   private dataBuffer: F123TelemetryData[] = [];
+  private isRemoteSource: boolean = false;
   
   // Cached header object to avoid recreating on every emission
   private readonly DEFAULT_HEADER: PacketHeader = {
@@ -209,7 +211,6 @@ export class TelemetryService extends EventEmitter {
   private carStatusMap: Map<number, CarStatusData> = new Map();
   private stintHistoryMap: Map<number, TyreStintHistoryData[]> = new Map();
   private participantsMap: Map<number, { driverName: string; teamName: string; carNumber: number; steamId?: string; platform?: number; networkId?: number }> = new Map();
-  private bestLapTimesMap: Map<number, number> = new Map(); // Store best lap times from Session History
   private bestLapSector1Map: Map<number, number> = new Map(); // Store best lap sector 1 times
   private bestLapSector2Map: Map<number, number> = new Map(); // Store best lap sector 2 times
   private bestLapSector3Map: Map<number, number> = new Map(); // Store best lap sector 3 times
@@ -301,7 +302,7 @@ export class TelemetryService extends EventEmitter {
       try {
         this.processLapDataPacket(data);
       } catch (error) {
-        console.error('Error processing lap data packet:', error);
+        logger.error('Error processing lap data packet:', error);
       }
     });
 
@@ -310,7 +311,7 @@ export class TelemetryService extends EventEmitter {
       try {
         this.processCarStatusPacket(data);
       } catch (error) {
-        console.error('Error processing car status packet:', error);
+        logger.error('Error processing car status packet:', error);
       }
     });
 
@@ -321,7 +322,7 @@ export class TelemetryService extends EventEmitter {
         // Emit raw packet for F123UDPProcessor consumption
         this.emit('raw_packet:sessionHistory', data);
       } catch (error) {
-        console.error('Error processing session history packet:', error);
+        logger.error('Error processing session history packet:', error);
       }
     });
 
@@ -332,7 +333,7 @@ export class TelemetryService extends EventEmitter {
         // Emit raw packet for F123UDPProcessor consumption
         this.emit('raw_packet:participants', data);
       } catch (error) {
-        console.error('Error processing participants packet:', error);
+        logger.error('Error processing participants packet:', error);
       }
     });
 
@@ -343,7 +344,7 @@ export class TelemetryService extends EventEmitter {
         // Emit raw packet for F123UDPProcessor consumption
         this.emit('raw_packet:session', data);
       } catch (error) {
-        console.error('Error processing session packet:', error);
+        logger.error('Error processing session packet:', error);
       }
     });
 
@@ -352,7 +353,7 @@ export class TelemetryService extends EventEmitter {
       try {
         this.processEventPacket(data);
       } catch (error) {
-        console.error('Error processing event packet:', error);
+        logger.error('Error processing event packet:', error);
       }
     });
 
@@ -363,7 +364,7 @@ export class TelemetryService extends EventEmitter {
         // Emit raw packet for F123UDPProcessor consumption
         this.emit('raw_packet:finalClassification', data);
       } catch (error) {
-        console.error('Error processing final classification packet:', error);
+        logger.error('Error processing final classification packet:', error);
       }
     });
 
@@ -372,7 +373,7 @@ export class TelemetryService extends EventEmitter {
       try {
         this.processCarDamagePacket(data);
       } catch (error) {
-        console.error('Error processing car damage packet:', error);
+        logger.error('Error processing car damage packet:', error);
       }
     });
   }
@@ -798,7 +799,9 @@ export class TelemetryService extends EventEmitter {
       
       this.stintHistoryMap.set(carIndex, stintHistory);
       
-      // Extract best lap time and sector times from lap history data
+      // Extract sector times from lap history data for the best VALID lap
+      // Note: We don't override bestLapTimeInMS here - UDP provides it correctly with validity checks
+      // We only use Session History to extract sector times for that best lap
       if (data.m_lapHistoryData && Array.isArray(data.m_lapHistoryData)) {
         let bestLapTime = 0;
         let bestLapSector1 = 0;
@@ -806,7 +809,12 @@ export class TelemetryService extends EventEmitter {
         let bestLapSector3 = 0;
         
         for (const lap of data.m_lapHistoryData) {
-          if (lap.m_lapTimeInMS && lap.m_lapTimeInMS > 0) {
+          // Check if lap is valid: lap_valid_bit_flags bit 0x01 = lap valid
+          const lapValidBitFlags = lap.m_lapValidBitFlags || 0;
+          const isLapValid = (lapValidBitFlags & 0x01) === 0x01;
+          
+          // Only consider valid laps with valid lap times
+          if (lap.m_lapTimeInMS && lap.m_lapTimeInMS > 0 && isLapValid) {
             if (bestLapTime === 0 || lap.m_lapTimeInMS < bestLapTime) {
               bestLapTime = lap.m_lapTimeInMS;
               bestLapSector1 = lap.m_sector1TimeInMS || 0;
@@ -816,8 +824,9 @@ export class TelemetryService extends EventEmitter {
           }
         }
         
+        // Store sector times (but not the lap time - UDP provides that correctly)
         if (bestLapTime > 0) {
-          this.bestLapTimesMap.set(carIndex, bestLapTime);
+          // Store sector times for the best valid lap
           this.bestLapSector1Map.set(carIndex, bestLapSector1);
           this.bestLapSector2Map.set(carIndex, bestLapSector2);
           this.bestLapSector3Map.set(carIndex, bestLapSector3);
@@ -985,7 +994,11 @@ export class TelemetryService extends EventEmitter {
 
     // Store current session metadata for post-session processing
     this.currentSessionType = data.m_sessionType || 10;
-    this.currentTrackName = getTrackName(data.m_trackId || -1);
+    // Fix: Use nullish coalescing (??) instead of || to handle trackId 0 (Melbourne) correctly
+    // Only update trackName if trackId is actually provided
+    if (data.m_trackId !== undefined && data.m_trackId !== null) {
+      this.currentTrackName = getTrackName(data.m_trackId);
+    }
     this.currentTrackLength = data.m_trackLength || 0;
     this.currentTotalLaps = data.m_totalLaps || 0;
   }
@@ -1007,7 +1020,6 @@ export class TelemetryService extends EventEmitter {
     this.participantsMap.clear();
     this.stintHistoryMap.clear();
     this.carDamageMap.clear(); // Clear car damage data on session change
-    this.bestLapTimesMap.clear();
     this.bestLapSector1Map.clear();
     this.bestLapSector2Map.clear();
     this.bestLapSector3Map.clear();
@@ -1046,28 +1058,55 @@ export class TelemetryService extends EventEmitter {
 
   // Process Event Packet (ID: 3)
   private processEventPacket(data: any): void {
+    // Check if data is undefined or null
+    if (!data) {
+      logger.debug('Event packet data is undefined or null');
+      return;
+    }
+    
+    // Helper function to convert BigInt to string for JSON serialization
+    const bigIntReplacer = (key: string, value: any) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
+      return value;
+    };
+    
+    // Check if data is just a string (event code directly)
+    if (typeof data === 'string') {
+      const eventCode = data.trim().toUpperCase();
+      logger.debug('Event packet received as string only:', eventCode);
+      // Can't process further without event details
+      return;
+    }
+    
     // Handle both string and array formats (UDP library may parse it)
-    let eventCode: string;
+    let eventCode: string | null = null;
     
     if (typeof data.m_eventStringCode === 'string') {
       // Already a string (UDP library parsed it)
       eventCode = data.m_eventStringCode.trim();
+      logger.debug('Found event code (string):', eventCode);
     } else if (Array.isArray(data.m_eventStringCode)) {
       // Array of bytes - parse to string
       eventCode = String.fromCharCode(...data.m_eventStringCode)
         .replace(/\0/g, '')
         .trim();
+      logger.debug('Found event code (array):', eventCode);
     } else {
-      // Invalid format - return early
+      logger.debug('Could not find m_eventStringCode field. Available keys:', Object.keys(data || {}));
       return;
     }
     
     if (!eventCode || eventCode.length === 0) {
+      logger.debug('Event code is empty after parsing');
       return;
     }
-    
-  const eventDetails = data.m_eventDetails || {};
-  const header = data.m_header || {};
+  
+    const eventDetails = data.m_eventDetails || {};
+    const header = data.m_header || {};
+  
+    logger.debug('Processing event code:', eventCode);
   
   switch (eventCode) {
       case 'SSTA': // Session Started
@@ -1104,6 +1143,10 @@ export class TelemetryService extends EventEmitter {
               lapTime: lapTimeMs,
               timestamp: new Date()
             });
+            
+            logger.debug('FTLP event emitted:', { carIndex, driverName: participant?.driverName, lapTimeMs });
+          } else {
+            logger.warn('FTLP event missing required data:', { carIndex, lapTime });
           }
         }
         break;
@@ -1187,7 +1230,8 @@ export class TelemetryService extends EventEmitter {
         break;
         
       default:
-        // Unknown event code - ignore silently
+        // Unknown event code - log it so we can see what we're getting
+        logger.debug('Unknown event code received:', eventCode);
         break;
     }
   }
@@ -1328,11 +1372,9 @@ export class TelemetryService extends EventEmitter {
           ersDeployedThisLap: 0,
           networkPaused: 0
         };
-        // Update lap data with best lap time from Session History
-        const bestLapTime = this.bestLapTimesMap.get(carIndex);
-        if (bestLapTime && bestLapTime > 0) {
-          lapData.bestLapTimeInMS = bestLapTime;
-        }
+        // Use UDP's bestLapTimeInMS (respects validity) - don't override with Session History
+        // Session History is only used for sector times, which are extracted separately
+        // lapData.bestLapTimeInMS already contains UDP's value from processLapDataPacket
         
         // Micro-sector tracking disabled for performance (can re-enable when needed)
         // this.updateMicroSectorProgress(carIndex, lapData, participant?.driverName || `Driver ${carIndex + 1}`);
@@ -1509,32 +1551,32 @@ export class TelemetryService extends EventEmitter {
 
   public start(): void {
     if (this.isRunning) {
-      console.log('Telemetry service already running');
+      logger.debug('Telemetry service already running');
       return;
     }
     
     try {
       this.f123.start();
       this.isRunning = true;
-      console.log('F1 23 UDP telemetry service started');
+      logger.log('F1 23 UDP telemetry service started');
     } catch (error) {
-      console.error('Failed to start telemetry service:', error);
+      logger.error('Failed to start telemetry service:', error);
       this.isRunning = false;
     }
   }
 
   public stop(): void {
     if (!this.isRunning) {
-      console.log('Telemetry service not running');
+      logger.debug('Telemetry service not running');
       return;
     }
     
     try {
       this.f123.stop();
       this.isRunning = false;
-      console.log('F1 23 UDP telemetry service stopped');
+      logger.log('F1 23 UDP telemetry service stopped');
     } catch (error) {
-      console.error('Failed to stop telemetry service:', error);
+      logger.error('Failed to stop telemetry service:', error);
     }
   }
 
@@ -1544,6 +1586,96 @@ export class TelemetryService extends EventEmitter {
 
   public getDataBuffer(): F123TelemetryData[] {
     return [...this.dataBuffer];
+  }
+
+  // Process remote packets received via Socket.IO from local-host app
+  public processRemotePacket(packetType: string, data: any): void {
+    // Convert string BigInt values back to BigInt if needed
+    const processedData = this.deserializeBigInt(data);
+    
+    try {
+      switch (packetType) {
+        case 'lapData':
+          this.processLapDataPacket(processedData);
+          break;
+        case 'carStatus':
+          this.processCarStatusPacket(processedData);
+          break;
+        case 'sessionHistory':
+          this.processSessionHistoryPacket(processedData);
+          this.emit('raw_packet:sessionHistory', processedData);
+          break;
+        case 'participants':
+          this.processParticipantsPacket(processedData);
+          this.emit('raw_packet:participants', processedData);
+          break;
+        case 'session':
+          this.processSessionPacket(processedData);
+          this.emit('raw_packet:session', processedData);
+          break;
+        case 'event':
+          this.processEventPacket(processedData);
+          break;
+        case 'finalClassification':
+          this.processFinalClassificationPacket(processedData);
+          this.emit('raw_packet:finalClassification', processedData);
+          break;
+        case 'carDamage':
+          this.processCarDamagePacket(processedData);
+          break;
+        default:
+          logger.debug(`Unknown remote packet type: ${packetType}`);
+      }
+    } catch (error) {
+      logger.error(`Error processing remote ${packetType} packet:`, error);
+    }
+  }
+
+  // Helper to deserialize BigInt values (convert string back to BigInt)
+  private deserializeBigInt(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj === 'string' && /^\d+n$/.test(obj)) {
+      // Handle stringified BigInt (format: "123n")
+      return BigInt(obj.slice(0, -1));
+    }
+    if (Array.isArray(obj)) return obj.map(this.deserializeBigInt.bind(this));
+    if (typeof obj === 'object') {
+      const result: any = {};
+      for (const key in obj) {
+        // Special handling for known BigInt fields (sessionUid, etc.)
+        if (key === 'm_sessionUid' || key === 'sessionUid' || key.includes('Uid')) {
+          if (typeof obj[key] === 'string') {
+            try {
+              result[key] = BigInt(obj[key]);
+            } catch {
+              result[key] = obj[key]; // Keep as string if conversion fails
+            }
+          } else {
+            result[key] = obj[key];
+          }
+        } else if (typeof obj[key] === 'string' && /^\d+$/.test(obj[key]) && obj[key].length > 15) {
+          // Large number strings might be BigInt (but not if already handled above)
+          try {
+            result[key] = BigInt(obj[key]);
+          } catch {
+            result[key] = this.deserializeBigInt(obj[key]); // Recurse if conversion fails
+          }
+        } else {
+          result[key] = this.deserializeBigInt(obj[key]);
+        }
+      }
+      return result;
+    }
+    return obj;
+  }
+
+  // Set remote source flag (used to track if packets come from remote vs local UDP)
+  public setRemoteSource(isRemote: boolean): void {
+    this.isRemoteSource = isRemote;
+  }
+
+  public getRemoteSource(): boolean {
+    return this.isRemoteSource;
   }
 
 }

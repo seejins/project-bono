@@ -83,7 +83,7 @@ const SessionTimer = ({ sessionTimeLeft, isRunning }: { sessionTimeLeft: number;
     initialTimeRef.current = sessionTimeLeft;
   }, [sessionTimeLeft]);
   
-  return <span ref={displayRef} className="font-mono">{Math.floor(sessionTimeLeft / 60)}:{(sessionTimeLeft % 60).toFixed(0).padStart(2, '0')}</span>;
+  return <span ref={displayRef}>{Math.floor(sessionTimeLeft / 60)}:{(sessionTimeLeft % 60).toFixed(0).padStart(2, '0')}</span>;
 };
 
 // Get retirement status text based on F1 23 UDP status
@@ -245,13 +245,17 @@ const StintGraph = ({ driver }: StintGraphProps) => {
           return (
             <div
               key={index}
-              className={`h-5 rounded-sm flex items-center justify-center text-[9px] font-bold flex-1 ${
-                element.tire === 'S' ? 'bg-red-500 text-white' :
-                element.tire === 'M' ? 'bg-yellow-500 text-black' :
-                element.tire === 'H' ? 'bg-white text-black' :
-                element.tire === 'I' ? 'bg-green-500 text-white' :
-                element.tire === 'W' ? 'bg-blue-500 text-white' :
-                'bg-white/15 text-white'
+              className={`h-5 flex items-center justify-center flex-1 ${
+                element.isStintCount ? (
+                  `rounded-sm text-[9px] font-bold ${
+                    element.tire === 'S' ? 'bg-red-500 text-white' :
+                    element.tire === 'M' ? 'bg-yellow-500 text-black' :
+                    element.tire === 'H' ? 'bg-gray-200 dark:bg-white text-black' :
+                    element.tire === 'I' ? 'bg-green-500 text-white' :
+                    element.tire === 'W' ? 'bg-blue-500 text-white' :
+                    'bg-white/15 text-white'
+                  }`
+                ) : ''
               }`}
               style={{ 
                 minWidth: '2px'
@@ -260,7 +264,7 @@ const StintGraph = ({ driver }: StintGraphProps) => {
               {element.isStintCount ? (
                 element.lapNum
               ) : icon ? (
-                <img src={icon} alt={`${fullName} tire`} className="h-4 w-4" />
+                <img src={icon} alt={`${fullName} tire`} className="h-5 w-5" />
               ) : (
                 element.tire
               )}
@@ -271,10 +275,10 @@ const StintGraph = ({ driver }: StintGraphProps) => {
           const bgClass = element.tire
             ? (element.tire === 'S' ? 'bg-red-500' :
                element.tire === 'M' ? 'bg-yellow-500' :
-               element.tire === 'H' ? 'bg-white' :
+               element.tire === 'H' ? 'bg-gray-200 dark:bg-white' :
                element.tire === 'I' ? 'bg-green-500' :
                element.tire === 'W' ? 'bg-blue-500' : 'bg-white/15')
-            : 'bg-white/10';
+            : 'bg-gray-300 dark:bg-white/20';
           
           return (
             <div
@@ -317,6 +321,9 @@ export const LiveTimings = () => {
   
   // Track fastest lap carIndex from FTLP event packet (authoritative source)
   const [fastestLapCarIndex, setFastestLapCarIndex] = useState<string | null>(null);
+  
+  // Track selected driver for highlighting
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   
   // Calculate sector coloring once at parent level (shared by both tables)
   const { getCurrentSectorColor, fastestSectors, parseSectorTimeString } = useSectorColoring(drivers);
@@ -794,10 +801,6 @@ export const LiveTimings = () => {
           {/* Left: Track/Session Info */}
           <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
             <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.3em] text-gray-800 dark:text-white/80">
-              <span className="inline-flex items-center gap-2 rounded-full border border-gray-300 dark:border-white/20 bg-gray-100 dark:bg-white/10 px-4 py-1.5 text-xs font-bold tracking-[0.4em] text-gray-900 dark:text-white">
-                Live
-              </span>
-              <span className="hidden md:inline-block text-gray-500 dark:text-white/60">•</span>
               <span className="text-gray-700 dark:text-white/70">{sessionData.trackName}</span>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-base font-medium tracking-[0.12em] text-gray-900 dark:text-white">
@@ -815,11 +818,6 @@ export const LiveTimings = () => {
                   />
                 )}
               </span>
-              {sessionData.sessionType === 'RACE' && (
-                <span className="flex items-center gap-2 text-gray-600 dark:text-white/60">
-                  Laps {sessionData.currentLap || 0}/{sessionData.totalLaps || 0}
-                </span>
-              )}
             </div>
           </div>
 
@@ -832,11 +830,11 @@ export const LiveTimings = () => {
             </div>
           )}
 
-          {/* Right: Connection Status */}
+          {/* Right: Live Status */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-gray-300 dark:border-white/15 bg-gray-100 dark:bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-gray-700 dark:text-white/70">
-              <span className={`block h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(244,114,182,0.7)]'}`} />
-              {isConnected ? 'Connected' : 'Disconnected'}
+              <span className={`block h-2 w-2 rounded-full ${isConnected ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-gray-400 shadow-[0_0_8px_rgba(156,163,175,0.7)]'}`} />
+              {isConnected ? 'Live' : 'Offline'}
             </div>
           </div>
         </div>
@@ -861,6 +859,8 @@ export const LiveTimings = () => {
                  previousDrivers={previousDrivers}
                  getCurrentSectorColor={getCurrentSectorColor}
                  fastestLapCarIndex={fastestLapCarIndex}
+                 selectedDriverId={selectedDriverId}
+                 onRowClick={setSelectedDriverId}
                />
               ) : (
                <PracticeQualifyingTimingTable 
@@ -869,6 +869,8 @@ export const LiveTimings = () => {
                  getCurrentSectorColor={getCurrentSectorColor}
                  fastestSectors={fastestSectors}
                  parseSectorTimeString={parseSectorTimeString}
+                 selectedDriverId={selectedDriverId}
+                 onRowClick={setSelectedDriverId}
                />
             )}
           </div>
@@ -943,7 +945,7 @@ const useSectorColoring = (drivers: DriverData[]) => {
       if (fastest === Infinity || fastest === 0) return '';
       
       if (currentTime < fastest) {
-        return 'text-purple-400 font-semibold';
+        return 'text-purple-400 dark:text-purple-400 font-semibold';
       }
       
       // Compare against best lap sectors (not previous LS values)
@@ -990,19 +992,26 @@ const PracticeDriverRow = React.memo(({
   getCurrentSectorColor,
   isFastestS1,
   isFastestS2,
-  isFastestS3
+  isFastestS3,
+  isSelected,
+  onRowClick
 }: {
   driver: DriverData;
   getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string;
   isFastestS1: boolean;
   isFastestS2: boolean;
   isFastestS3: boolean;
+  isSelected: boolean;
+  onRowClick: (driverId: string) => void;
 }) => {
               return (
     <div className="relative transition-all duration-150 ease-out">
       <div
-        className="grid grid-cols-13 gap-0 items-center border-b border-gray-200 dark:border-white/10 p-3 hover:bg-gray-50 dark:hover:bg-white/10"
+        className={`grid grid-cols-13 gap-0 items-center border-b border-gray-200 dark:border-white/10 p-3 hover:bg-gray-50 dark:hover:bg-white/10 cursor-pointer ${
+          isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
+        }`}
         style={{gridTemplateColumns: '64px 116px 116px 96px 80px 80px 80px 1fr 116px 96px 80px 80px 80px'}}
+        onClick={() => onRowClick(driver.id)}
       >
         {/* POS */}
             <div className="px-2 border-r border-gray-200 dark:border-white/10 flex items-center justify-center">
@@ -1030,7 +1039,7 @@ const PracticeDriverRow = React.memo(({
         <div className={`px-[11px] border-r border-white/10 flex items-center justify-between ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         }`}>
-          <span className="text-base font-mono tabular-nums tracking-tighter text-gray-900 dark:text-white">{driver.fastestLap}</span>
+          <span className="text-sm 2xl:text-base tabular-nums tracking-tighter text-gray-900 dark:text-white">{driver.fastestLap}</span>
           {driver.fastestLapTire && (() => {
             const icon = F123DataService.getTireCompoundIcon(driver.fastestLapTire);
             const fullName = F123DataService.getTireCompoundFullName(driver.fastestLapTire);
@@ -1052,30 +1061,42 @@ const PracticeDriverRow = React.memo(({
             </div>
             
         {/* Gap */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
         {/* S1 (Best Lap) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
-        } ${isFastestS1 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) 
+            ? 'opacity-40 text-gray-500 dark:text-white/45' 
+            : isFastestS1 
+              ? 'text-purple-400 dark:text-purple-400 font-semibold' 
+              : 'text-gray-700 dark:text-white/80'
+        }`}>
           {driver.sector1Time || '--:--'}
             </div>
             
         {/* S2 (Best Lap) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
-        } ${isFastestS2 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) 
+            ? 'opacity-40 text-gray-500 dark:text-white/45' 
+            : isFastestS2 
+              ? 'text-purple-400 dark:text-purple-400 font-semibold' 
+              : 'text-gray-700 dark:text-white/80'
+        }`}>
           {driver.sector2Time || '--:--'}
         </div>
         
         {/* S3 (Best Lap) */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
-        } ${isFastestS3 ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) 
+            ? 'opacity-40 text-gray-500 dark:text-white/45' 
+            : isFastestS3 
+              ? 'text-purple-400 dark:text-purple-400 font-semibold' 
+              : 'text-gray-700 dark:text-white/80'
+        }`}>
           {driver.sector3Time || '--:--'}
         </div>
         
@@ -1121,21 +1142,21 @@ const PracticeDriverRow = React.memo(({
     </div>
         
         {/* S1 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS1 || '--:--'}
         </div>
         
         {/* S2 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS2 || '--:--'}
         </div>
         
         {/* S3 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS3 || '--:--'}
@@ -1161,7 +1182,8 @@ const PracticeDriverRow = React.memo(({
     prevProps.driver.microSectors === nextProps.driver.microSectors &&
     prevProps.isFastestS1 === nextProps.isFastestS1 &&
     prevProps.isFastestS2 === nextProps.isFastestS2 &&
-    prevProps.isFastestS3 === nextProps.isFastestS3
+    prevProps.isFastestS3 === nextProps.isFastestS3 &&
+    prevProps.isSelected === nextProps.isSelected
   );
 });
 
@@ -1170,18 +1192,25 @@ const RaceDriverRow = React.memo(({
   driver,
   getCurrentSectorColor,
   fastestLapCarIndex,
-  StintGraph
+  StintGraph,
+  isSelected,
+  onRowClick
 }: {
   driver: DriverData;
   getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string;
   fastestLapCarIndex: string | null;
   StintGraph: React.FC<{ driver: DriverData }>;
+  isSelected: boolean;
+  onRowClick: (driverId: string) => void;
 }) => {
               return (
     <div className="relative transition-all duration-150 ease-out">
       <div
-        className="grid grid-cols-12 gap-0 items-center border-b border-white/10 p-3 hover:bg-white/10"
+        className={`grid grid-cols-12 gap-0 items-center border-b border-white/10 p-3 hover:bg-white/10 cursor-pointer ${
+          isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
+        }`}
         style={{gridTemplateColumns: '64px 111px 80px 96px 116px 116px 1fr 116px 96px 80px 80px 80px'}}
+        onClick={() => onRowClick(driver.id)}
       >
         {/* POS */}
             <div className="px-2 border-r border-gray-200 dark:border-white/10 flex items-center justify-center">
@@ -1204,13 +1233,13 @@ const RaceDriverRow = React.memo(({
           <div className="flex items-center justify-end space-x-1 w-14">
                 {driver.positionChange > 0 ? (
                   <>
-                <ArrowUp className="w-4 h-4 text-emerald-400 position-change" />
-                <span className="text-sm text-emerald-300 font-semibold position-change tabular-nums">{driver.positionChange}</span>
+                <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400 position-change" />
+                <span className="text-sm text-green-600 dark:text-green-400 font-semibold position-change tabular-nums">{driver.positionChange}</span>
                   </>
                 ) : driver.positionChange < 0 ? (
                   <>
-                <ArrowDown className="w-4 h-4 text-rose-400 position-change" />
-                <span className="text-sm text-rose-300 font-semibold position-change tabular-nums">{Math.abs(driver.positionChange)}</span>
+                <ArrowDown className="w-4 h-4 text-red-600 dark:text-red-400 position-change" />
+                <span className="text-sm text-red-600 dark:text-red-400 font-semibold position-change tabular-nums">{Math.abs(driver.positionChange)}</span>
                   </>
                 ) : (
                   <>
@@ -1222,28 +1251,32 @@ const RaceDriverRow = React.memo(({
             </div>
             
         {/* Gap */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : ''
         } ${getRetirementStatusColor(driver.status)}`}>
           {isDriverRetired(driver.status) ? getRetirementStatus(driver.status) : driver.gap}
             </div>
             
             {/* Interval */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.interval}
             </div>
             
             {/* Best Lap */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
-          isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
-        } ${driver.id === fastestLapCarIndex ? 'text-fuchsia-300 font-semibold drop-shadow-[0_0_8px_rgba(217,70,239,0.45)]' : ''}`}>
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
+          isDriverRetired(driver.status) 
+            ? 'opacity-40 text-gray-500 dark:text-white/45' 
+            : driver.id === fastestLapCarIndex 
+              ? 'text-purple-400 dark:text-purple-400 font-semibold' 
+              : 'text-gray-700 dark:text-white/80'
+        }`}>
               {driver.bestLap}
             </div>
             
             {/* Last Lap */}
-        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 border-r border-gray-200 dark:border-white/10 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : 'text-gray-700 dark:text-white/80'
             }`}>
               {driver.lastLapTime}
@@ -1273,21 +1306,21 @@ const RaceDriverRow = React.memo(({
         </div>
         
         {/* S1 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's1') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS1 || '--:--'}
         </div>
         
         {/* S2 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's2') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS2 || '--:--'}
         </div>
         
         {/* S3 (Current) */}
-        <div className={`px-2 text-base text-center font-mono tabular-nums tracking-tighter ${
+        <div className={`px-2 text-sm 2xl:text-base text-center tabular-nums tracking-tighter ${
           isDriverRetired(driver.status) ? 'opacity-40 text-gray-500 dark:text-white/45' : getCurrentSectorColor(driver, 's3') || 'text-gray-600 dark:text-white/70'
         }`}>
           {driver.LS3 || '--:--'}
@@ -1311,7 +1344,8 @@ const RaceDriverRow = React.memo(({
     prevProps.driver.LS3 === nextProps.driver.LS3 &&
     prevProps.driver.stintHistory === nextProps.driver.stintHistory &&
     prevProps.driver.stintLaps === nextProps.driver.stintLaps &&
-    prevProps.fastestLapCarIndex === nextProps.fastestLapCarIndex
+    prevProps.fastestLapCarIndex === nextProps.fastestLapCarIndex &&
+    prevProps.isSelected === nextProps.isSelected
   );
 });
 
@@ -1321,13 +1355,17 @@ const PracticeQualifyingTimingTable = ({
   previousDrivers,
   getCurrentSectorColor,
   fastestSectors,
-  parseSectorTimeString
+  parseSectorTimeString,
+  selectedDriverId,
+  onRowClick
 }: { 
   drivers: DriverData[], 
   previousDrivers: DriverData[],
   getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string,
   fastestSectors: { fastestS1: number, fastestS2: number, fastestS3: number, sectorBestMap: Record<string, {s1: number, s2: number, s3: number}> },
-  parseSectorTimeString: (timeStr: string) => number
+  parseSectorTimeString: (timeStr: string) => number,
+  selectedDriverId: string | null,
+  onRowClick: (driverId: string) => void
 }) => {
   // Pre-calculate sector fastest flags for all drivers
   const driversWithFlags = useSectorFastestFlags(drivers, fastestSectors, parseSectorTimeString);
@@ -1359,6 +1397,8 @@ const PracticeQualifyingTimingTable = ({
               isFastestS1={driverWithFlags.isFastestS1}
               isFastestS2={driverWithFlags.isFastestS2}
               isFastestS3={driverWithFlags.isFastestS3}
+              isSelected={selectedDriverId === driverWithFlags.id}
+              onRowClick={onRowClick}
             />
           ))}
         </div>
@@ -1371,12 +1411,16 @@ const RaceTimingTable = ({
   drivers, 
   previousDrivers,
   getCurrentSectorColor,
-  fastestLapCarIndex
+  fastestLapCarIndex,
+  selectedDriverId,
+  onRowClick
 }: { 
   drivers: DriverData[], 
   previousDrivers: DriverData[],
   getCurrentSectorColor: (driver: DriverData, sector: 's1' | 's2' | 's3') => string,
-  fastestLapCarIndex: string | null
+  fastestLapCarIndex: string | null,
+  selectedDriverId: string | null,
+  onRowClick: (driverId: string) => void
 }) => {
   // Use shared logic from parent (no local calculations)
 
@@ -1405,6 +1449,8 @@ const RaceTimingTable = ({
               getCurrentSectorColor={getCurrentSectorColor}
               fastestLapCarIndex={fastestLapCarIndex}
               StintGraph={StintGraph}
+              isSelected={selectedDriverId === driver.id}
+              onRowClick={onRowClick}
             />
           ))}
         </div>

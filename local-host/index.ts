@@ -1,40 +1,17 @@
 import { F123UDP } from 'f1-23-udp';
-import axios from 'axios';
 import dotenv from 'dotenv';
+import { io, Socket } from 'socket.io-client';
 
 dotenv.config();
 
-interface SessionData {
-  trackName: string;
-  sessionType: string;
-  date: string;
-  results: Array<{
-    driverName: string;
-    driverNumber: number;
-    position: number;
-    lapTime: number;
-    sector1Time: number;
-    sector2Time: number;
-    sector3Time: number;
-    fastestLap: boolean;
-    status: string;
-    gridPosition: number;
-    pitStops: number;
-    tireCompound: string;
-  }>;
-  drivers: Array<{
-    driverName: string;
-    driverNumber: number;
-  }>;
-}
+const DEBUG = process.env.DEBUG === 'true';
 
 class LocalHostApp {
   private udp: F123UDP;
   private cloudApiUrl: string;
   private apiKey: string;
-  private currentSession: SessionData | null = null;
-  private sessionStartTime: Date | null = null;
-  private isUploading = false;
+  private socket: Socket | null = null;
+  private isStreaming = false;
 
   constructor() {
     this.cloudApiUrl = process.env.CLOUD_API_URL || '';
@@ -48,27 +25,118 @@ class LocalHostApp {
     }
 
     this.udp = new F123UDP();
+    this.setupSocketConnection();
     this.setupEventHandlers();
   }
 
-  private setupEventHandlers() {
-    // Use motionEx event as the main data source
-    this.udp.on('motionEx', (data: any) => {
-      if (!this.currentSession) {
-        // Initialize session on first data
-        this.sessionStartTime = new Date();
-        this.currentSession = {
-          trackName: 'Unknown Track',
-          sessionType: 'Race',
-          date: this.sessionStartTime.toISOString(),
-          results: [],
-          drivers: []
-        };
-        console.log('🏁 Session started');
+  private setupSocketConnection() {
+    // Connect to cloud backend via Socket.IO
+    const socketUrl = this.cloudApiUrl.replace(/\/$/, ''); // Remove trailing slash
+    this.socket = io(socketUrl, {
+      auth: {
+        apiKey: this.apiKey
+      },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelayMax: 5000
+    });
+
+    this.socket.on('connect', () => {
+      console.log('✅ Connected to cloud backend via Socket.IO');
+      this.isStreaming = true;
+      if (DEBUG) {
+        console.log('📡 Socket.IO connection established');
       }
-      
-      // Process motion data
-      this.processMotionData(data);
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('⚠️  Disconnected from cloud backend:', reason);
+      this.isStreaming = false;
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('❌ Socket.IO connection error:', error.message);
+      this.isStreaming = false;
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log(`✅ Reconnected to cloud backend (attempt ${attemptNumber})`);
+      this.isStreaming = true;
+    });
+  }
+
+  // Helper function to serialize BigInt values for Socket.IO
+  private serializeBigInt(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj === 'bigint') return obj.toString();
+    if (Array.isArray(obj)) return obj.map(this.serializeBigInt.bind(this));
+    if (typeof obj === 'object') {
+      const result: any = {};
+      for (const key in obj) {
+        result[key] = this.serializeBigInt(obj[key]);
+      }
+      return result;
+    }
+    return obj;
+  }
+
+  // Forward UDP packet to backend via Socket.IO
+  private forwardPacket(packetType: string, data: any) {
+    if (!this.socket || !this.socket.connected) {
+      return; // Don't try to send if not connected
+    }
+
+    try {
+      const serializedData = this.serializeBigInt(data);
+      this.socket.emit(`packet:${packetType}`, serializedData);
+    } catch (error) {
+      if (DEBUG) {
+        console.error(`❌ Error forwarding ${packetType} packet:`, error);
+      }
+    }
+  }
+
+  private setupEventHandlers() {
+    // Lap Data Packet (ID: 2) - Core timing data
+    this.udp.on('lapData', (data: any) => {
+      this.forwardPacket('lapData', data);
+    });
+
+    // Car Status Packet (ID: 7) - Tire and fuel data
+    this.udp.on('carStatus', (data: any) => {
+      this.forwardPacket('carStatus', data);
+    });
+
+    // Session History Packet (ID: 11) - Stint data
+    this.udp.on('sessionHistory', (data: any) => {
+      this.forwardPacket('sessionHistory', data);
+    });
+
+    // Participants Packet (ID: 4) - Driver information
+    this.udp.on('participants', (data: any) => {
+      this.forwardPacket('participants', data);
+    });
+
+    // Session Packet (ID: 1) - Session information
+    this.udp.on('session', (data: any) => {
+      this.forwardPacket('session', data);
+    });
+
+    // Event Packet (ID: 3) - Race events
+    this.udp.on('event', (data: any) => {
+      this.forwardPacket('event', data);
+    });
+
+    // Final Classification Packet (ID: 8) - Post-session results
+    this.udp.on('finalClassification', (data: any) => {
+      this.forwardPacket('finalClassification', data);
+    });
+
+    // Car Damage Packet (ID: 10) - Tire wear and damage data
+    this.udp.on('carDamage', (data: any) => {
+      this.forwardPacket('carDamage', data);
     });
 
     // Handle any errors
@@ -77,154 +145,16 @@ class LocalHostApp {
         console.error('❌ UDP Error:', error);
       });
     } catch (e) {
-      console.log('Note: Error event not available in this version');
-    }
-  }
-
-  private processMotionData(data: any) {
-    if (!this.currentSession) return;
-
-    // Simple motion data processing
-    // This is a basic implementation - in reality you'd process
-    // the motion data to extract lap times, positions, etc.
-    console.log('📊 Processing motion data...');
-  }
-
-  private processLapData(data: any) {
-    if (!this.currentSession) return;
-
-    // Find or create driver entry
-    let driverIndex = this.currentSession.results.findIndex(
-      r => r.driverNumber === data.driverNumber
-    );
-
-    if (driverIndex === -1) {
-      // New driver
-      this.currentSession.results.push({
-        driverName: data.driverName || `Driver ${data.driverNumber}`,
-        driverNumber: data.driverNumber,
-        position: data.position,
-        lapTime: data.lapTime,
-        sector1Time: data.sector1Time || 0,
-        sector2Time: data.sector2Time || 0,
-        sector3Time: data.sector3Time || 0,
-        fastestLap: false,
-        status: 'running',
-        gridPosition: data.position,
-        pitStops: 0,
-        tireCompound: 'unknown'
-      });
-    } else {
-      // Update existing driver
-      const driver = this.currentSession.results[driverIndex];
-      driver.position = data.position;
-      driver.lapTime = data.lapTime;
-      driver.sector1Time = data.sector1Time || driver.sector1Time;
-      driver.sector2Time = data.sector2Time || driver.sector2Time;
-      driver.sector3Time = data.sector3Time || driver.sector3Time;
-    }
-
-    // Update drivers list
-    if (!this.currentSession.drivers.find(d => d.driverNumber === data.driverNumber)) {
-      this.currentSession.drivers.push({
-        driverName: data.driverName || `Driver ${data.driverNumber}`,
-        driverNumber: data.driverNumber
-      });
-    }
-  }
-
-  private processCarStatus(data: any) {
-    if (!this.currentSession) return;
-
-    const driverIndex = this.currentSession.results.findIndex(
-      r => r.driverNumber === data.driverNumber
-    );
-
-    if (driverIndex !== -1) {
-      this.currentSession.results[driverIndex].tireCompound = data.tireCompound || 'unknown';
-      this.currentSession.results[driverIndex].pitStops = data.pitStops || 0;
-    }
-  }
-
-  private processSessionData(data: any) {
-    if (!this.currentSession) return;
-
-    // Update grid positions
-    if (data.gridPositions) {
-      data.gridPositions.forEach((pos: any, index: number) => {
-        const driverIndex = this.currentSession!.results.findIndex(
-          r => r.driverNumber === pos.driverNumber
-        );
-        if (driverIndex !== -1) {
-          this.currentSession!.results[driverIndex].gridPosition = pos.position;
-        }
-      });
-    }
-  }
-
-  private async uploadSessionData() {
-    if (!this.currentSession || this.isUploading) return;
-
-    this.isUploading = true;
-    console.log('📤 Uploading session data to cloud...');
-
-    try {
-      // Find fastest lap
-      const fastestLapTime = Math.min(
-        ...this.currentSession.results
-          .filter(r => r.lapTime > 0)
-          .map(r => r.lapTime)
-      );
-
-      // Mark fastest lap
-      this.currentSession.results.forEach(result => {
-        result.fastestLap = result.lapTime === fastestLapTime;
-      });
-
-      const response = await axios.post(
-        `${this.cloudApiUrl}/api/sessions/upload`,
-        {
-          sessionData: this.currentSession,
-          seasonId: process.env.SEASON_ID || 'default-season',
-          raceId: null // Let the backend create a new race
-        },
-        {
-          headers: {
-            'X-API-Key': this.apiKey,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000 // 30 second timeout
-        }
-      );
-
-      if (response.data.success) {
-        console.log('✅ Session data uploaded successfully!');
-        console.log(`   Race ID: ${response.data.raceId}`);
-        console.log(`   Results: ${response.data.importedResults}`);
-        console.log(`   Lap Times: ${response.data.importedLapTimes}`);
-      } else {
-        console.log('⚠️  Upload completed with warnings:', response.data.message);
-        if (response.data.unmappedDrivers) {
-          console.log('   Unmapped drivers:', response.data.unmappedDrivers.join(', '));
-        }
+      if (DEBUG) {
+        console.log('Note: Error event not available in this version');
       }
-
-    } catch (error) {
-      console.error('❌ Failed to upload session data:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('   Status:', error.response?.status);
-        console.error('   Message:', error.response?.data?.error);
-      }
-    } finally {
-      this.isUploading = false;
-      this.currentSession = null;
-      this.sessionStartTime = null;
     }
   }
 
   public async start() {
     console.log('🚀 Starting F1 23 UDP Capture...');
     console.log(`📡 Cloud API: ${this.cloudApiUrl}`);
+    console.log('🔌 Connecting to cloud backend...');
     console.log('🎮 Waiting for F1 23 session...');
     console.log('   Make sure F1 23 is running and UDP is enabled');
     console.log('   UDP Port: 20777');
@@ -233,6 +163,7 @@ class LocalHostApp {
     try {
       await this.udp.start();
       console.log('✅ UDP listener started successfully');
+      console.log('📡 Streaming packets to cloud backend...');
     } catch (error) {
       console.error('❌ Failed to start UDP listener:', error);
       process.exit(1);
@@ -241,6 +172,14 @@ class LocalHostApp {
 
   public async stop() {
     console.log('\n🛑 Stopping UDP capture...');
+    
+    // Disconnect Socket.IO connection
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+      this.isStreaming = false;
+    }
+    
     await this.udp.stop();
     console.log('✅ UDP capture stopped');
   }
