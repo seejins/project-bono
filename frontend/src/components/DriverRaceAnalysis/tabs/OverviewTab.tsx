@@ -199,7 +199,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className={`${LABEL_CLASS} mb-1`}>Sector 1</div>
               <div className={`text-base font-semibold ${
                 raceStats.bestSector1 !== undefined && raceStats.bestSector1 !== null
-                  ? sessionFastestSectors?.sector1 != null && Math.abs(raceStats.bestSector1 - sessionFastestSectors.sector1) < 50
+                  ? sessionFastestSectors?.sector1 != null && raceStats.bestSector1 === sessionFastestSectors.sector1
                     ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
                     : 'text-slate-900 dark:text-slate-100' // Personal best - default color
                   : 'text-slate-900 dark:text-slate-100'
@@ -213,7 +213,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className={`${LABEL_CLASS} mb-1`}>Sector 2</div>
               <div className={`text-base font-semibold ${
                 raceStats.bestSector2 !== undefined && raceStats.bestSector2 !== null
-                  ? sessionFastestSectors?.sector2 != null && Math.abs(raceStats.bestSector2 - sessionFastestSectors.sector2) < 50
+                  ? sessionFastestSectors?.sector2 != null && raceStats.bestSector2 === sessionFastestSectors.sector2
                     ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
                     : 'text-slate-900 dark:text-slate-100' // Personal best - default color
                   : 'text-slate-900 dark:text-slate-100'
@@ -227,7 +227,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className={`${LABEL_CLASS} mb-1`}>Sector 3</div>
               <div className={`text-base font-semibold ${
                 raceStats.bestSector3 !== undefined && raceStats.bestSector3 !== null
-                  ? sessionFastestSectors?.sector3 != null && Math.abs(raceStats.bestSector3 - sessionFastestSectors.sector3) < 50
+                  ? sessionFastestSectors?.sector3 != null && raceStats.bestSector3 === sessionFastestSectors.sector3
                     ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
                     : 'text-slate-900 dark:text-slate-100' // Personal best - default color
                   : 'text-slate-900 dark:text-slate-100'

@@ -50,6 +50,25 @@ const formatEventMeta = (event: SeasonEventSummary | null) => {
   });
 };
 
+// Helper function moved outside component for better performance
+const getPositionBadgeClass = (position?: number | null) => {
+  if (position === 1) {
+    return 'inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-amber-500';
+  }
+  if (position === 2) {
+    return 'inline-flex items-center rounded-full bg-slate-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-400';
+  }
+  if (position === 3) {
+    return 'inline-flex items-center rounded-full bg-orange-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-orange-400';
+  }
+  return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300';
+};
+
+// Shared render function for points column to avoid duplication
+const renderPointsCell = (points: number) => (
+  <span className="font-semibold text-slate-900 dark:text-slate-100">{points} pts</span>
+);
+
 export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, onDriverSelect, onScheduleView }) => {
   const { currentSeason } = useSeason();
   const { analysis, loading, error } = useSeasonAnalysis(currentSeason?.id);
@@ -67,29 +86,15 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     }
 
     // Get all drivers (league + AI) or just league drivers based on toggle
-    let standingsList: DriverSeasonSummary[] = [];
+    const standingsList = showAllDrivers 
+      ? (analysis.standings || [])
+      : (analysis.drivers || []);
     
-    if (showAllDrivers) {
-      // Show all drivers including AI from standings
-      standingsList = analysis.standings || [];
-    } else {
-      // Show only league drivers (exclude AI)
-      standingsList = analysis.drivers || [];
-    }
-    
-    return [...standingsList]
-      .filter((driver) => {
-        // If showing season drivers only, exclude AI drivers
-        if (!showAllDrivers) {
-          return !driver.isAi;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        const positionA = a.position ?? Number.MAX_SAFE_INTEGER;
-        const positionB = b.position ?? Number.MAX_SAFE_INTEGER;
-        return positionA - positionB;
-      });
+    return [...standingsList].sort((a, b) => {
+      const positionA = a.position ?? Number.MAX_SAFE_INTEGER;
+      const positionB = b.position ?? Number.MAX_SAFE_INTEGER;
+      return positionA - positionB;
+    });
   }, [analysis, showAllDrivers]);
 
   const constructorSummaries: ConstructorSeasonSummary[] = useMemo(() => {
@@ -208,19 +213,6 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     },
   ];
 
-  const getPositionBadgeClass = (position?: number | null) => {
-    if (position === 1) {
-      return 'inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-amber-500';
-    }
-    if (position === 2) {
-      return 'inline-flex items-center rounded-full bg-slate-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-400';
-    }
-    if (position === 3) {
-      return 'inline-flex items-center rounded-full bg-orange-400/15 px-3 py-1 text-xs 2xl:text-sm font-semibold text-orange-400';
-    }
-    return 'inline-flex items-center rounded-full bg-slate-900/10 px-3 py-1 text-xs 2xl:text-sm font-semibold text-slate-600 dark:bg-slate-700/40 dark:text-slate-300';
-  };
-
   const standingsColumns = useMemo(
     () => [
       {
@@ -268,9 +260,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       {
         key: 'points',
         label: 'Points',
-        render: (_: number, row: DriverSeasonSummary) => (
-          <span className="font-semibold text-slate-900 dark:text-slate-100">{row.points} pts</span>
-        ),
+        render: (_: number, row: DriverSeasonSummary) => renderPointsCell(row.points),
       },
     ],
     []
@@ -312,9 +302,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       {
         key: 'points',
         label: 'Points',
-        render: (_: number, row: ConstructorSeasonSummary) => (
-          <span className="font-semibold text-slate-900 dark:text-slate-100">{row.points} pts</span>
-        ),
+        render: (_: number, row: ConstructorSeasonSummary) => renderPointsCell(row.points),
       },
     ],
     []
