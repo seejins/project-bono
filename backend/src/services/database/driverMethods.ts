@@ -376,12 +376,9 @@ export const driverMethods = {
             -- Only count if we don't already have qualifying data for this race
             AND NOT EXISTS (
               SELECT 1
-              FROM driver_session_results dsr2
-              JOIN session_results sr2 ON sr2.id = dsr2.session_result_id
+              FROM session_results sr2
               WHERE sr2.race_id = r.id
                 AND sr2.session_type BETWEEN 5 AND 9
-                AND dsr2.user_id = dsr.user_id
-                AND dsr2.position = 1
             )
         ) poles
       `,

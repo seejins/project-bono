@@ -692,7 +692,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         const isSessionFastest = Boolean(
           sessionFastestSectors?.sector1 != null && 
           value != null && 
-          Math.abs(value - sessionFastestSectors.sector1) < 1
+          Math.abs(value - sessionFastestSectors.sector1) < 50
         );
         const isPersonalBest = Boolean(
           raceStats?.bestSector1 != null && value != null && raceStats.bestSector1 === value
@@ -721,7 +721,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         const isSessionFastest = Boolean(
           sessionFastestSectors?.sector2 != null && 
           value != null && 
-          Math.abs(value - sessionFastestSectors.sector2) < 1
+          Math.abs(value - sessionFastestSectors.sector2) < 50
         );
         const isPersonalBest = Boolean(
           raceStats?.bestSector2 != null && value != null && raceStats.bestSector2 === value
@@ -750,7 +750,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         const isSessionFastest = Boolean(
           sessionFastestSectors?.sector3 != null && 
           value != null && 
-          Math.abs(value - sessionFastestSectors.sector3) < 1
+          Math.abs(value - sessionFastestSectors.sector3) < 50
         );
         const isPersonalBest = Boolean(
           raceStats?.bestSector3 != null && value != null && raceStats.bestSector3 === value

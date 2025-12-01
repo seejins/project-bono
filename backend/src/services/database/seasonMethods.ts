@@ -203,7 +203,8 @@ export const seasonMethods = {
           dsr.points,
           dsr.position,
           dsr.fastest_lap,
-          dsr.pole_position
+          dsr.user_id,
+          r.id as race_id
         FROM driver_session_results dsr
         JOIN session_results sr ON sr.id = dsr.session_result_id
         JOIN races r ON r.id = sr.race_id
@@ -211,16 +212,81 @@ export const seasonMethods = {
         WHERE r.season_id = $1
           AND sr.session_type = 10
           AND COALESCE(d.team, dsr.json_team_name) IS NOT NULL
+      ),
+      team_poles AS (
+        SELECT 
+          normalized_team,
+          COUNT(*) as pole_count
+        FROM (
+          -- Count poles from qualifying sessions where position = 1
+          SELECT DISTINCT 
+            CASE 
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
+                OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
+              THEN 'Ferrari'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alpha%tauri%' 
+                OR LOWER(COALESCE(d.team, dsr.json_team_name)) = 'alphatauri'
+              THEN 'AlphaTauri'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%red%bull%' 
+                OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%redbull%'
+              THEN 'Red Bull Racing'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%aston%martin%'
+              THEN 'Aston Martin'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alfa%romeo%'
+                OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%sauber%'
+              THEN 'Alfa Romeo'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%mclaren%'
+              THEN 'McLaren'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alpine%'
+              THEN 'Alpine'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%williams%'
+              THEN 'Williams'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%haas%'
+              THEN 'Haas'
+              WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%mercedes%'
+              THEN 'Mercedes'
+              ELSE COALESCE(d.team, dsr.json_team_name)
+            END as normalized_team,
+            r.id as race_id
+          FROM driver_session_results dsr
+          JOIN session_results sr ON sr.id = dsr.session_result_id
+          JOIN races r ON r.id = sr.race_id
+          LEFT JOIN drivers d ON dsr.user_id = d.id AND d.season_id = $1
+          WHERE r.season_id = $1
+            AND sr.session_type BETWEEN 5 AND 9
+            AND dsr.position = 1
+            AND COALESCE(d.team, dsr.json_team_name) IS NOT NULL
+          
+          UNION
+          
+          -- Count poles from race sessions where grid_position = 1 (fallback if qualifying data missing)
+          SELECT DISTINCT nt.normalized_team, nt.race_id
+          FROM normalized_teams nt
+          JOIN driver_session_results dsr ON dsr.user_id = nt.user_id
+          JOIN session_results sr ON sr.id = dsr.session_result_id
+          WHERE sr.race_id = nt.race_id
+            AND sr.session_type = 10
+            AND dsr.grid_position = 1
+            -- Only count if we don't already have qualifying data for this race
+            AND NOT EXISTS (
+              SELECT 1
+              FROM session_results sr2
+              WHERE sr2.race_id = nt.race_id
+                AND sr2.session_type BETWEEN 5 AND 9
+            )
+        ) poles
+        GROUP BY normalized_team
       )
       SELECT 
-        normalized_team as team,
-        COALESCE(SUM(points), 0) AS points,
-        COUNT(*) FILTER (WHERE position = 1) AS wins,
-        COUNT(*) FILTER (WHERE position <= 3) AS podiums,
-        COUNT(*) FILTER (WHERE fastest_lap = true) AS fastest_laps,
-        COUNT(*) FILTER (WHERE pole_position = true) AS pole_positions
-      FROM normalized_teams
-      GROUP BY normalized_team
+        nt.normalized_team as team,
+        COALESCE(SUM(nt.points), 0) AS points,
+        COUNT(*) FILTER (WHERE nt.position = 1) AS wins,
+        COUNT(*) FILTER (WHERE nt.position <= 3) AS podiums,
+        COUNT(*) FILTER (WHERE nt.fastest_lap = true) AS fastest_laps,
+        COALESCE(tp.pole_count, 0) AS pole_positions
+      FROM normalized_teams nt
+      LEFT JOIN team_poles tp ON tp.normalized_team = nt.normalized_team
+      GROUP BY nt.normalized_team
       ORDER BY points DESC, wins DESC, podiums DESC
       `,
       [seasonId],
