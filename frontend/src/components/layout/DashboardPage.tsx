@@ -75,7 +75,7 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
           <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/90 via-black/55 to-transparent" />
         </div>
 
-        <div className="relative mx-auto flex h-full w-full max-w-[1600px] flex-col items-center justify-center gap-6 px-10 pb-12 pt-40 text-center lg:px-20 lg:pb-16 lg:pt-40">
+        <div className="relative mx-auto flex h-full w-full max-w-[1600px] flex-col items-center justify-center gap-6 px-4 pb-12 pt-40 text-center sm:px-6 md:px-10 lg:px-20 lg:pb-16 lg:pt-40">
           {subtitle && (
             <p className="text-sm font-semibold uppercase tracking-[0.4em] text-white/75 md:text-base">
               {subtitle}
@@ -98,7 +98,7 @@ export function DashboardPage({ hero, children, contentClassName, isReady = true
         animate={isReady ? { opacity: 1, y: 0 } : { opacity: 0.4, y: 8 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
         className={clsx(
-          'relative z-10 mx-auto w-full max-w-[2048px] -mt-12 min-h-[calc(45vh+35rem)] space-y-6 px-6 pb-12 lg:-mt-16 lg:px-10',
+          'relative z-10 mx-auto w-full max-w-[2048px] -mt-12 min-h-[calc(45vh+35rem)] space-y-4 px-2 pb-12 sm:space-y-6 sm:px-4 md:space-y-8 md:px-6 lg:-mt-16 lg:px-10',
           contentClassName
         )}
       >

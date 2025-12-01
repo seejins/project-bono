@@ -765,7 +765,7 @@ export const LiveTimings = () => {
           <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-gray-50 dark:from-[#060b1d] via-transparent to-transparent" />
         </div>
 
-        <div className="relative z-10 mx-auto flex min-h-[calc(100vh+96px)] max-w-[1600px] items-center justify-center px-6 pt-24">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh+96px)] max-w-[1600px] items-center justify-center px-2 pt-24 sm:px-4 md:px-6 lg:px-10">
           <div className="rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-10 py-12 text-center backdrop-blur-md shadow-[0_35px_90px_-45px_rgba(6,11,29,0.85)]">
             <div className="text-6xl mb-4">🏁</div>
             <h1 className="text-3xl font-extrabold uppercase tracking-[0.35em] text-gray-900 dark:text-white">Live Timings</h1>
@@ -786,7 +786,7 @@ export const LiveTimings = () => {
         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-gray-50 dark:from-[#060b1d] via-transparent to-transparent" />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-[1600px] px-6 pt-24 pb-12">
+      <div className="relative z-10 mx-auto max-w-[1600px] px-2 pt-24 pb-12 sm:px-4 md:px-6 lg:px-10">
         {/* Header with Notification System */}
         <div
           className={`relative border-b border-gray-200 dark:border-white/10 px-6 py-6 backdrop-blur-sm transition-colors duration-300 ${
@@ -841,7 +841,7 @@ export const LiveTimings = () => {
       </div>
 
         {/* Main Content - Constrained Width for 1440p Optimization */}
-        <div className="mx-auto max-w-[2048px] px-6 py-10">
+        <div className="mx-auto max-w-[2048px] px-2 py-10 sm:px-4 md:px-6 lg:px-10">
           <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 shadow-[0_25px_80px_-45px_rgba(8,10,25,0.95)] backdrop-blur-md">
               {/* Loading state overlay - show when session exists but no drivers loaded yet */}
               {sessionData && drivers.length === 0 && (

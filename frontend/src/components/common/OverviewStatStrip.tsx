@@ -56,7 +56,7 @@ export function OverviewStatStrip({ items, className, variant = 'default' }: Ove
           key={item.id}
           type="button"
           onClick={item.onClick}
-          className={clsx(cardBaseClasses, !item.onClick && 'cursor-default', item.onClick && 'min-h-[44px]')}
+          className={clsx(cardBaseClasses, !item.onClick && 'cursor-default', 'min-h-[44px]')}
         >
           <div className="flex items-center gap-3">
             <span className={clsx(iconBaseClasses, getIconBgClass(item.accentClass), item.accentClass)}>

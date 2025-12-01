@@ -8,6 +8,7 @@ export interface DashboardTableColumn<TRow> {
   className?: string;
   headerClassName?: string;
   render?: (value: any, row: TRow, index: number) => ReactNode;
+  hideOnMobile?: boolean;
 }
 
 interface DashboardTableProps<TRow> {
@@ -63,74 +64,7 @@ export function DashboardTable<TRow>({
         </div>
       )}
 
-      {/* Mobile Card View */}
-      <div className="block md:hidden">
-        {rows.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            {emptyMessage}
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {rows.map((row, index) => {
-              const key = rowKey(row, index);
-              const primaryColumns = columns.slice(0, 2); // First 2 columns as primary
-              const secondaryColumns = columns.slice(2); // Rest as secondary
-              
-              return (
-                <div
-                  key={key}
-                  onClick={() => onRowClick?.(row)}
-                  className={clsx(
-                    rowsVisible ? 'opacity-100' : 'opacity-0',
-                    rowsVisible && 'transition-opacity duration-500 linear',
-                    'px-4 py-4',
-                    onRowClick && 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-900'
-                  )}
-                  style={{
-                    transitionProperty: rowsVisible ? 'opacity' : undefined,
-                    transitionDelay: rowsVisible && rowStaggerMs && rowInitialDelayMs
-                      ? `${rowInitialDelayMs + index * rowStaggerMs}ms`
-                      : undefined
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      {primaryColumns.map((column) => {
-                        const value = (row as any)[column.key as string];
-                        return (
-                          <div key={`${key}-${column.key as string}-mobile`} className="mb-2 last:mb-0">
-                            {column.render ? column.render(value, row, index) : value}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {secondaryColumns.length > 0 && (
-                    <div className="mt-3 grid grid-cols-2 gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                      {secondaryColumns.map((column) => {
-                        const value = (row as any)[column.key as string];
-                        return (
-                          <div key={`${key}-${column.key as string}-mobile-secondary`} className="flex flex-col">
-                            <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
-                              {typeof column.label === 'string' ? column.label : ''}
-                            </span>
-                            <span className="text-sm text-slate-700 dark:text-slate-300">
-                              {column.render ? column.render(value, row, index) : value}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Desktop Table View */}
-      <div className="hidden overflow-x-auto md:block">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm 2xl:text-base text-slate-600 dark:text-slate-200">
           <thead className="bg-slate-100 text-xs 2xl:text-sm uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <tr>
@@ -138,7 +72,8 @@ export function DashboardTable<TRow>({
                 <th
                   key={column.key as string}
                   className={clsx(
-                    'px-3 py-3 text-xs sm:px-4 2xl:px-5 2xl:py-4 2xl:text-sm',
+                    'px-4 py-3 2xl:px-5 2xl:py-4',
+                    column.hideOnMobile && 'hidden md:table-cell',
                     column.align === 'right'
                       ? 'text-right'
                       : column.align === 'left'
@@ -188,7 +123,8 @@ export function DashboardTable<TRow>({
                         <td
                           key={`${key}-${column.key as string}`}
                           className={clsx(
-                            'px-3 py-3 text-xs sm:px-4 sm:py-4 sm:text-sm 2xl:px-5 2xl:py-5 2xl:text-base',
+                            'px-4 py-4 2xl:px-5 2xl:py-5',
+                            column.hideOnMobile && 'hidden md:table-cell',
                             column.align === 'right'
                               ? 'text-right'
                               : column.align === 'left'

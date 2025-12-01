@@ -77,9 +77,27 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
         className
       )}
     >
-      <nav className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-between gap-4 px-4 transition-all duration-300">
-        {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center space-x-1">
+      <nav className="relative mx-auto flex h-full w-full max-w-5xl items-center px-4 transition-all duration-300">
+        {/* Mobile Menu Button - Left side */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className={clsx(
+            'md:hidden flex h-11 w-11 items-center justify-center rounded-md transition-colors',
+            (isOverlay && hasHeroImage) || isDark
+              ? 'text-white hover:bg-white/15'
+              : 'text-gray-900 hover:bg-gray-100'
+          )}
+          aria-label="Toggle menu"
+        >
+          {mobileMenuOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Menu className="h-6 w-6" />
+          )}
+        </button>
+
+        {/* Desktop Navigation - Centered */}
+        <div className="hidden md:flex items-center space-x-1 absolute left-1/2 -translate-x-1/2">
           {LINKS.map(({ to, label, icon: Icon, exact }) => (
             <NavLink
               key={to}
@@ -87,7 +105,8 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
               end={exact}
               className={({ isActive }) =>
                 clsx(
-                  'flex min-w-[116px] items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em] transition-colors',
+                  'flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold uppercase tracking-[0.18em] transition-colors whitespace-nowrap',
+                  label === 'Live Timings' ? 'min-w-[140px]' : 'min-w-[100px]',
                   isActive
                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/35'
                     : isOverlay
@@ -100,35 +119,15 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
                 )
               }
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-5 w-5 flex-shrink-0" />
               <span>{label}</span>
             </NavLink>
           ))}
         </div>
 
-        {/* Mobile Menu Button */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className={clsx(
-            'md:hidden flex h-11 w-11 items-center justify-center rounded-md transition-colors',
-            isOverlay && hasHeroImage
-              ? 'text-white hover:bg-white/15'
-              : isDark
-                ? 'text-white hover:bg-white/15'
-                : 'text-gray-900 hover:bg-gray-100'
-          )}
-          aria-label="Toggle menu"
-        >
-          {mobileMenuOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
-        </button>
-
-        {/* Theme Toggle */}
+        {/* Theme Toggle - Right side */}
         <div className={clsx(
-          'flex items-center',
+          'absolute right-4 flex items-center',
           isOverlay ? textColor : ''
         )}>
           <ThemeToggle 

@@ -857,27 +857,34 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         </div>
         
       <motion.div
-        className="relative z-10 mx-auto max-w-[1600px] space-y-8 px-6 pt-40 pb-16 text-slate-900 dark:text-slate-100 lg:px-10"
+        className="relative z-10 mx-auto max-w-[1600px] space-y-4 px-2 pt-40 pb-16 text-slate-900 dark:text-slate-100 sm:space-y-6 sm:px-4 md:space-y-8 md:px-6 lg:px-10"
         initial={{ opacity: 0, y: 32 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: easing }}
       >
+        {/* Results Button - Positioned in left corner below header */}
+        <motion.div
+          className="absolute left-2 top-[104px] z-20 sm:left-4 md:left-6 lg:left-10"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
+        >
+          <button
+            onClick={() => navigate(`/races/${raceId}`)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:text-slate-900 dark:text-slate-100 dark:hover:text-white"
+            aria-label="Back to results"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Results</span>
+          </button>
+        </motion.div>
+
         <motion.header
           className="relative flex flex-col items-center justify-center space-y-4 text-center"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
         >
-          <div className="absolute left-0 top-0">
-            <button
-              onClick={() => navigate(`/races/${raceId}`)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-              aria-label="Back to results"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Results</span>
-            </button>
-          </div>
           <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
             {driverNameLabel}
           </p>
@@ -890,19 +897,19 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         </motion.header>
 
         <motion.section
-          className="space-y-6"
+          className="space-y-3 sm:space-y-4 md:space-y-6"
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
         >
           <motion.nav
-            className="flex flex-col gap-4 border-b border-slate-200 pb-2 dark:border-slate-800 md:flex-row md:items-center md:justify-between"
+            className="flex flex-col gap-2 border-b border-slate-200 pb-2 dark:border-slate-800 sm:gap-4 md:flex-row md:items-center md:justify-between"
             aria-label="Tabs"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: easing, delay: 0.22 }}
           >
-            <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-6">
+            <div className="flex flex-wrap gap-2 sm:gap-3 md:gap-4 lg:gap-6">
             <button
               onClick={() => handleTabChange('overview')}
               className={`pt-4 pb-2 px-1 border-b-2 font-medium text-base transition-colors ${
@@ -997,7 +1004,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.4, ease: easing }}
-            className="space-y-6"
+            className="space-y-3 sm:space-y-4 md:space-y-6"
           >
             {activeTab === 'overview' && (
               <OverviewTab
@@ -1067,7 +1074,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
           </motion.div>
 
           <motion.div
-            className="space-y-4"
+            className="space-y-3 md:space-y-4"
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, ease: easing, delay: 0.26 }}

@@ -109,7 +109,7 @@ function AppLayout() {
 
   const mainContainerClass = useMemo(
     () =>
-      clsx('mx-auto min-h-screen w-full max-w-[1600px] px-6 pb-12', {
+      clsx('mx-auto min-h-screen w-full lg:max-w-[1600px] px-0 pb-12 lg:px-6', {
         'pt-24': true,
       }),
     []

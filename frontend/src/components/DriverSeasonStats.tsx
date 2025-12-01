@@ -843,7 +843,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   const easing: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
   return (
-    <div className="relative -mt-24 overflow-hidden md:-ml-[calc(50vw-50%)] md:-mr-[calc(50vw-50%)] md:w-screen">
+    <div className="relative -mt-24 overflow-hidden -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen">
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-x-0 top-0 h-[320px] blur-[120px] md:h-[520px] md:blur-[160px]"
@@ -851,7 +851,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
         />
       </div>
       <motion.div
-        className="relative z-10 mx-auto max-w-[1600px] space-y-6 px-4 pt-20 pb-12 text-slate-900 dark:text-slate-100 sm:space-y-8 sm:px-6 sm:pt-32 sm:pb-16 lg:px-10 lg:pt-40"
+        className="relative z-10 mx-auto max-w-[1600px] space-y-4 px-2 pt-20 pb-12 text-slate-900 dark:text-slate-100 sm:space-y-6 sm:px-4 sm:pt-32 sm:pb-16 md:space-y-8 md:px-6 lg:px-10 lg:pt-40"
         initial={{ opacity: 0, y: 32 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: easing }}
@@ -881,12 +881,12 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
         </motion.header>
 
         <motion.section
-          className="space-y-8"
+          className="space-y-3 sm:space-y-6 md:space-y-8"
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easing, delay: 0.18 }}
         >
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-5 md:space-y-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 sm:text-xl">
                 Season Statistics
