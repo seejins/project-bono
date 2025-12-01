@@ -81,7 +81,7 @@ const teams: F123Team[] = [
     id: 'alpine',
     name: 'Alpine',
     shortName: 'ALP',
-    color: '#0090FF',
+    color: '#FF69B4', // BWT pink - changed from #0090FF (light blue)
     textClass: 'team-alpine',
     aliases: [
       'bwt alpine f1 team',

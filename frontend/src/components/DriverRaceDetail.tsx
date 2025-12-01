@@ -28,7 +28,7 @@ export const DriverRaceDetail: React.FC<DriverRaceDetailProps> = ({ driver, race
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{driver.name}</h2>
-              <p className={`text-lg ${F123DataService.getTeamColor(driver.team)}`}>{driver.team}</p>
+              <p className={`text-lg ${F123DataService.getTeamColor(driver.team)}`}>{F123DataService.getTeamDisplayName(driver.team)}</p>
             </div>
           </div>
           <button

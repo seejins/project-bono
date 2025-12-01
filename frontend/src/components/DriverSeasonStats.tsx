@@ -904,7 +904,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
                     {comparisonOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.name}
-                        {option.team ? ` • ${option.team}` : ''}
+                        {option.team ? ` • ${F123DataService.getTeamDisplayName(option.team)}` : ''}
                       </option>
                     ))}
                   </select>

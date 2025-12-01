@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { BarChart3, TrendingUp, Award, LineChart } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { BarChart3, TrendingUp, Award, LineChart, ArrowLeft } from 'lucide-react';
 import type { TooltipProps } from 'recharts';
 import { DEFAULT_OVERLAY_STYLES, type LineConfig } from './charts/BaseLineChart';
 import { F123DataService } from '../services/F123DataService';
@@ -30,6 +30,7 @@ type AnalyticsTab = 'overview' | 'pace' | 'comparison' | 'strategy';
 
 export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId, raceId, initialSessionType }) => {
   const { raceData, sessions, defaultSessionId, loading, error } = useDriverRaceData(driverId, raceId);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as AnalyticsTab | null;
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -235,6 +236,40 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
   const { stintChartData, stintSegments, stintStartLapInfo, compoundLineSetup, compoundAverages } =
     useStintAnalytics(lapData);
   const raceStats = useRaceStats({ lapData, driver, sessionDrivers });
+  
+  // Calculate session fastest sectors from ALL laps in the session (not just best laps)
+  const sessionFastestSectors = useMemo(() => {
+    if (!sessionDrivers || sessionDrivers.length === 0) {
+      return { sector1: null, sector2: null, sector3: null };
+    }
+    
+    let fastestS1 = Infinity;
+    let fastestS2 = Infinity;
+    let fastestS3 = Infinity;
+    
+    // Single pass through all drivers and their laps
+    for (const sessionDriver of sessionDrivers) {
+      const lapTimes = Array.isArray(sessionDriver.lap_times) ? sessionDriver.lap_times : [];
+      for (const lap of lapTimes) {
+        // Early validation - only check if values exist and are positive
+        if (lap.sector1_ms && lap.sector1_ms > 0 && lap.sector1_ms < fastestS1) {
+          fastestS1 = lap.sector1_ms;
+        }
+        if (lap.sector2_ms && lap.sector2_ms > 0 && lap.sector2_ms < fastestS2) {
+          fastestS2 = lap.sector2_ms;
+        }
+        if (lap.sector3_ms && lap.sector3_ms > 0 && lap.sector3_ms < fastestS3) {
+          fastestS3 = lap.sector3_ms;
+        }
+      }
+    }
+    
+    return {
+      sector1: fastestS1 !== Infinity ? fastestS1 : null,
+      sector2: fastestS2 !== Infinity ? fastestS2 : null,
+      sector3: fastestS3 !== Infinity ? fastestS3 : null,
+    };
+  }, [sessionDrivers]);
 
   const createStintDotRenderer = useCallback(
     (compoundKey: string) =>
@@ -654,11 +689,24 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
       headerClassName: lapTableHeaderPadding,
       className: `${lapTableCellPadding} text-lg font-medium`,
       render: (value: number | undefined) => {
-        const isBest = Boolean(
+        const isSessionFastest = Boolean(
+          sessionFastestSectors?.sector1 != null && 
+          value != null && 
+          Math.abs(value - sessionFastestSectors.sector1) < 1
+        );
+        const isPersonalBest = Boolean(
           raceStats?.bestSector1 != null && value != null && raceStats.bestSector1 === value
         );
+        
+        let className = 'text-slate-900 dark:text-white';
+        if (isSessionFastest) {
+          className = 'text-purple-600 dark:text-purple-400 font-semibold'; // Session fastest - purple
+        } else if (isPersonalBest) {
+          className = 'text-green-600 dark:text-green-400 font-semibold'; // Personal best - green
+        }
+        
         return (
-          <span className={isBest ? 'text-green-500' : 'text-slate-900 dark:text-white'}>
+          <span className={className}>
             {formatSectorTime(value)}
           </span>
         );
@@ -670,11 +718,24 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
       headerClassName: lapTableHeaderPadding,
       className: `${lapTableCellPadding} text-lg font-medium`,
       render: (value: number | undefined) => {
-        const isBest = Boolean(
+        const isSessionFastest = Boolean(
+          sessionFastestSectors?.sector2 != null && 
+          value != null && 
+          Math.abs(value - sessionFastestSectors.sector2) < 1
+        );
+        const isPersonalBest = Boolean(
           raceStats?.bestSector2 != null && value != null && raceStats.bestSector2 === value
         );
+        
+        let className = 'text-slate-900 dark:text-white';
+        if (isSessionFastest) {
+          className = 'text-purple-600 dark:text-purple-400 font-semibold'; // Session fastest - purple
+        } else if (isPersonalBest) {
+          className = 'text-green-600 dark:text-green-400 font-semibold'; // Personal best - green
+        }
+        
         return (
-          <span className={isBest ? 'text-green-500' : 'text-slate-900 dark:text-white'}>
+          <span className={className}>
             {formatSectorTime(value)}
           </span>
         );
@@ -686,11 +747,24 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
       headerClassName: lapTableHeaderPadding,
       className: `${lapTableCellPadding} text-lg font-medium`,
       render: (value: number | undefined) => {
-        const isBest = Boolean(
+        const isSessionFastest = Boolean(
+          sessionFastestSectors?.sector3 != null && 
+          value != null && 
+          Math.abs(value - sessionFastestSectors.sector3) < 1
+        );
+        const isPersonalBest = Boolean(
           raceStats?.bestSector3 != null && value != null && raceStats.bestSector3 === value
         );
+        
+        let className = 'text-slate-900 dark:text-white';
+        if (isSessionFastest) {
+          className = 'text-purple-600 dark:text-purple-400 font-semibold'; // Session fastest - purple
+        } else if (isPersonalBest) {
+          className = 'text-green-600 dark:text-green-400 font-semibold'; // Personal best - green
+        }
+        
         return (
-          <span className={isBest ? 'text-green-500' : 'text-slate-900 dark:text-white'}>
+          <span className={className}>
             {formatSectorTime(value)}
           </span>
         );
@@ -739,7 +813,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         return <div className="flex flex-col items-center space-y-1">{badges}</div>;
       },
     },
-  ], [deltaByLap, formatGapTime, formatSectorTime, getTireCompoundColor, raceStats]);
+  ], [deltaByLap, formatGapTime, formatSectorTime, getTireCompoundColor, raceStats, sessionFastestSectors]);
 
   const driverNumberLabel = driver?.number ?? '--';
   const driverNameLabel = driver?.name ?? 'Driver data unavailable';
@@ -789,11 +863,21 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
         transition={{ duration: 0.6, ease: easing }}
       >
         <motion.header
-          className="flex flex-col items-center justify-center space-y-4 text-center"
+          className="relative flex flex-col items-center justify-center space-y-4 text-center"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easing, delay: 0.1 }}
         >
+          <div className="absolute left-0 top-0">
+            <button
+              onClick={() => navigate(`/races/${raceId}`)}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+              aria-label="Back to results"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Results</span>
+            </button>
+          </div>
           <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
             {driverNameLabel}
           </p>
@@ -923,6 +1007,7 @@ export const DriverRaceAnalysis: React.FC<DriverRaceAnalysisProps> = ({ driverId
                 formatGapTime={formatGapTime}
                 formatSectorTime={formatSectorTime}
                 getTireCompoundColor={getTireCompoundColor}
+                sessionFastestSectors={sessionFastestSectors}
               />
             )}
             {activeTab === 'pace' && (

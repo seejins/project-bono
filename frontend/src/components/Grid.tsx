@@ -75,7 +75,7 @@ export const Grid: React.FC<DriverListProps> = ({ onDriverSelect }) => {
         headerClassName: 'text-left',
         render: (_: string | undefined, row: DriverSeasonSummary) => (
           <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
-            {row.team ?? '—'}
+            {row.team ? F123DataService.getTeamDisplayName(row.team) : '—'}
           </span>
         ),
       },

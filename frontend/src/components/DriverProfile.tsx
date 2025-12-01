@@ -3,6 +3,7 @@ import { ArrowLeft, Trophy, Award, Clock, TrendingUp, Target, Users, Calendar } 
 import logger from '../utils/logger';
 import { getApiUrl } from '../utils/api';
 import { formatFullDate } from '../utils/dateUtils';
+import { F123DataService } from '../services/F123DataService';
 
 interface Driver {
   id: string;
@@ -127,21 +128,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
     return 'text-red-400 bg-red-500/20';
   };
 
-  const getTeamColor = (team: string) => {
-    const teamColors: { [key: string]: string } = {
-      'Mercedes': 'text-cyan-400',
-      'Red Bull': 'text-blue-400',
-      'Ferrari': 'text-red-400',
-      'McLaren': 'text-orange-400',
-      'Aston Martin': 'text-green-400',
-      'Alpine': 'text-pink-400',
-      'AlphaTauri': 'text-white',
-      'Alfa Romeo': 'text-red-300',
-      'Haas': 'text-gray-300',
-      'Williams': 'text-blue-300'
-    };
-    return teamColors[team] || 'text-gray-400';
-  };
+  const getTeamColor = (team: string) => F123DataService.getTeamColor(team);
 
   if (loading) {
     return (
@@ -187,7 +174,7 @@ export const DriverProfile: React.FC<DriverProfileProps> = ({ driverId, onBack, 
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{driver.name}</h1>
-              <p className={`text-lg ${getTeamColor(driver.team)}`}>{driver.team}</p>
+              <p className={`text-lg ${F123DataService.getTeamColor(driver.team)}`}>{F123DataService.getTeamDisplayName(driver.team)}</p>
               <p className="text-gray-600 dark:text-gray-400">Championship Position: #{driver.position}</p>
             </div>
           </div>

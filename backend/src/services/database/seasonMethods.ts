@@ -171,32 +171,56 @@ export const seasonMethods = {
   > {
     const result = await this.db.query(
       `
+      WITH normalized_teams AS (
+        SELECT 
+          CASE 
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
+              OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
+            THEN 'Ferrari'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alpha%tauri%' 
+              OR LOWER(COALESCE(d.team, dsr.json_team_name)) = 'alphatauri'
+            THEN 'AlphaTauri'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%red%bull%' 
+              OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%redbull%'
+            THEN 'Red Bull Racing'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%aston%martin%'
+            THEN 'Aston Martin'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alfa%romeo%'
+              OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%sauber%'
+            THEN 'Alfa Romeo'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%mclaren%'
+            THEN 'McLaren'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%alpine%'
+            THEN 'Alpine'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%williams%'
+            THEN 'Williams'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%haas%'
+            THEN 'Haas'
+            WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%mercedes%'
+            THEN 'Mercedes'
+            ELSE COALESCE(d.team, dsr.json_team_name)
+          END as normalized_team,
+          dsr.points,
+          dsr.position,
+          dsr.fastest_lap,
+          dsr.pole_position
+        FROM driver_session_results dsr
+        JOIN session_results sr ON sr.id = dsr.session_result_id
+        JOIN races r ON r.id = sr.race_id
+        LEFT JOIN drivers d ON dsr.user_id = d.id AND d.season_id = $1
+        WHERE r.season_id = $1
+          AND sr.session_type = 10
+          AND COALESCE(d.team, dsr.json_team_name) IS NOT NULL
+      )
       SELECT 
-        CASE 
-          WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
-            OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
-          THEN 'Ferrari'
-          ELSE COALESCE(d.team, dsr.json_team_name)
-        END as team,
-        COALESCE(SUM(dsr.points), 0) AS points,
-        COUNT(*) FILTER (WHERE dsr.position = 1) AS wins,
-        COUNT(*) FILTER (WHERE dsr.position <= 3) AS podiums,
-        COUNT(*) FILTER (WHERE dsr.fastest_lap = true) AS fastest_laps,
-        COUNT(*) FILTER (WHERE dsr.pole_position = true) AS pole_positions
-      FROM driver_session_results dsr
-      JOIN session_results sr ON sr.id = dsr.session_result_id
-      JOIN races r ON r.id = sr.race_id
-      LEFT JOIN drivers d ON dsr.user_id = d.id AND d.season_id = $1
-      WHERE r.season_id = $1
-        AND sr.session_type = 10
-        AND COALESCE(d.team, dsr.json_team_name) IS NOT NULL
-      GROUP BY 
-        CASE 
-          WHEN LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%ferrari%' 
-            OR LOWER(COALESCE(d.team, dsr.json_team_name)) LIKE '%scuderia%' 
-          THEN 'Ferrari'
-          ELSE COALESCE(d.team, dsr.json_team_name)
-        END
+        normalized_team as team,
+        COALESCE(SUM(points), 0) AS points,
+        COUNT(*) FILTER (WHERE position = 1) AS wins,
+        COUNT(*) FILTER (WHERE position <= 3) AS podiums,
+        COUNT(*) FILTER (WHERE fastest_lap = true) AS fastest_laps,
+        COUNT(*) FILTER (WHERE pole_position = true) AS pole_positions
+      FROM normalized_teams
+      GROUP BY normalized_team
       ORDER BY points DESC, wins DESC, podiums DESC
       `,
       [seasonId],

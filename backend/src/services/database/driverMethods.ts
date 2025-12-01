@@ -327,13 +327,13 @@ export const driverMethods = {
     seasonId: string,
   ): Promise<any> {
     try {
-      const statsResult = await this.db.query(
+      // Get race session stats
+      const raceStatsResult = await this.db.query(
         `
         SELECT 
           COUNT(*) FILTER (WHERE dsr.position = 1) as wins,
           COUNT(*) FILTER (WHERE dsr.position <= 3) as podiums,
           SUM(dsr.points) as points,
-          COUNT(*) FILTER (WHERE dsr.pole_position = true) as pole_positions,
           COUNT(*) FILTER (WHERE dsr.fastest_lap = true) as fastest_laps,
           AVG(NULLIF(dsr.position, 0)) as avg_finish,
           COUNT(*) as total_races,
@@ -347,16 +347,58 @@ export const driverMethods = {
         [driverId, seasonId],
       );
 
-      const stats = statsResult.rows[0] || {};
-      const wins = Number(stats.wins ?? 0);
-      const podiums = Number(stats.podiums ?? 0);
-      const points = Number(stats.points ?? 0);
-      const polePositions = Number(stats.pole_positions ?? 0);
-      const fastestLaps = Number(stats.fastest_laps ?? 0);
-      const avgFinish = Number(stats.avg_finish ?? 0);
-      const totalRaces = Number(stats.total_races ?? 0);
-      const dnfs = Number(stats.dnfs ?? 0);
-      const pointsFinishes = Number(stats.points_finishes ?? 0);
+      // Get pole positions from qualifying sessions (session_type 5-9) OR from race grid_position = 1
+      const poleStatsResult = await this.db.query(
+        `
+        SELECT COUNT(*) as pole_positions
+        FROM (
+          -- Count poles from qualifying sessions where position = 1
+          SELECT 1
+          FROM driver_session_results dsr
+          JOIN session_results sr ON sr.id = dsr.session_result_id
+          JOIN races r ON r.id = sr.race_id
+          WHERE dsr.user_id = $1 
+            AND r.season_id = $2 
+            AND sr.session_type BETWEEN 5 AND 9
+            AND dsr.position = 1
+          
+          UNION ALL
+          
+          -- Count poles from race sessions where grid_position = 1 (fallback if qualifying data missing)
+          SELECT 1
+          FROM driver_session_results dsr
+          JOIN session_results sr ON sr.id = dsr.session_result_id
+          JOIN races r ON r.id = sr.race_id
+          WHERE dsr.user_id = $1 
+            AND r.season_id = $2 
+            AND sr.session_type = 10
+            AND dsr.grid_position = 1
+            -- Only count if we don't already have qualifying data for this race
+            AND NOT EXISTS (
+              SELECT 1
+              FROM driver_session_results dsr2
+              JOIN session_results sr2 ON sr2.id = dsr2.session_result_id
+              WHERE sr2.race_id = r.id
+                AND sr2.session_type BETWEEN 5 AND 9
+                AND dsr2.user_id = dsr.user_id
+                AND dsr2.position = 1
+            )
+        ) poles
+      `,
+        [driverId, seasonId],
+      );
+
+      const raceStats = raceStatsResult.rows[0] || {};
+      const poleStats = poleStatsResult.rows[0] || {};
+      const wins = Number(raceStats.wins ?? 0);
+      const podiums = Number(raceStats.podiums ?? 0);
+      const points = Number(raceStats.points ?? 0);
+      const polePositions = Number(poleStats.pole_positions ?? 0);
+      const fastestLaps = Number(raceStats.fastest_laps ?? 0);
+      const avgFinish = Number(raceStats.avg_finish ?? 0);
+      const totalRaces = Number(raceStats.total_races ?? 0);
+      const dnfs = Number(raceStats.dnfs ?? 0);
+      const pointsFinishes = Number(raceStats.points_finishes ?? 0);
       const consistency = totalRaces > 0 ? Math.round((pointsFinishes / totalRaces) * 1000) / 10 : 0;
 
       return {

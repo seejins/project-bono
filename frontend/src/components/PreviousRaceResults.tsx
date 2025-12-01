@@ -101,7 +101,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
               </span>
               {item.team ? (
                 <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
-                  {item.team}
+                  {F123DataService.getTeamDisplayName(item.team)}
                 </span>
               ) : null}
             </div>
@@ -126,7 +126,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
               </span>
               {item.team ? (
                 <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
-                  {item.team}
+                  {F123DataService.getTeamDisplayName(item.team)}
                 </span>
               ) : null}
             </div>
@@ -153,7 +153,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
               </span>
               {item.team ? (
                 <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
-                  {item.team}
+                  {F123DataService.getTeamDisplayName(item.team)}
                 </span>
               ) : null}
             </div>
@@ -186,7 +186,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
               </span>
               {item.team ? (
                 <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(item.team))}>
-                  {item.team}
+                  {F123DataService.getTeamDisplayName(item.team)}
                 </span>
               ) : null}
             </div>
@@ -358,7 +358,7 @@ export const PreviousRaceResultsComponent: React.FC<PreviousRaceResultsProps> = 
                   </span>
                   {driver.team ? (
                     <span className={clsx('text-xs font-medium', F123DataService.getTeamColor(driver.team))}>
-                      {driver.team}
+                      {F123DataService.getTeamDisplayName(driver.team)}
                     </span>
                   ) : null}
                 </div>

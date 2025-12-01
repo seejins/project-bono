@@ -170,7 +170,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       value: highlights?.mostWins?.name ?? 'Awaiting data',
       meta: formatHighlightMeta(highlights?.mostWins, 'wins'),
       icon: <Award className="w-5 h-5" />,
-      accentClass: 'text-purple-400 dark:text-purple-300',
+      accentClass: 'text-amber-500',
       onClick: handleNavigateToGrid,
     },
     {
@@ -179,7 +179,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       value: highlights?.mostPoles?.name ?? 'Awaiting data',
       meta: formatHighlightMeta(highlights?.mostPoles, 'poles'),
       icon: <Star className="w-5 h-5" />,
-      accentClass: 'text-amber-400 dark:text-amber-300',
+      accentClass: 'text-purple-500',
       onClick: handleNavigateToGrid,
     },
     {
@@ -188,7 +188,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       value: highlights?.mostPodiums?.name ?? 'Awaiting data',
       meta: formatHighlightMeta(highlights?.mostPodiums, 'podiums'),
       icon: <Flag className="w-5 h-5" />,
-      accentClass: 'text-emerald-400 dark:text-emerald-300',
+      accentClass: 'text-blue-500',
       onClick: handleNavigateToGrid,
     },
     {
@@ -201,7 +201,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         'To be announced',
       meta: formatEventMeta(nextEvent),
       icon: <Calendar className="w-5 h-5" />,
-      accentClass: 'text-sky-400 dark:text-sky-300',
+      accentClass: 'text-red-500',
       onClick: nextEvent ? handleNextEventClick : undefined,
     },
   ];
@@ -247,7 +247,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         headerClassName: 'text-left',
         render: (_: string, row: DriverSeasonSummary) => (
           <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
-            {row.team ?? '—'}
+            {row.team ? F123DataService.getTeamDisplayName(row.team) : '—'}
           </span>
         ),
       },
@@ -289,7 +289,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
         headerClassName: 'text-left',
         render: (_: string, row: ConstructorSeasonSummary) => (
           <span className={clsx('font-medium', F123DataService.getTeamColor(row.team ?? ''))}>
-            {row.team ?? '—'}
+            {row.team ? F123DataService.getTeamDisplayName(row.team) : '—'}
           </span>
         ),
       },

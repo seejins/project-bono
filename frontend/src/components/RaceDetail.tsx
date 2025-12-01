@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import logger from '../utils/logger';
-import { formatFullDate, getDateTimestamp } from '../utils/dateUtils';
+import { formatFullDate, getDateTimestamp, formatTimeFromMs } from '../utils/dateUtils';
 import { useSearchParams } from 'react-router-dom';
 import { getApiUrl } from '../utils/api';
 import clsx from 'clsx';
-import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X } from 'lucide-react';
+import { Calendar, MapPin, Trophy, Flag, ArrowUp, ArrowDown, Minus, Edit, X, Zap, Target, BarChart3 } from 'lucide-react';
 import { F123DataService, F123DriverResult } from '../services/F123DataService';
+import { calculatePaceMetrics } from '../services/analytics/paceAnalytics';
+import type { LapData } from './DriverRaceAnalysis/types';
 import { getTireCompound } from '../utils/f123DataMapping';
 import { useAdmin } from '../contexts/AdminContext';
 import { DashboardPage } from './layout/DashboardPage';
@@ -49,6 +51,7 @@ type RaceDriverRow = F123DriverResult & {
   participantIsAi?: boolean | null;
   sessionResultId?: string | null;
   canonicalDriverId?: string | null;
+  lap_times?: LapData[];
 };
 
 type DriverMemberOption = {
@@ -61,6 +64,16 @@ type DriverMemberOption = {
 interface RaceDetailProps {
   raceId: string;
   onDriverSelect: (driverId: string, raceId: string, initialSessionType?: 'race' | 'qualifying' | 'practice') => void;
+}
+
+interface SessionSummary {
+  fastestLap: { driver: string; time: number } | null;
+  fastestSectors: {
+    sector1: { driver: string; time: number } | null;
+    sector2: { driver: string; time: number } | null;
+    sector3: { driver: string; time: number } | null;
+  };
+  mostConsistent: { driver: string; consistency: string } | null;
 }
 
 export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }) => {
@@ -166,6 +179,86 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
     hasQualifying: sessions.some(s => s.sessionType >= 5 && s.sessionType <= 9),
     hasPractice: sessions.some(s => s.sessionType >= 1 && s.sessionType <= 4)
   }), [sessions]);
+
+  // Calculate session summary for current drivers
+  const calculateSessionSummary = useCallback((drivers: RaceDriverRow[]): SessionSummary => {
+    if (!drivers || drivers.length === 0) {
+      return {
+        fastestLap: null,
+        fastestSectors: { sector1: null, sector2: null, sector3: null },
+        mostConsistent: null,
+      };
+    }
+
+    // Fastest Lap
+    const fastestLapDriver = drivers
+      .filter(d => d.fastestLap && d.fastestLapTime && d.fastestLapTime > 0)
+      .sort((a, b) => (a.fastestLapTime || Infinity) - (b.fastestLapTime || Infinity))[0];
+    const fastestLap = fastestLapDriver
+      ? { driver: fastestLapDriver.name, time: fastestLapDriver.fastestLapTime! }
+      : null;
+
+    // Fastest Sectors - iterate through all lap_times from all drivers
+    let fastestS1 = Infinity;
+    let fastestS2 = Infinity;
+    let fastestS3 = Infinity;
+    let fastestS1Driver = '';
+    let fastestS2Driver = '';
+    let fastestS3Driver = '';
+
+    drivers.forEach((driver) => {
+      const lapTimes = Array.isArray(driver.lap_times) ? driver.lap_times : [];
+      lapTimes.forEach((lap) => {
+        if (lap.sector1_ms && lap.sector1_ms > 0 && lap.sector1_ms < fastestS1) {
+          fastestS1 = lap.sector1_ms;
+          fastestS1Driver = driver.name;
+        }
+        if (lap.sector2_ms && lap.sector2_ms > 0 && lap.sector2_ms < fastestS2) {
+          fastestS2 = lap.sector2_ms;
+          fastestS2Driver = driver.name;
+        }
+        if (lap.sector3_ms && lap.sector3_ms > 0 && lap.sector3_ms < fastestS3) {
+          fastestS3 = lap.sector3_ms;
+          fastestS3Driver = driver.name;
+        }
+      });
+    });
+
+    // Most Consistent - calculate consistency for each driver
+    let mostConsistent: { driver: string; consistency: string } | null = null;
+    let lowestConsistency = Infinity;
+
+    drivers.forEach((driver) => {
+      const lapTimes = Array.isArray(driver.lap_times) ? driver.lap_times : [];
+      if (lapTimes.length > 0) {
+        const paceMetrics = calculatePaceMetrics(lapTimes);
+        if (paceMetrics && paceMetrics.consistencyPercent) {
+          const consistency = parseFloat(paceMetrics.consistencyPercent);
+          if (consistency < lowestConsistency) {
+            lowestConsistency = consistency;
+            mostConsistent = {
+              driver: driver.name,
+              consistency: paceMetrics.consistencyPercent,
+            };
+          }
+        }
+      }
+    });
+
+    return {
+      fastestLap,
+      fastestSectors: {
+        sector1: fastestS1 !== Infinity ? { driver: fastestS1Driver, time: fastestS1 } : null,
+        sector2: fastestS2 !== Infinity ? { driver: fastestS2Driver, time: fastestS2 } : null,
+        sector3: fastestS3 !== Infinity ? { driver: fastestS3Driver, time: fastestS3 } : null,
+      },
+      mostConsistent,
+    };
+  }, []);
+
+  const sessionSummary = useMemo(() => {
+    return calculateSessionSummary(drivers);
+  }, [drivers]);
 
   // Handle session change - update both state and URL
   const handleSessionChange = useCallback((session: 'practice' | 'qualifying' | 'race') => {
@@ -1632,7 +1725,7 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
       render: (_: unknown, row) => {
         return (
           <span className={clsx('text-base font-medium', F123DataService.getTeamColor(row.team))}>
-            {row.team}
+            {F123DataService.getTeamDisplayName(row.team)}
           </span>
         );
       },
@@ -1904,6 +1997,123 @@ export const RaceDetail: React.FC<RaceDetailProps> = ({ raceId, onDriverSelect }
                 )}
               </>
             )}
+        </div>
+      )}
+
+      {/* Summary Cards - Only show for race and practice, not qualifying */}
+      {activeSession !== 'qualifying' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Fastest Lap Card */}
+        {sessionSummary.fastestLap && (
+          <div className="rounded-3xl border border-slate-200 bg-white shadow-md dark:border-slate-800 dark:bg-slate-950/70 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-500/15 text-purple-500">
+                <Zap className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Fastest Lap</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Driver</span>
+                <span className="text-base font-bold text-slate-900 dark:text-slate-100 truncate ml-2">
+                  {sessionSummary.fastestLap.driver}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Time</span>
+                <span className="text-base font-bold text-purple-600 dark:text-purple-400">
+                  {formatTimeFromMs(sessionSummary.fastestLap.time)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fastest Sectors Card - Wider, columns layout */}
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-md dark:border-slate-800 dark:bg-slate-950/70 p-6 md:col-span-2 lg:col-span-2">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-500">
+              <Target className="h-5 w-5" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Fastest Sectors</h3>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {/* Sector 1 */}
+            <div className="text-center">
+              <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">S1</div>
+              {sessionSummary.fastestSectors.sector1 ? (
+                <>
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate mb-1">
+                    {sessionSummary.fastestSectors.sector1.driver}
+                  </div>
+                  <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                    {F123DataService.formatSectorTimeFromMs(sessionSummary.fastestSectors.sector1.time)}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-slate-400 dark:text-slate-500">No data</div>
+              )}
+            </div>
+            {/* Sector 2 */}
+            <div className="text-center">
+              <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">S2</div>
+              {sessionSummary.fastestSectors.sector2 ? (
+                <>
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate mb-1">
+                    {sessionSummary.fastestSectors.sector2.driver}
+                  </div>
+                  <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                    {F123DataService.formatSectorTimeFromMs(sessionSummary.fastestSectors.sector2.time)}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-slate-400 dark:text-slate-500">No data</div>
+              )}
+            </div>
+            {/* Sector 3 */}
+            <div className="text-center">
+              <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">S3</div>
+              {sessionSummary.fastestSectors.sector3 ? (
+                <>
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate mb-1">
+                    {sessionSummary.fastestSectors.sector3.driver}
+                  </div>
+                  <div className="text-base font-bold text-blue-600 dark:text-blue-400">
+                    {F123DataService.formatSectorTimeFromMs(sessionSummary.fastestSectors.sector3.time)}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-slate-400 dark:text-slate-500">No data</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Most Consistent Card */}
+        {sessionSummary.mostConsistent && (
+          <div className="rounded-3xl border border-slate-200 bg-white shadow-md dark:border-slate-800 dark:bg-slate-950/70 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500">
+                <BarChart3 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Most Consistent</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Driver</span>
+                <span className="text-base font-bold text-slate-900 dark:text-slate-100 truncate ml-2">
+                  {sessionSummary.mostConsistent.driver}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Consistency</span>
+                <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                  {sessionSummary.mostConsistent.consistency}%
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       )}
 

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiGet, apiPost, apiPut } from '../utils/api';
-import { Trophy, Clock, Flag, AlertTriangle, RotateCcw, Edit, History, Shield } from 'lucide-react';
+import { Trophy, Clock, Flag, AlertTriangle, RotateCcw, Edit, History, Shield, Zap, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import logger from '../utils/logger';
 import { formatTimeFromMs } from '../utils/dateUtils';
+import { F123DataService } from '../services/F123DataService';
+import { calculatePaceMetrics } from '../services/analytics/paceAnalytics';
 
 interface RaceResult {
   id: string;
@@ -32,6 +34,17 @@ interface SessionResult {
 interface RaceResultsProps {
   raceId: string;
   isAdmin?: boolean;
+}
+
+interface SessionSummary {
+  fastestLap: { driver: string; time: number } | null;
+  fastestSectors: {
+    sector1: { driver: string; time: number } | null;
+    sector2: { driver: string; time: number } | null;
+    sector3: { driver: string; time: number } | null;
+  };
+  mostConsistent: { driver: string; consistency: string } | null;
+  mostPositionsGained: { driver: string; positions: number } | null;
 }
 
 export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = false }) => {
@@ -140,6 +153,108 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
     }
   };
 
+  const calculateSessionSummary = (results: RaceResult[]): SessionSummary => {
+    if (!results || results.length === 0) {
+      return {
+        fastestLap: null,
+        fastestSectors: { sector1: null, sector2: null, sector3: null },
+        mostConsistent: null,
+        mostPositionsGained: null,
+      };
+    }
+
+    // Fastest Lap
+    const fastestLapResult = results
+      .filter(r => r.fastest_lap && r.best_lap_time_ms > 0)
+      .sort((a, b) => a.best_lap_time_ms - b.best_lap_time_ms)[0];
+    const fastestLap = fastestLapResult
+      ? { driver: fastestLapResult.driver_name, time: fastestLapResult.best_lap_time_ms }
+      : null;
+
+    // Fastest Sectors - iterate through all lap_times from all drivers
+    let fastestS1 = Infinity;
+    let fastestS2 = Infinity;
+    let fastestS3 = Infinity;
+    let fastestS1Driver = '';
+    let fastestS2Driver = '';
+    let fastestS3Driver = '';
+
+    results.forEach((result: any) => {
+      const lapTimes = Array.isArray(result.lap_times) ? result.lap_times : [];
+      lapTimes.forEach((lap: any) => {
+        if (lap.sector1_ms && lap.sector1_ms > 0 && lap.sector1_ms < fastestS1) {
+          fastestS1 = lap.sector1_ms;
+          fastestS1Driver = result.driver_name;
+        }
+        if (lap.sector2_ms && lap.sector2_ms > 0 && lap.sector2_ms < fastestS2) {
+          fastestS2 = lap.sector2_ms;
+          fastestS2Driver = result.driver_name;
+        }
+        if (lap.sector3_ms && lap.sector3_ms > 0 && lap.sector3_ms < fastestS3) {
+          fastestS3 = lap.sector3_ms;
+          fastestS3Driver = result.driver_name;
+        }
+      });
+    });
+
+    // Most Consistent - calculate consistency for each driver
+    let mostConsistent: { driver: string; consistency: string } | null = null;
+    let lowestConsistency = Infinity;
+
+    results.forEach((result: any) => {
+      const lapTimes = Array.isArray(result.lap_times) ? result.lap_times : [];
+      if (lapTimes.length > 0) {
+        const paceMetrics = calculatePaceMetrics(lapTimes);
+        if (paceMetrics && paceMetrics.consistencyPercent) {
+          const consistency = parseFloat(paceMetrics.consistencyPercent);
+          if (consistency < lowestConsistency) {
+            lowestConsistency = consistency;
+            mostConsistent = {
+              driver: result.driver_name,
+              consistency: paceMetrics.consistencyPercent,
+            };
+          }
+        }
+      }
+    });
+
+    // Most Positions Gained
+    let mostPositionsGained: { driver: string; positions: number } | null = null;
+    let maxPositionsGained = -Infinity;
+
+    results.forEach((result: any) => {
+      const gridPos = (result as any).grid_position ?? (result as any).starting_position;
+      const finishPos = result.position;
+      if (gridPos && finishPos && gridPos > finishPos) {
+        const positionsGained = gridPos - finishPos;
+        if (positionsGained > maxPositionsGained) {
+          maxPositionsGained = positionsGained;
+          mostPositionsGained = {
+            driver: result.driver_name,
+            positions: positionsGained,
+          };
+        }
+      }
+    });
+
+    return {
+      fastestLap,
+      fastestSectors: {
+        sector1: fastestS1 !== Infinity ? { driver: fastestS1Driver, time: fastestS1 } : null,
+        sector2: fastestS2 !== Infinity ? { driver: fastestS2Driver, time: fastestS2 } : null,
+        sector3: fastestS3 !== Infinity ? { driver: fastestS3Driver, time: fastestS3 } : null,
+      },
+      mostConsistent,
+      mostPositionsGained: maxPositionsGained > 0 ? mostPositionsGained : null,
+    };
+  };
+
+  const sessionSummaries = useMemo(() => {
+    return sessions.map(session => ({
+      sessionId: session.sessionId,
+      summary: calculateSessionSummary(session.results),
+    }));
+  }, [sessions]);
 
   const getResultStatusBadge = (status: number, dnfReason?: string) => {
     switch (status) {
@@ -204,37 +319,130 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
       )}
 
       {/* Session Results */}
-      {sessions.map((session) => (
-        <div key={session.sessionId} className="bg-white dark:bg-gray-800 rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Flag className="h-5 w-5 text-red-600" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {session.sessionName}
-                </h3>
-                <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                  Completed
-                </span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Clock className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {new Date(session.completedAt).toLocaleString()}
-                </span>
-                {isAdmin && (
-                  <button
-                    onClick={() => loadEditHistory(session.sessionId)}
-                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <History className="h-4 w-4" />
-                  </button>
-                )}
+      {sessions.map((session) => {
+        const summary = sessionSummaries.find(s => s.sessionId === session.sessionId)?.summary ?? calculateSessionSummary(session.results);
+        
+        return (
+          <div key={session.sessionId} className="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Flag className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {session.sessionName}
+                  </h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                    Completed
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {new Date(session.completedAt).toLocaleString()}
+                  </span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => loadEditHistory(session.sessionId)}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <History className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="overflow-x-auto">
+            {/* Summary Cards */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Fastest Lap Card */}
+                {summary.fastestLap && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Zap className="h-4 w-4 text-purple-500" />
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Fastest Lap</span>
+                      </div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {summary.fastestLap.driver}
+                      </div>
+                      <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                        {formatTimeFromMs(summary.fastestLap.time)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fastest Sectors Card */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Target className="h-4 w-4 text-blue-500" />
+                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Fastest Sectors</span>
+                    </div>
+                    <div className="space-y-1">
+                      {summary.fastestSectors.sector1 && (
+                        <div className="text-xs">
+                          <span className="text-gray-600 dark:text-gray-400">S1:</span>
+                          <span className="ml-1 font-medium text-gray-900 dark:text-white">{summary.fastestSectors.sector1.driver}</span>
+                          <span className="ml-1 text-blue-600 dark:text-blue-400 font-semibold">
+                            {F123DataService.formatSectorTimeFromMs(summary.fastestSectors.sector1.time)}
+                          </span>
+                        </div>
+                      )}
+                      {summary.fastestSectors.sector2 && (
+                        <div className="text-xs">
+                          <span className="text-gray-600 dark:text-gray-400">S2:</span>
+                          <span className="ml-1 font-medium text-gray-900 dark:text-white">{summary.fastestSectors.sector2.driver}</span>
+                          <span className="ml-1 text-blue-600 dark:text-blue-400 font-semibold">
+                            {F123DataService.formatSectorTimeFromMs(summary.fastestSectors.sector2.time)}
+                          </span>
+                        </div>
+                      )}
+                      {summary.fastestSectors.sector3 && (
+                        <div className="text-xs">
+                          <span className="text-gray-600 dark:text-gray-400">S3:</span>
+                          <span className="ml-1 font-medium text-gray-900 dark:text-white">{summary.fastestSectors.sector3.driver}</span>
+                          <span className="ml-1 text-blue-600 dark:text-blue-400 font-semibold">
+                            {F123DataService.formatSectorTimeFromMs(summary.fastestSectors.sector3.time)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Most Consistent Card */}
+                  {summary.mostConsistent && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <BarChart3 className="h-4 w-4 text-green-500" />
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Most Consistent</span>
+                      </div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {summary.mostConsistent.driver}
+                      </div>
+                      <div className="text-lg font-bold text-green-600 dark:text-green-400">
+                        {summary.mostConsistent.consistency}%
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Most Positions Gained Card */}
+                  {summary.mostPositionsGained && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <TrendingUp className="h-4 w-4 text-orange-500" />
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Most Positions Gained</span>
+                      </div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {summary.mostPositionsGained.driver}
+                      </div>
+                      <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                        +{summary.mostPositionsGained.positions}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
@@ -339,7 +547,8 @@ export const RaceResults: React.FC<RaceResultsProps> = ({ raceId, isAdmin = fals
             </table>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {/* Edit Modal */}
       {showEditModal && editingDriver && (

@@ -23,10 +23,22 @@ export function OverviewStatStrip({ items, className, variant = 'default' }: Ove
       ? 'group rounded-2xl border border-slate-200 dark:border-slate-800/60 bg-white dark:bg-slate-900/70 p-4 text-left shadow-md transition duration-200 hover:bg-slate-50 dark:hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50'
       : 'group rounded-2xl border border-slate-200 dark:border-slate-800/50 bg-white dark:bg-slate-900/70 p-4 text-left shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] backdrop-blur-lg transition duration-200 hover:bg-slate-50 dark:hover:bg-slate-800/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40';
 
+  // Helper function to get icon background class from accent class
+  const getIconBgClass = (accentClass?: string) => {
+    if (!accentClass) return 'bg-slate-100 dark:bg-slate-800';
+    if (accentClass.includes('purple')) return 'bg-purple-500/15';
+    if (accentClass.includes('amber')) return 'bg-amber-500/15';
+    if (accentClass.includes('blue')) return 'bg-blue-500/15';
+    if (accentClass.includes('red')) return 'bg-red-500/15';
+    if (accentClass.includes('emerald')) return 'bg-emerald-500/15';
+    if (accentClass.includes('sky')) return 'bg-sky-500/15';
+    return 'bg-slate-100 dark:bg-slate-800';
+  };
+
   const iconBaseClasses =
     variant === 'muted'
-      ? 'flex h-10 w-10 items-center justify-center text-slate-700 dark:text-slate-200 transition-transform duration-300 group-hover:scale-105'
-      : 'flex h-10 w-10 items-center justify-center text-slate-900 transition-transform duration-300 group-hover:scale-105 dark:text-white';
+      ? 'flex h-10 w-10 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105'
+      : 'flex h-10 w-10 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105';
 
   const titleClasses =
     variant === 'muted'
@@ -47,7 +59,9 @@ export function OverviewStatStrip({ items, className, variant = 'default' }: Ove
           className={clsx(cardBaseClasses, !item.onClick && 'cursor-default')}
         >
           <div className="flex items-center gap-3">
-            <span className={clsx(iconBaseClasses, item.accentClass)}>{item.icon}</span>
+            <span className={clsx(iconBaseClasses, getIconBgClass(item.accentClass), item.accentClass)}>
+              {item.icon}
+            </span>
             <div className="space-y-1">
               <p className={titleClasses}>{item.title}</p>
               <div className={valueClasses}>{item.value ?? '—'}</div>

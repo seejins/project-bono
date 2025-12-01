@@ -14,6 +14,7 @@ interface OverviewTabProps {
   formatGapTime: (ms?: number | null) => string;
   formatSectorTime: (ms?: number | null) => string;
   getTireCompoundColor: (compound?: string) => string;
+  sessionFastestSectors?: { sector1: number | null; sector2: number | null; sector3: number | null };
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -23,6 +24,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   formatGapTime,
   formatSectorTime,
   getTireCompoundColor,
+  sessionFastestSectors,
 }) => {
   if (!raceStats) {
     return (
@@ -195,7 +197,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
               <div className={`${LABEL_CLASS} mb-1`}>Sector 1</div>
-              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className={`text-base font-semibold ${
+                raceStats.bestSector1 !== undefined && raceStats.bestSector1 !== null
+                  ? sessionFastestSectors?.sector1 && Math.abs(raceStats.bestSector1 - sessionFastestSectors.sector1) < 1
+                    ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
+                    : 'text-slate-900 dark:text-slate-100' // Personal best - default color
+                  : 'text-slate-900 dark:text-slate-100'
+              }`}>
                 {raceStats.bestSector1 !== undefined && raceStats.bestSector1 !== null
                   ? formatSectorTime(raceStats.bestSector1)
                   : '--.---'}
@@ -203,7 +211,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
             <div className="text-center">
               <div className={`${LABEL_CLASS} mb-1`}>Sector 2</div>
-              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className={`text-base font-semibold ${
+                raceStats.bestSector2 !== undefined && raceStats.bestSector2 !== null
+                  ? sessionFastestSectors?.sector2 && Math.abs(raceStats.bestSector2 - sessionFastestSectors.sector2) < 1
+                    ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
+                    : 'text-slate-900 dark:text-slate-100' // Personal best - default color
+                  : 'text-slate-900 dark:text-slate-100'
+              }`}>
                 {raceStats.bestSector2 !== undefined && raceStats.bestSector2 !== null
                   ? formatSectorTime(raceStats.bestSector2)
                   : '--.---'}
@@ -211,7 +225,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
             <div className="text-center">
               <div className={`${LABEL_CLASS} mb-1`}>Sector 3</div>
-              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className={`text-base font-semibold ${
+                raceStats.bestSector3 !== undefined && raceStats.bestSector3 !== null
+                  ? sessionFastestSectors?.sector3 && Math.abs(raceStats.bestSector3 - sessionFastestSectors.sector3) < 1
+                    ? 'text-purple-600 dark:text-purple-400' // Session fastest - purple
+                    : 'text-slate-900 dark:text-slate-100' // Personal best - default color
+                  : 'text-slate-900 dark:text-slate-100'
+              }`}>
                 {raceStats.bestSector3 !== undefined && raceStats.bestSector3 !== null
                   ? formatSectorTime(raceStats.bestSector3)
                   : '--.---'}
