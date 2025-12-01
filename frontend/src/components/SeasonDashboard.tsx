@@ -129,10 +129,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
       <button
         key="next-race"
         onClick={handleNextEventClick}
-        className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-white/70 px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-white/90 hover:text-slate-900 dark:bg-slate-900/50 dark:text-slate-100 dark:hover:bg-slate-900/70 dark:hover:text-white sm:px-4 sm:text-sm"
       >
         <Calendar className="h-4 w-4" />
-        Next race
+        <span className="hidden sm:inline">Next race</span>
+        <span className="sm:hidden">Next</span>
       </button>,
     );
   }
@@ -141,10 +142,11 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
     ? (
     <button
       onClick={onScheduleView}
-          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric px-5 py-2 text-sm font-semibold text-white shadow-brand-glow transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-accent"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-gradient-to-r from-brand-accent via-brand-highlight to-brand-electric px-4 py-2 text-xs font-semibold text-white shadow-brand-glow transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-accent sm:px-5 sm:text-sm"
     >
       <Calendar className="h-4 w-4" />
-      View schedule
+      <span className="hidden sm:inline">View schedule</span>
+      <span className="sm:hidden">Schedule</span>
     </button>
       )
     : undefined;
@@ -386,28 +388,30 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4">
               {/* Tab Navigation */}
-              <div className="flex rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-900">
+              <div className="flex rounded-lg bg-slate-100 p-1 text-xs dark:bg-slate-900 sm:text-sm">
                 <button
                   onClick={() => setActiveTab('drivers')}
                   className={clsx(
-                    'flex-1 rounded-md px-3 py-1 transition-colors',
+                    'flex-1 min-h-[44px] rounded-md px-2 py-2 transition-colors sm:px-3 sm:py-1',
                     activeTab === 'drivers'
                       ? 'bg-red-600 text-white'
                       : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                   )}
                 >
-                  Drivers Championship
+                  <span className="hidden sm:inline">Drivers Championship</span>
+                  <span className="sm:hidden">Drivers</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('constructors')}
                   className={clsx(
-                    'flex-1 rounded-md px-3 py-1 transition-colors',
+                    'flex-1 min-h-[44px] rounded-md px-2 py-2 transition-colors sm:px-3 sm:py-1',
                     activeTab === 'constructors'
                       ? 'bg-red-600 text-white'
                       : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                   )}
                 >
-                  Constructors Championship
+                  <span className="hidden sm:inline">Constructors Championship</span>
+                  <span className="sm:hidden">Constructors</span>
                 </button>
               </div>
 
@@ -418,7 +422,7 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
                   icon={<div className="flex h-10 w-10 items-center justify-center text-red-500"><Trophy className="h-5 w-5" /></div>}
                   headerActions={
                     <label className="flex cursor-pointer items-center gap-2">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">AI</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 sm:text-sm">AI</span>
                       <div className="relative inline-block">
                         <input
                           type="checkbox"
@@ -426,9 +430,9 @@ export const SeasonDashboard: React.FC<SeasonDashboardProps> = ({ onRaceSelect, 
                           onChange={(e) => setShowAllDrivers(e.target.checked)}
                           className="peer sr-only"
                         />
-                        <div className="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-red-600 dark:bg-slate-700 dark:peer-checked:bg-red-600">
+                        <div className="h-7 w-12 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-red-600 dark:bg-slate-700 dark:peer-checked:bg-red-600">
                           <div className={clsx(
-                            "absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200",
+                            "absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform duration-200",
                             showAllDrivers && "translate-x-5"
                           )}></div>
                         </div>

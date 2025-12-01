@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Trophy, Users, Calendar, Settings, Home, Clock } from 'lucide-react';
+import { Trophy, Users, Calendar, Settings, Home, Clock, Menu, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -33,6 +33,7 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
 }) => {
   const location = useLocation();
   const { isDark } = useTheme();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Detect if current page has a hero image
   const hasHeroImage = useMemo(() => {
@@ -61,6 +62,11 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
   // Use white text on hero pages, theme-aware text on other pages
   const textColor = hasHeroImage ? 'text-white' : (isDark ? 'text-white' : 'text-gray-900');
 
+  // Close mobile menu when route changes
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   return (
     <header
       className={clsx(
@@ -71,8 +77,9 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
         className
       )}
     >
-      <nav className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center gap-4 px-4 transition-all duration-300">
-        <div className="flex items-center space-x-1">
+      <nav className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-between gap-4 px-4 transition-all duration-300">
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center space-x-1">
           {LINKS.map(({ to, label, icon: Icon, exact }) => (
             <NavLink
               key={to}
@@ -98,8 +105,30 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
             </NavLink>
           ))}
         </div>
+
+        {/* Mobile Menu Button */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className={clsx(
+            'md:hidden flex h-11 w-11 items-center justify-center rounded-md transition-colors',
+            isOverlay && hasHeroImage
+              ? 'text-white hover:bg-white/15'
+              : isDark
+                ? 'text-white hover:bg-white/15'
+                : 'text-gray-900 hover:bg-gray-100'
+          )}
+          aria-label="Toggle menu"
+        >
+          {mobileMenuOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Menu className="h-6 w-6" />
+          )}
+        </button>
+
+        {/* Theme Toggle */}
         <div className={clsx(
-          'absolute right-4 flex items-center',
+          'flex items-center',
           isOverlay ? textColor : ''
         )}>
           <ThemeToggle 
@@ -107,6 +136,49 @@ export const HeaderNavigation: React.FC<HeaderNavigationProps> = ({
             isOverlay={isOverlay}
           />
         </div>
+
+        {/* Mobile Menu Overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div
+              className={clsx(
+                'fixed left-0 top-[88px] z-50 w-full border-b transition-transform duration-300 md:hidden',
+                isOverlay && hasHeroImage
+                  ? 'border-white/20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg'
+                  : 'border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+              )}
+            >
+              <nav className="mx-auto max-w-5xl px-4 py-4">
+                <div className="flex flex-col space-y-1">
+                  {LINKS.map(({ to, label, icon: Icon, exact }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={exact}
+                      className={({ isActive }) =>
+                        clsx(
+                          'flex min-h-[44px] items-center gap-3 rounded-md px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] transition-colors',
+                          isActive
+                            ? 'bg-red-600 text-white'
+                            : isOverlay && hasHeroImage
+                              ? 'text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-slate-800'
+                              : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-800'
+                        )
+                      }
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span>{label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </nav>
+            </div>
+          </>
+        )}
       </nav>
     </header>
   );

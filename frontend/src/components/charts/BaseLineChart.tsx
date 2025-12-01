@@ -166,9 +166,9 @@ export function BaseLineChart<T extends Record<string, unknown>>({
 
   const mergedMargin = React.useMemo(
     () => ({
-      top: 16,
-      right: 24,
-      bottom: 16,
+      top: 8,
+      right: 8,
+      bottom: 8,
       left: 0,
       ...margin,
     }),

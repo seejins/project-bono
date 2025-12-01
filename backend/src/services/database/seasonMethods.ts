@@ -283,7 +283,7 @@ export const seasonMethods = {
         COUNT(*) FILTER (WHERE nt.position = 1) AS wins,
         COUNT(*) FILTER (WHERE nt.position <= 3) AS podiums,
         COUNT(*) FILTER (WHERE nt.fastest_lap = true) AS fastest_laps,
-        COALESCE(tp.pole_count, 0) AS pole_positions
+        COALESCE(MAX(tp.pole_count), 0) AS pole_positions
       FROM normalized_teams nt
       LEFT JOIN team_poles tp ON tp.normalized_team = nt.normalized_team
       GROUP BY nt.normalized_team

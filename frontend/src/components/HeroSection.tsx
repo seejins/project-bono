@@ -628,14 +628,15 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 <button
                   onClick={onExplore}
                   className={clsx(
-                    'group mt-1 inline-flex items-center gap-3 rounded-full bg-red-600 px-6 py-3 text-xs font-semibold uppercase tracking-[0.4em] text-white transition-all duration-500 ease-out hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500 disabled:bg-red-600/70 disabled:text-white/80',
+                    'group mt-1 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-red-600 px-4 py-3 text-xs font-semibold uppercase tracking-[0.4em] text-white transition-all duration-500 ease-out hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500 disabled:bg-red-600/70 disabled:text-white/80 sm:gap-3 sm:px-6',
                     buttonVisible
                       ? 'opacity-100 translate-x-0 translate-y-0'
                       : 'pointer-events-none opacity-0 -translate-x-6'
                   )}
                   disabled={isLoading}
                 >
-                  Season Dashboard
+                  <span className="hidden sm:inline">Season Dashboard</span>
+                  <span className="sm:hidden">Dashboard</span>
                   <Trophy className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </button>
               </div>

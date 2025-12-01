@@ -33,8 +33,8 @@ export function PanelHeader({
   return (
     <header
       className={clsx(
-        'relative overflow-hidden rounded-3xl border border-white/10 bg-white/80 p-6 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.65)] backdrop-blur-lg transition-all duration-300 dark:border-white/10 dark:bg-slate-900/80',
-        'sm:p-8',
+        'relative overflow-hidden rounded-3xl border border-white/10 bg-white/80 p-4 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.65)] backdrop-blur-lg transition-all duration-300 dark:border-white/10 dark:bg-slate-900/80',
+        'sm:p-6 lg:p-8',
         className,
       )}
     >
@@ -51,7 +51,7 @@ export function PanelHeader({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8">
           <div className="flex flex-1 items-start gap-4">
             {icon && (
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-accent to-brand-electric text-white shadow-brand-glow">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-accent to-brand-electric text-white shadow-brand-glow sm:h-12 sm:w-12">
                 {icon}
               </div>
             )}
@@ -59,13 +59,13 @@ export function PanelHeader({
             <div className="min-w-0 space-y-2">
               {breadcrumbs && <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{breadcrumbs}</div>}
 
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="truncate text-2xl font-semibold text-slate-900 dark:text-white sm:text-3xl">{title}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl lg:text-3xl">{title}</h1>
                 {metaBadge}
               </div>
 
-              {subtitle && <p className="text-base text-slate-600 dark:text-slate-300">{subtitle}</p>}
-              {description && <p className="text-sm text-slate-500 dark:text-slate-400 sm:text-base">{description}</p>}
+              {subtitle && <p className="text-sm text-slate-600 dark:text-slate-300 sm:text-base">{subtitle}</p>}
+              {description && <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm lg:text-base">{description}</p>}
             </div>
           </div>
 

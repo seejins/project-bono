@@ -754,10 +754,10 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
     const average = chartType === 'race' ? averageRacePosition : averageQualifyingPosition;
 
     return (
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-6 shadow-md">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 p-4 shadow-md sm:p-6">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
               {chartType === 'race' ? 'Race Finish Trend' : 'Qualifying Trend'}
             </h3>
             <p className="text-xs uppercase tracking-[0.28em] text-slate-600 dark:text-slate-500">
@@ -771,7 +771,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
           )}
         </div>
         {hasPrimaryData || (comparisonDriverId && hasComparisonData) ? (
-          <div className="h-64 w-full">
+          <div className="h-48 w-full sm:h-64">
             <BaseLineChart<TrendPoint>
               data={trendData}
               xKey="order"
@@ -787,6 +787,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
               tooltipContent={buildTrendTooltip(chartType)}
               height="100%"
               cartesianGrid
+              margin={{ top: 8, right: 8, bottom: 8, left: 0 }}
               referenceLines={
                 average !== null
                   ? [
@@ -806,7 +807,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
             />
           </div>
         ) : (
-          <div className="flex h-64 items-center justify-center text-sm text-slate-600 dark:text-slate-500">
+          <div className="flex h-48 items-center justify-center text-sm text-slate-600 dark:text-slate-500 sm:h-64">
             No {chartType === 'race' ? 'race' : 'qualifying'} data yet.
           </div>
         )}
@@ -842,15 +843,15 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
   const easing: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
   return (
-    <div className="relative -mt-24 -ml-[calc(50vw-50%)] -mr-[calc(50vw-50%)] w-screen overflow-hidden">
+    <div className="relative -mt-24 overflow-hidden md:-ml-[calc(50vw-50%)] md:-mr-[calc(50vw-50%)] md:w-screen">
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute inset-x-0 top-0 h-[520px] blur-[160px]"
+          className="absolute inset-x-0 top-0 h-[320px] blur-[120px] md:h-[520px] md:blur-[160px]"
           style={{ background: glowGradient }}
         />
-              </div>
+      </div>
       <motion.div
-        className="relative z-10 mx-auto max-w-[1600px] space-y-8 px-6 pt-40 pb-16 text-slate-900 dark:text-slate-100 lg:px-10"
+        className="relative z-10 mx-auto max-w-[1600px] space-y-6 px-4 pt-20 pb-12 text-slate-900 dark:text-slate-100 sm:space-y-8 sm:px-6 sm:pt-32 sm:pb-16 lg:px-10 lg:pt-40"
         initial={{ opacity: 0, y: 32 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: easing }}
@@ -864,7 +865,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
           <p className="text-xs font-semibold uppercase tracking-[0.45em] text-slate-500 dark:text-slate-400">
             Season Overview
           </p>
-          <h1 className="text-4xl font-black uppercase tracking-[0.18em] text-slate-900 dark:text-white sm:text-5xl">
+          <h1 className="text-2xl font-black uppercase tracking-[0.18em] text-slate-900 dark:text-white sm:text-4xl lg:text-5xl">
             {driverSummary.name}
           </h1>
           <span className="text-sm font-medium uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
@@ -887,18 +888,18 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 sm:text-xl">
                 Season Statistics
               </h2>
               {comparisonOptions.length > 0 && (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <label className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
                     Compare
                   </label>
                   <select
                     value={comparisonDriverId}
                     onChange={(event) => setComparisonDriverId(event.target.value)}
-                    className="min-w-[200px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-500/30"
+                    className="min-h-[44px] w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-slate-500 dark:focus:ring-slate-500/30 sm:min-w-[200px] sm:w-auto"
                   >
                     <option value="">Driver only</option>
                     {comparisonOptions.map((option) => (
@@ -926,29 +927,29 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
             )}
 
             {overviewCards.length > 0 && (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {overviewCards.map((card) => {
                   const Icon = card.icon;
                   return (
                     <div
                       key={card.id}
-                      className="rounded-3xl border border-slate-200/40 bg-white/80 p-6 shadow-md dark:border-slate-800 dark:bg-slate-950/90"
+                      className="rounded-3xl border border-slate-200/40 bg-white/80 p-4 shadow-md dark:border-slate-800 dark:bg-slate-950/90 sm:p-6"
                     >
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${card.iconClasses}`}>
-                          <Icon className="h-5 w-5" />
+                      <div className="mb-3 flex items-center gap-3 sm:mb-4">
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-2xl sm:h-10 sm:w-10 ${card.iconClasses}`}>
+                          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 sm:text-base">
                           {card.title}
                         </h3>
                       </div>
-                      <div className="space-y-3">
+                      <div className="space-y-2 sm:space-y-3">
                         {card.metrics.map((metric) => (
                           <div key={`${card.id}-${metric.label}`} className="flex items-center justify-between">
-                            <span className="text-sm text-slate-500 dark:text-slate-400">
+                            <span className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
                               {metric.label}
                             </span>
-                            <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 sm:text-base">
                               {metric.value}
                             </span>
                           </div>
@@ -960,7 +961,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
               {renderTrendChart('race')}
               {renderTrendChart('qualifying')}
             </div>
@@ -986,7 +987,7 @@ export const DriverSeasonStats: React.FC<DriverSeasonStatsProps> = ({ driverId, 
               latestRaceId && onRaceSelect ? (
                   <button
                   onClick={() => onRaceSelect(latestRaceId)}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
                   >
                   View latest race
                     <ChevronRight className="h-3 w-3" />
