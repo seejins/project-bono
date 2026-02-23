@@ -1,20 +1,16 @@
 # Project Bono
 
-A real-time companion app for F1 games (F1 23, F1 24, F1 25) that mimics a real-life race engineer experience.
+A real-time companion app for F1 games (F1 23, F1 24, F1 25) and season tracker for detailed season data, race data, and lap data for each driver.
 
 ## Features
 
-### Core Race Engineer Functions
-- **Real-time Telemetry Monitoring**: Speed, tire wear, fuel levels, engine status, brake temperatures
-- **Race Strategy Engine**: Dynamic pit stop recommendations, tire strategy, fuel management
-- **Performance Analysis**: Lap time analysis, sector performance, driving technique feedback
-- **Voice Communication**: Real-time voice commands and responses
-- **Weather Integration**: Track conditions and weather-based strategy adjustments
+### Core Live Race Functions
+- **Real-time Telemetry Monitoring**: Position, best time, current time, current sector times, micro-sector tracking, tire stynt tracking.
+- **Real-time Updates**: Red Flag, Yellow Flag, Blue Flag, Formation laps, penalties.
 
 ### Technical Features
 - **Live Data Streaming**: UDP telemetry parsing from F1 games
 - **Real-time Dashboard**: Modern, responsive UI with live charts
-- **Strategy Calculator**: AI-powered race strategy recommendations
 - **Data Visualization**: Interactive charts for telemetry analysis
 - **Cross-platform**: Desktop and mobile support
 
@@ -25,7 +21,6 @@ A real-time companion app for F1 games (F1 23, F1 24, F1 25) that mimics a real-
 - **Telemetry**: F1 Telemetry Client (TypeScript UDP parser)
 - **UI**: Tailwind CSS + Framer Motion
 - **Charts**: Recharts + D3.js
-- **Voice**: Web Speech API + Speech Recognition
 - **Database**: SQLite (local) / PostgreSQL (production)
 
 ## Project Structure
